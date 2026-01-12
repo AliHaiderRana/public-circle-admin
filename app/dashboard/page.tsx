@@ -272,9 +272,9 @@ export default function DashboardPage() {
 
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="performance">Performance</TabsTrigger>
-          <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="overview">Dashboard</TabsTrigger>
+          <TabsTrigger value="performance">Email Reputation</TabsTrigger>
+          <TabsTrigger value="activity">Recent Activity</TabsTrigger>
         </TabsList>
         
         <TabsContent value="overview" className="space-y-6">
