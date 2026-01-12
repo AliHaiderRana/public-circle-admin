@@ -11,13 +11,14 @@ export async function POST(request: Request) {
   
   try {
     const { email } = await request.json();
+    const sessionEmail = typeof session === 'string' ? session : session.email;
 
     const existingUser = await AdminUser.findOne({ email });
-    if (existingUser && existingUser.email !== session.email) {
+    if (existingUser && existingUser.email !== sessionEmail) {
       return NextResponse.json({ error: 'Email already in use' }, { status: 400 });
     }
 
-    await AdminUser.updateOne({ email: session.email }, { email });
+    await AdminUser.updateOne({ email: sessionEmail }, { email });
 
     return NextResponse.json({ message: 'Email updated successfully' });
   } catch (error) {

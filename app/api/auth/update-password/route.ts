@@ -11,8 +11,9 @@ export async function POST(request: Request) {
   
   try {
     const { currentPassword, newPassword } = await request.json();
+    const sessionEmail = typeof session === 'string' ? session : session.email;
 
-    const user = await AdminUser.findOne({ email: session.email });
+    const user = await AdminUser.findOne({ email: sessionEmail });
     if (!user || user.password !== currentPassword) {
       return NextResponse.json({ error: 'Current password is incorrect' }, { status: 401 });
     }
