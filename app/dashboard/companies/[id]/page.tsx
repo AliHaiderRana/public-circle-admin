@@ -277,12 +277,12 @@ export default function CompanyDetailPage() {
                   <AlertDialogDescription>
                     Are you sure you want to block <strong>{companyDetails.company.name}</strong>? 
                     This action will:
-                    <ul className="list-disc list-inside mt-2 space-y-1">
-                      <li>Suspend all users belonging to this company</li>
-                      <li>Pause all active campaigns</li>
-                      <li>Prevent users from logging in</li>
-                    </ul>
                   </AlertDialogDescription>
+                  <ul className="list-disc list-inside mt-2 space-y-1 text-sm text-muted-foreground">
+                    <li>Suspend all users belonging to this company</li>
+                    <li>Pause all active campaigns</li>
+                    <li>Prevent users from logging in</li>
+                  </ul>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -317,12 +317,12 @@ export default function CompanyDetailPage() {
                   <AlertDialogDescription>
                     Are you sure you want to unblock <strong>{companyDetails.company.name}</strong>? 
                     This action will:
-                    <ul className="list-disc list-inside mt-2 space-y-1">
-                      <li>Restore all blocked users to active status</li>
-                      <li>Allow users to log in again</li>
-                      <li>Campaigns will remain paused (you can activate them manually)</li>
-                    </ul>
                   </AlertDialogDescription>
+                  <ul className="list-disc list-inside mt-2 space-y-1 text-sm text-muted-foreground">
+                    <li>Restore all blocked users to active status</li>
+                    <li>Allow users to log in again</li>
+                    <li>Campaigns will remain paused (you can activate them manually)</li>
+                  </ul>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>

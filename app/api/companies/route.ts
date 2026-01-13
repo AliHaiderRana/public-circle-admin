@@ -56,12 +56,19 @@ export async function GET(request: Request) {
       Company.find(query)
         .sort({ createdAt: sortOrder })
         .skip(skip)
-        .limit(limit),
+        .limit(limit)
+        .lean(),
       Company.countDocuments(query)
     ]);
     
+    // Convert ObjectId to string for consistent comparison
+    const formattedCompanies = companies.map(company => ({
+      ...company,
+      _id: company._id.toString()
+    }));
+    
     return NextResponse.json({
-      companies,
+      companies: formattedCompanies,
       pagination: {
         page,
         limit,

@@ -29,6 +29,7 @@ export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [companiesLoading, setCompaniesLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [companyFilter, setCompanyFilter] = useState(searchParams.get('company') || '');
@@ -40,17 +41,28 @@ export default function CampaignsPage() {
     pages: 0
   });
 
+  // Sync companyFilter with URL search params when they change
+  useEffect(() => {
+    const companyParam = searchParams.get('company');
+    if (companyParam !== null && companyParam !== companyFilter) {
+      setCompanyFilter(companyParam);
+    }
+  }, [searchParams]);
+
   // Fetch all companies for the filter dropdown
   useEffect(() => {
     const fetchCompanies = async () => {
+      setCompaniesLoading(true);
       try {
         const res = await fetch('/api/companies?limit=1000');
         const data = await res.json();
-        if (data.companies) {
+        if (data.companies && Array.isArray(data.companies)) {
           setCompanies(data.companies);
         }
       } catch (err) {
-        console.error('Failed to load companies');
+        console.error('Failed to load companies', err);
+      } finally {
+        setCompaniesLoading(false);
       }
     };
     fetchCompanies();
@@ -205,7 +217,9 @@ export default function CampaignsPage() {
               }}>
                 <SelectTrigger className="w-56">
                   <SelectValue placeholder="Company">
-                    {companyFilter ? (
+                    {companiesLoading ? (
+                      <span className="text-neutral-400">Loading companies...</span>
+                    ) : companyFilter ? (
                       <div className="flex items-center gap-2">
                         <Building2 size={14} className="text-neutral-500" />
                         <span className="truncate">{getCompanyNameById(companyFilter) || 'Selected Company'}</span>
@@ -217,11 +231,17 @@ export default function CampaignsPage() {
                 </SelectTrigger>
                 <SelectContent className="max-h-[300px]">
                   <SelectItem value="all">All Companies</SelectItem>
-                  {companies.map(company => (
-                    <SelectItem key={company._id} value={company._id}>
-                      {company.name}
-                    </SelectItem>
-                  ))}
+                  {companiesLoading ? (
+                    <SelectItem value="loading" disabled>Loading companies...</SelectItem>
+                  ) : companies.length === 0 ? (
+                    <SelectItem value="no-companies" disabled>No companies found</SelectItem>
+                  ) : (
+                    companies.map(company => (
+                      <SelectItem key={company._id} value={company._id}>
+                        {company.name}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
 
