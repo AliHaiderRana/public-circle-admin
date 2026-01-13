@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Search, Building2, Users as UsersIcon, Globe, MapPin, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { Search, Building2, Users as UsersIcon, Globe, MapPin, ChevronLeft, ChevronRight, Filter, ArrowUp, ArrowDown } from 'lucide-react';
 
 export default function CompaniesPage() {
   const router = useRouter();
@@ -27,6 +27,7 @@ export default function CompaniesPage() {
   const [countryFilter, setCountryFilter] = useState('');
   const [cityFilter, setCityFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
@@ -36,7 +37,7 @@ export default function CompaniesPage() {
 
   useEffect(() => {
     fetchCompanies();
-  }, [pagination.page, pagination.limit, searchTerm, companySizeFilter, countryFilter, cityFilter, statusFilter]);
+  }, [pagination.page, pagination.limit, searchTerm, companySizeFilter, countryFilter, cityFilter, statusFilter, sortOrder]);
 
   const fetchCompanies = async () => {
     setLoading(true);
@@ -44,6 +45,7 @@ export default function CompaniesPage() {
       const params = new URLSearchParams({
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
+        sort: sortOrder,
         ...(searchTerm && { search: searchTerm }),
         ...(companySizeFilter && { companySize: companySizeFilter }),
         ...(countryFilter && { country: countryFilter }),
@@ -77,12 +79,18 @@ export default function CompaniesPage() {
     setPagination(prev => ({ ...prev, page: 1 }));
   };
 
+  const toggleSortOrder = () => {
+    setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
   const clearFilters = () => {
     setSearchTerm('');
     setCompanySizeFilter('');
     setCountryFilter('');
     setCityFilter('');
     setStatusFilter('');
+    setSortOrder('desc');
     setPagination(prev => ({ ...prev, page: 1 }));
   };
 
@@ -122,6 +130,24 @@ export default function CompaniesPage() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={toggleSortOrder}
+                className="flex items-center gap-1"
+              >
+                {sortOrder === 'desc' ? (
+                  <>
+                    <ArrowDown className="h-4 w-4" />
+                    Newest First
+                  </>
+                ) : (
+                  <>
+                    <ArrowUp className="h-4 w-4" />
+                    Oldest First
+                  </>
+                )}
+              </Button>
               <div className="relative w-72">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 h-4 w-4" />
                 <Input 
@@ -197,6 +223,7 @@ export default function CompaniesPage() {
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="ACTIVE">Active</SelectItem>
                 <SelectItem value="SUSPENDED">Suspended</SelectItem>
+                <SelectItem value="BLOCKED">Blocked</SelectItem>
                 <SelectItem value="DELETED">Deleted</SelectItem>
               </SelectContent>
             </Select>
@@ -263,7 +290,18 @@ export default function CompaniesPage() {
                     </TableCell>
                     <TableCell className="text-sm text-neutral-600">{company.companySize || 'N/A'}</TableCell>
                     <TableCell>
-                      <Badge className={company.status === 'ACTIVE' ? 'bg-neutral-900 text-white' : ''} variant={company.status === 'ACTIVE' ? 'default' : 'secondary'}>
+                      <Badge 
+                        className={
+                          company.status === 'ACTIVE' 
+                            ? 'bg-neutral-900 text-white' 
+                            : company.status === 'BLOCKED'
+                            ? 'bg-red-500 text-white'
+                            : company.status === 'SUSPENDED'
+                            ? 'bg-yellow-500 text-white'
+                            : ''
+                        } 
+                        variant={company.status === 'ACTIVE' ? 'default' : 'secondary'}
+                      >
                         {company.status}
                       </Badge>
                     </TableCell>

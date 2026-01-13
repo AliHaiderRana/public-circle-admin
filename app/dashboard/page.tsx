@@ -370,20 +370,20 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <p className="text-sm font-medium text-orange-600">Emails</p>
-                    <p className="text-2xl font-bold text-orange-900">
+                    <div className="text-2xl font-bold text-orange-900">
                       {emailLoading ? (
-                        <div className="h-8 w-16 bg-orange-200 rounded animate-pulse"></div>
+                        <span className="inline-block h-8 w-16 bg-orange-200 rounded animate-pulse"></span>
                       ) : (
                         emailData?.thisMonthEmails?.toLocaleString() || '0'
                       )}
-                    </p>
-                    <p className="text-xs text-orange-700 mt-1">
+                    </div>
+                    <div className="text-xs text-orange-700 mt-1">
                       {emailLoading ? (
-                        <div className="h-4 w-12 bg-orange-200 rounded animate-pulse"></div>
+                        <span className="inline-block h-4 w-12 bg-orange-200 rounded animate-pulse"></span>
                       ) : (
                         `This month${emailData && emailData.emailGrowth > 0 ? ` (+${emailData.emailGrowth}%)` : ''}`
                       )}
-                    </p>
+                    </div>
                   </div>
                   <div className="p-3 bg-orange-200 rounded-full">
                     <Mail className="w-6 h-6 text-orange-700" />
@@ -402,13 +402,13 @@ export default function DashboardPage() {
                   <CheckCircle className="w-8 h-8 text-green-600 flex-shrink-0" />
                   <div className="flex-1">
                     <p className="text-sm font-medium text-green-800">Completed</p>
-                    <p className="text-2xl font-bold text-green-900">
+                    <div className="text-2xl font-bold text-green-900">
                       {campaignLoading ? (
                         <div className="h-8 w-16 bg-green-200 rounded animate-pulse"></div>
                       ) : (
                         campaignData?.completedRequests?.toLocaleString() || '0'
                       )}
-                    </p>
+                    </div>
                   </div>
                 </div>
                 
@@ -416,13 +416,13 @@ export default function DashboardPage() {
                   <Clock className="w-8 h-8 text-yellow-600 flex-shrink-0" />
                   <div className="flex-1">
                     <p className="text-sm font-medium text-yellow-800">Pending</p>
-                    <p className="text-2xl font-bold text-yellow-900">
+                    <div className="text-2xl font-bold text-yellow-900">
                       {campaignLoading ? (
                         <div className="h-8 w-16 bg-yellow-200 rounded animate-pulse"></div>
                       ) : (
                         campaignData?.pendingRequests?.toLocaleString() || '0'
                       )}
-                    </p>
+                    </div>
                     {campaignData?.pendingRequests && campaignData.pendingRequests > 0 && (
                       <Badge variant="destructive" className="mt-1 text-xs">Action Required</Badge>
                     )}
@@ -433,13 +433,13 @@ export default function DashboardPage() {
                   <AlertCircle className="w-8 h-8 text-red-600 flex-shrink-0" />
                   <div className="flex-1">
                     <p className="text-sm font-medium text-red-800">Rejected</p>
-                    <p className="text-2xl font-bold text-red-900">
+                    <div className="text-2xl font-bold text-red-900">
                       {campaignLoading ? (
                         <div className="h-8 w-16 bg-red-200 rounded animate-pulse"></div>
                       ) : (
                         campaignData?.rejectedRequests?.toLocaleString() || '0'
                       )}
-                    </p>
+                    </div>
                   </div>
                 </div>
               </div>

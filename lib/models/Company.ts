@@ -68,6 +68,10 @@ const schema = new mongoose.Schema(
       enum: Object.values(USER_STATUS),
       default: USER_STATUS.ACTIVE,
     },
+    isBlockedByAdmin: {
+      type: Boolean,
+      default: false,
+    },
     isContactEmailLocked: {
       type: Boolean,
       default: false,

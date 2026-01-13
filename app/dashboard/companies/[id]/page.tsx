@@ -17,8 +17,22 @@ import {
   Archive,
   UserPlus,
   Activity,
-  TrendingUp
+  TrendingUp,
+  Ban,
+  CheckCircle,
+  Loader2
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface CompanyDetails {
   company: {
@@ -37,6 +51,7 @@ interface CompanyDetails {
       phoneNumber: string;
       profilePicture: string;
       createdAt: string;
+      status: string;
     }>;
     secondary: Array<{
       emailAddress: string;
@@ -45,6 +60,7 @@ interface CompanyDetails {
       phoneNumber: string;
       profilePicture: string;
       createdAt: string;
+      status: string;
     }>;
     totalUsers: number;
   };
@@ -68,6 +84,7 @@ export default function CompanyDetailPage() {
   const router = useRouter();
   const [companyDetails, setCompanyDetails] = useState<CompanyDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     if (params.id) {
@@ -87,6 +104,54 @@ export default function CompanyDetailPage() {
       console.error('Error fetching company details:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBlockCompany = async () => {
+    if (!companyDetails) return;
+    
+    setActionLoading(true);
+    try {
+      const response = await fetch(`/api/companies/${companyDetails.company.id}/block`, {
+        method: 'POST',
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to block company');
+      }
+      
+      // Refresh company details
+      await fetchCompanyDetails();
+    } catch (error) {
+      console.error('Error blocking company:', error);
+      alert(error instanceof Error ? error.message : 'Failed to block company');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleUnblockCompany = async () => {
+    if (!companyDetails) return;
+    
+    setActionLoading(true);
+    try {
+      const response = await fetch(`/api/companies/${companyDetails.company.id}/unblock`, {
+        method: 'POST',
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to unblock company');
+      }
+      
+      // Refresh company details
+      await fetchCompanyDetails();
+    } catch (error) {
+      console.error('Error unblocking company:', error);
+      alert(error instanceof Error ? error.message : 'Failed to unblock company');
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -166,7 +231,18 @@ export default function CompanyDetailPage() {
                 {companyDetails.company.name}
               </h1>
               <div className="flex items-center gap-2 mt-1">
-                <Badge className={companyDetails.company.status === 'ACTIVE' ? 'bg-neutral-900 text-white' : ''} variant={companyDetails.company.status === 'ACTIVE' ? 'default' : 'secondary'}>
+                <Badge 
+                  className={
+                    companyDetails.company.status === 'ACTIVE' 
+                      ? 'bg-neutral-900 text-white' 
+                      : companyDetails.company.status === 'BLOCKED'
+                      ? 'bg-red-500 text-white'
+                      : companyDetails.company.status === 'SUSPENDED'
+                      ? 'bg-yellow-500 text-white'
+                      : ''
+                  } 
+                  variant={companyDetails.company.status === 'ACTIVE' ? 'default' : 'secondary'}
+                >
                   {companyDetails.company.status}
                 </Badge>
                 <span className="text-sm text-gray-500">
@@ -175,6 +251,91 @@ export default function CompanyDetailPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Block/Unblock Actions */}
+        <div className="flex items-center gap-2">
+          {companyDetails.company.status === 'ACTIVE' ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  variant="destructive" 
+                  className="flex items-center gap-2"
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Ban className="h-4 w-4" />
+                  )}
+                  Block Company
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Block Company</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to block <strong>{companyDetails.company.name}</strong>? 
+                    This action will:
+                    <ul className="list-disc list-inside mt-2 space-y-1">
+                      <li>Suspend all users belonging to this company</li>
+                      <li>Pause all active campaigns</li>
+                      <li>Prevent users from logging in</li>
+                    </ul>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={handleBlockCompany}
+                    className="bg-red-500 hover:bg-red-600"
+                  >
+                    Block Company
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : companyDetails.company.status === 'BLOCKED' ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  variant="default" 
+                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4" />
+                  )}
+                  Unblock Company
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Unblock Company</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to unblock <strong>{companyDetails.company.name}</strong>? 
+                    This action will:
+                    <ul className="list-disc list-inside mt-2 space-y-1">
+                      <li>Restore all blocked users to active status</li>
+                      <li>Allow users to log in again</li>
+                      <li>Campaigns will remain paused (you can activate them manually)</li>
+                    </ul>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={handleUnblockCompany}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    Unblock Company
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : null}
         </div>
       </div>
 
@@ -378,7 +539,22 @@ export default function CompanyDetailPage() {
                           )}
                         </div>
                       </div>
-                      <Badge className="bg-blue-500 text-white border-blue-500">Primary</Badge>
+                      <div className="flex items-center gap-2">
+                        {user.status !== 'ACTIVE' && (
+                          <Badge 
+                            className={
+                              user.status === 'BLOCKED' 
+                                ? 'bg-red-500 text-white border-red-500' 
+                                : user.status === 'SUSPENDED'
+                                ? 'bg-yellow-500 text-white border-yellow-500'
+                                : 'bg-gray-500 text-white border-gray-500'
+                            }
+                          >
+                            {user.status}
+                          </Badge>
+                        )}
+                        <Badge className="bg-blue-500 text-white border-blue-500">Primary</Badge>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -432,7 +608,22 @@ export default function CompanyDetailPage() {
                           )}
                         </div>
                       </div>
-                      <Badge variant="secondary" className="bg-purple-100 text-purple-800 border-purple-200">Secondary</Badge>
+                      <div className="flex items-center gap-2">
+                        {user.status !== 'ACTIVE' && (
+                          <Badge 
+                            className={
+                              user.status === 'BLOCKED' 
+                                ? 'bg-red-500 text-white border-red-500' 
+                                : user.status === 'SUSPENDED'
+                                ? 'bg-yellow-500 text-white border-yellow-500'
+                                : 'bg-gray-500 text-white border-gray-500'
+                            }
+                          >
+                            {user.status}
+                          </Badge>
+                        )}
+                        <Badge variant="secondary" className="bg-purple-100 text-purple-800 border-purple-200">Secondary</Badge>
+                      </div>
                     </div>
                   ))}
                 </div>

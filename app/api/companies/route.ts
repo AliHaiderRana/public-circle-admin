@@ -17,6 +17,7 @@ export async function GET(request: Request) {
     const country = searchParams.get('country') || '';
     const status = searchParams.get('status') || '';
     const city = searchParams.get('city') || '';
+    const sort = searchParams.get('sort') || 'desc';
 
     // Build search query
     let query: any = {};
@@ -49,10 +50,11 @@ export async function GET(request: Request) {
     }
     
     const skip = (page - 1) * limit;
+    const sortOrder = sort === 'asc' ? 1 : -1;
     
     const [companies, totalCount] = await Promise.all([
       Company.find(query)
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: sortOrder })
         .skip(skip)
         .limit(limit),
       Company.countDocuments(query)

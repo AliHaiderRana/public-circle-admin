@@ -1,6 +1,7 @@
 'use client';
 
 import ProtectedRoute from '@/components/ProtectedRoute';
+import NotificationDropdown from '@/components/NotificationDropdown';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -152,10 +153,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </div>
               
               <div className="flex items-center gap-3">
-                <Button variant="ghost" size="icon" className="relative">
-                  <Bell size={20} />
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                </Button>
+                <NotificationDropdown />
                 <div className="hidden lg:flex items-center gap-3 px-3 py-2 bg-neutral-100 dark:bg-neutral-700 rounded-lg">
                   <Search size={16} className="text-neutral-500" />
                   <input 

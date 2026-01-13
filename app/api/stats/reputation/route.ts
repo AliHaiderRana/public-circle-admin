@@ -9,66 +9,77 @@ export async function GET() {
 
   await dbConnect();
   try {
-    // Get total emails for rate calculations
-    const totalEmails = await EmailsSent.countDocuments({});
-
-    // Calculate bounce and complaint rates from emailEvents
-    const emailsWithEvents = await EmailsSent.find({
-      $or: [
-        { 'emailEvents.Bounce': { $exists: true } },
-        { 'emailEvents.Complaint': { $exists: true } }
-      ]
-    });
-
-    let bouncedEmails = 0;
-    let complainedEmails = 0;
-    let deliveredEmails = 0;
-
-    emailsWithEvents.forEach(email => {
-      if (email.emailEvents) {
-        // Check for Bounce events
-        if (email.emailEvents.Bounce) {
-          bouncedEmails++;
+    // Use aggregation pipeline for better performance - single query instead of 30+ queries
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    
+    // Single aggregation query to get all stats
+    const [overallStats, dailyStats] = await Promise.all([
+      // Get overall counts using aggregation
+      EmailsSent.aggregate([
+        {
+          $facet: {
+            total: [{ $count: 'count' }],
+            bounced: [
+              { $match: { 'emailEvents.Bounce': { $exists: true } } },
+              { $count: 'count' }
+            ],
+            complained: [
+              { $match: { 'emailEvents.Complaint': { $exists: true } } },
+              { $count: 'count' }
+            ],
+            delivered: [
+              { $match: { 'emailEvents.Delivery': { $exists: true } } },
+              { $count: 'count' }
+            ]
+          }
         }
-        // Check for Complaint events
-        if (email.emailEvents.Complaint) {
-          complainedEmails++;
-        }
-        // Check for Delivery events (if they exist)
-        if (email.emailEvents.Delivery) {
-          deliveredEmails++;
-        }
-      }
-    });
+      ]),
+      // Get daily stats for the last 30 days in a single query
+      EmailsSent.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: thirtyDaysAgo }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              $dateToString: { format: '%Y-%m-%d', date: '$createdAt' }
+            },
+            total: { $sum: 1 },
+            bounced: {
+              $sum: { $cond: [{ $ifNull: ['$emailEvents.Bounce', false] }, 1, 0] }
+            },
+            complained: {
+              $sum: { $cond: [{ $ifNull: ['$emailEvents.Complaint', false] }, 1, 0] }
+            }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ])
+    ]);
+
+    // Extract overall stats
+    const totalEmails = overallStats[0]?.total[0]?.count || 0;
+    const bouncedEmails = overallStats[0]?.bounced[0]?.count || 0;
+    const complainedEmails = overallStats[0]?.complained[0]?.count || 0;
+    const deliveredEmails = overallStats[0]?.delivered[0]?.count || 0;
 
     const bounceRate = totalEmails > 0 ? (bouncedEmails / totalEmails * 100).toFixed(2) : '0';
     const complaintRate = totalEmails > 0 ? (complainedEmails / totalEmails * 100).toFixed(2) : '0';
 
-    // Generate historical data for the last 30 days for the graph
+    // Build reputation data for the last 30 days
+    const dailyStatsMap = new Map(dailyStats.map((d: any) => [d._id, d]));
     const reputationData = [];
+    
     for (let i = 29; i >= 0; i--) {
       const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-      const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-      const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+      const dateKey = date.toISOString().split('T')[0];
+      const dayStats = dailyStatsMap.get(dateKey);
       
-      const dayEmails = await EmailsSent.find({
-        createdAt: { $gte: dayStart, $lt: dayEnd },
-        $or: [
-          { 'emailEvents.Bounce': { $exists: true } },
-          { 'emailEvents.Complaint': { $exists: true } }
-        ]
-      });
-      
-      let dayBounced = 0;
-      let dayComplained = 0;
-      let dayTotal = dayEmails.length;
-      
-      dayEmails.forEach(email => {
-        if (email.emailEvents) {
-          if (email.emailEvents.Bounce) dayBounced++;
-          if (email.emailEvents.Complaint) dayComplained++;
-        }
-      });
+      const dayTotal = dayStats?.total || 0;
+      const dayBounced = dayStats?.bounced || 0;
+      const dayComplained = dayStats?.complained || 0;
       
       reputationData.push({
         date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),

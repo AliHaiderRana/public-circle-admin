@@ -48,22 +48,22 @@ export async function GET(
       inactiveContacts,
       campaignStats,
     ] = await Promise.all([
-      // Primary users
+      // Primary users (exclude deleted)
       User.find({
         company: id,
         kind: USER_KIND.PRIMARY,
-        status: "ACTIVE",
+        status: { $ne: "DELETED" },
       })
-        .select("emailAddress firstName lastName phoneNumber profilePicture createdAt")
+        .select("emailAddress firstName lastName phoneNumber profilePicture createdAt status")
         .lean(),
       
-      // Secondary users  
+      // Secondary users (exclude deleted)
       User.find({
         company: id,
         kind: USER_KIND.SECONDARY,
-        status: "ACTIVE",
+        status: { $ne: "DELETED" },
       })
-        .select("emailAddress firstName lastName phoneNumber profilePicture createdAt")
+        .select("emailAddress firstName lastName phoneNumber profilePicture createdAt status")
         .lean(),
       
       // Total contacts

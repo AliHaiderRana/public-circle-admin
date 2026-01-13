@@ -16,6 +16,7 @@ export async function GET(request: Request) {
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
     const company = searchParams.get('company') || '';
+    const sort = searchParams.get('sort') || 'desc';
 
     // Ensure Company model is registered for populate
     const _Company = Company;
@@ -40,11 +41,12 @@ export async function GET(request: Request) {
     }
     
     const skip = (page - 1) * limit;
+    const sortOrder = sort === 'asc' ? 1 : -1;
     
     const [campaigns, totalCount] = await Promise.all([
       Campaign.find(query)
         .populate('company', 'name')
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: sortOrder })
         .skip(skip)
         .limit(limit),
       Campaign.countDocuments(query)

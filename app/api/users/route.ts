@@ -14,6 +14,7 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const search = searchParams.get('search') || '';
+    const sort = searchParams.get('sort') || 'desc';
 
     // Ensure Company model is registered for populate
     const _Company = Company;
@@ -31,11 +32,12 @@ export async function GET(request: Request) {
     }
     
     const skip = (page - 1) * limit;
+    const sortOrder = sort === 'asc' ? 1 : -1;
     
     const [users, totalCount] = await Promise.all([
       User.find(query)
         .populate('company', 'name')
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: sortOrder })
         .skip(skip)
         .limit(limit),
       User.countDocuments(query)

@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { UserPlus } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { UserPlus, User, Mail, Calendar } from 'lucide-react';
 
 interface Admin {
   _id: string;
@@ -29,6 +30,7 @@ export default function AdminsPage() {
   }, []);
 
   const fetchAdmins = async () => {
+    setLoading(true);
     try {
       const res = await fetch('/api/admins');
       const data = await res.json();
@@ -64,8 +66,6 @@ export default function AdminsPage() {
       setMessage('Failed to create admin');
     }
   };
-
-  if (loading) return <div>Loading...</div>;
 
   return (
     <div className="space-y-6">
@@ -137,19 +137,73 @@ export default function AdminsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
+                <TableHead className="pl-6">Name</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Created At</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {admins.map((admin) => (
-                <TableRow key={admin._id}>
-                  <TableCell>{admin.name || '-'}</TableCell>
-                  <TableCell>{admin.email}</TableCell>
-                  <TableCell>{new Date(admin.createdAt).toLocaleDateString()}</TableCell>
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="pl-6">
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="h-8 w-8 rounded-full" />
+                        <Skeleton className="h-4 w-[120px]" />
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-4 w-4 rounded" />
+                        <Skeleton className="h-4 w-[180px]" />
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-4 w-4 rounded" />
+                        <Skeleton className="h-4 w-[100px]" />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : admins.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-center h-48 text-neutral-500">
+                    <div className="flex flex-col items-center gap-2">
+                      <User size={40} className="text-neutral-300" />
+                      <p>No admin users found.</p>
+                      <Button variant="outline" size="sm" onClick={() => setShowForm(true)}>
+                        Add your first admin
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                admins.map((admin) => (
+                  <TableRow key={admin._id}>
+                    <TableCell className="pl-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                          <User size={14} />
+                        </div>
+                        <span className="font-medium">{admin.name || '-'}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2 text-sm">
+                        <Mail size={14} className="text-neutral-400" />
+                        {admin.email}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2 text-sm text-neutral-600">
+                        <Calendar size={14} className="text-neutral-400" />
+                        {new Date(admin.createdAt).toLocaleDateString()}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>

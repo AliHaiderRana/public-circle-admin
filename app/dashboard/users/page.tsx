@@ -14,12 +14,13 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Search, User, Mail, ShieldCheck, Building2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, User, Mail, ShieldCheck, Building2, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
@@ -29,7 +30,7 @@ export default function UsersPage() {
 
   useEffect(() => {
     fetchUsers();
-  }, [pagination.page, pagination.limit, searchTerm]);
+  }, [pagination.page, pagination.limit, searchTerm, sortOrder]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -37,6 +38,7 @@ export default function UsersPage() {
       const params = new URLSearchParams({
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
+        sort: sortOrder,
         ...(searchTerm && { search: searchTerm })
       });
       
@@ -66,6 +68,11 @@ export default function UsersPage() {
     setPagination(prev => ({ ...prev, page: 1 }));
   };
 
+  const toggleSortOrder = () => {
+    setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-end">
@@ -84,14 +91,34 @@ export default function UsersPage() {
                 {pagination.total > 0 ? `Showing ${users.length} of ${pagination.total} users` : 'Search by name, email, or company.'}
               </CardDescription>
             </div>
-            <div className="relative w-72">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 h-4 w-4" />
-              <Input 
-                placeholder="Search users..." 
-                className="pl-10"
-                value={searchTerm}
-                onChange={(e) => handleSearch(e.target.value)}
-              />
+            <div className="flex items-center gap-4">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={toggleSortOrder}
+                className="flex items-center gap-2"
+              >
+                {sortOrder === 'desc' ? (
+                  <>
+                    <ArrowDown size={14} />
+                    <span>Newest First</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowUp size={14} />
+                    <span>Oldest First</span>
+                  </>
+                )}
+              </Button>
+              <div className="relative w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 h-4 w-4" />
+                <Input 
+                  placeholder="Search users..." 
+                  className="pl-10"
+                  value={searchTerm}
+                  onChange={(e) => handleSearch(e.target.value)}
+                />
+              </div>
             </div>
           </div>
         </CardHeader>

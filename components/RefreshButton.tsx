@@ -2,7 +2,7 @@
 
 import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface RefreshButtonProps {
   onRefresh: () => void;
@@ -12,6 +12,11 @@ interface RefreshButtonProps {
 
 export default function RefreshButton({ onRefresh, isLoading = false, label = "Refresh" }: RefreshButtonProps) {
   const [isRefreshing, setIsRefreshing] = useState(isLoading);
+
+  // Sync with external loading state
+  useEffect(() => {
+    setIsRefreshing(isLoading);
+  }, [isLoading]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -28,10 +33,26 @@ export default function RefreshButton({ onRefresh, isLoading = false, label = "R
       disabled={isRefreshing}
       variant="outline"
       size="sm"
-      className="flex items-center gap-2"
+      className={`flex items-center gap-2 transition-all duration-200 ${
+        isRefreshing 
+          ? 'bg-primary/5 border-primary/30 text-primary' 
+          : 'hover:bg-primary/5 hover:border-primary/30'
+      }`}
     >
-      <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-      {isRefreshing ? 'Refreshing...' : label}
+      <RefreshCw 
+        className={`w-4 h-4 transition-transform duration-500 ${
+          isRefreshing ? 'animate-spin text-primary' : ''
+        }`} 
+      />
+      <span className={isRefreshing ? 'text-primary' : ''}>
+        {isRefreshing ? 'Refreshing...' : label}
+      </span>
+      {isRefreshing && (
+        <span className="flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-primary opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+        </span>
+      )}
     </Button>
   );
 }

@@ -16,16 +16,23 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Send, BarChart3, Mail, CheckCircle2, Clock, ChevronLeft, ChevronRight, Filter, Building2 } from 'lucide-react';
+import { Search, Send, BarChart3, Mail, CheckCircle2, Clock, ChevronLeft, ChevronRight, Filter, Building2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+
+interface Company {
+  _id: string;
+  name: string;
+}
 
 export default function CampaignsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [companyFilter, setCompanyFilter] = useState(searchParams.get('company') || '');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
@@ -33,9 +40,31 @@ export default function CampaignsPage() {
     pages: 0
   });
 
+  // Fetch all companies for the filter dropdown
+  useEffect(() => {
+    const fetchCompanies = async () => {
+      try {
+        const res = await fetch('/api/companies?limit=1000');
+        const data = await res.json();
+        if (data.companies) {
+          setCompanies(data.companies);
+        }
+      } catch (err) {
+        console.error('Failed to load companies');
+      }
+    };
+    fetchCompanies();
+  }, []);
+
+  // Find company name by ID for display
+  const getCompanyNameById = (companyId: string) => {
+    const company = companies.find(c => c._id === companyId);
+    return company?.name || '';
+  };
+
   useEffect(() => {
     fetchCampaigns();
-  }, [pagination.page, pagination.limit, searchTerm, statusFilter, companyFilter]);
+  }, [pagination.page, pagination.limit, searchTerm, statusFilter, companyFilter, sortOrder]);
 
   const fetchCampaigns = async () => {
     setLoading(true);
@@ -43,6 +72,7 @@ export default function CampaignsPage() {
       const params = new URLSearchParams({
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
+        sort: sortOrder,
         ...(searchTerm && { search: searchTerm }),
         ...(statusFilter && { status: statusFilter }),
         ...(companyFilter && { company: companyFilter })
@@ -78,6 +108,14 @@ export default function CampaignsPage() {
     setSearchTerm('');
     setStatusFilter('');
     setCompanyFilter('');
+    setSortOrder('desc');
+    setPagination(prev => ({ ...prev, page: 1 }));
+    // Clear URL params
+    router.push('/dashboard/campaigns');
+  };
+
+  const toggleSortOrder = () => {
+    setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
     setPagination(prev => ({ ...prev, page: 1 }));
   };
 
@@ -95,9 +133,6 @@ export default function CampaignsPage() {
         return <Badge>{status}</Badge>;
     }
   };
-
-  // Get unique values for filters
-  const uniqueCompanies = [...new Set(campaigns.map(c => c.company?.name).filter(Boolean))];
   const uniqueStatuses = [...new Set(campaigns.map(c => c.status).filter(Boolean))];
 
   return (
@@ -168,16 +203,47 @@ export default function CampaignsPage() {
                 setCompanyFilter(value === 'all' ? '' : value);
                 setPagination(prev => ({ ...prev, page: 1 }));
               }}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Company" />
+                <SelectTrigger className="w-56">
+                  <SelectValue placeholder="Company">
+                    {companyFilter ? (
+                      <div className="flex items-center gap-2">
+                        <Building2 size={14} className="text-neutral-500" />
+                        <span className="truncate">{getCompanyNameById(companyFilter) || 'Selected Company'}</span>
+                      </div>
+                    ) : (
+                      'All Companies'
+                    )}
+                  </SelectValue>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[300px]">
                   <SelectItem value="all">All Companies</SelectItem>
-                  {uniqueCompanies.map(company => (
-                    <SelectItem key={company} value={company}>{company}</SelectItem>
+                  {companies.map(company => (
+                    <SelectItem key={company._id} value={company._id}>
+                      {company.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+
+              {/* Sort Order Button */}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={toggleSortOrder}
+                className="flex items-center gap-2"
+              >
+                {sortOrder === 'desc' ? (
+                  <>
+                    <ArrowDown size={14} />
+                    <span>Newest First</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowUp size={14} />
+                    <span>Oldest First</span>
+                  </>
+                )}
+              </Button>
               
               <Button variant="outline" size="sm" onClick={clearFilters}>
                 Clear Filters
@@ -193,7 +259,21 @@ export default function CampaignsPage() {
                 <TableHead>Company</TableHead>
                 <TableHead>Subject</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={toggleSortOrder}
+                    className="flex items-center gap-1 -ml-2 h-auto p-1 font-medium hover:bg-transparent"
+                  >
+                    Created
+                    {sortOrder === 'desc' ? (
+                      <ArrowDown size={14} className="text-primary" />
+                    ) : (
+                      <ArrowUp size={14} className="text-primary" />
+                    )}
+                  </Button>
+                </TableHead>
                 <TableHead className="text-right pr-6">Actions</TableHead>
               </TableRow>
             </TableHeader>

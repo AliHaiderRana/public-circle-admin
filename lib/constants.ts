@@ -54,6 +54,7 @@ export const CUSTOMER_REQUEST_STATUS = {
 export const USER_STATUS = {
   ACTIVE: "ACTIVE",
   SUSPENDED: "SUSPENDED",
+  BLOCKED: "BLOCKED",
   DELETED: "DELETED",
 };
 
@@ -73,4 +74,14 @@ export const SES_STATUS = {
   HEALTHY: "HEALTHY",
   WARNING: "WARNING",
   RISK: "RISK",
+};
+
+export const SOCKET_CHANNELS = {
+  CONNECTION: "connection",
+  DISCONNECT: "disconnect",
+  ADMIN_NOTIFICATION_CREATED: "admin-notification-created",
+};
+
+export const ADMIN_NOTIFICATION_TYPES = {
+  CUSTOMER_REQUEST_CREATED: "CUSTOMER_REQUEST_CREATED",
 };

@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     }
 
     const token = jwt.sign(
-      { userId: user._id, email: user.email },
+      { userId: user._id, email: user.email, name: user.name || '' },
       JWT_SECRET,
       { expiresIn: '1d' }
     );
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
 
     const response = NextResponse.json({
       message: 'Login successful',
-      user: { email: user.email }
+      user: { email: user.email, name: user.name || '' }
     });
 
     response.headers.append('Set-Cookie', cookie);
