@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +12,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Loader2, ShieldAlert, UserPlus } from 'lucide-react';
 
 export default function ConfigPage() {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [isSignupAllowed, setIsSignupAllowed] = useState<boolean>(true);
   const [appleRelayEmail, setAppleRelayEmail] = useState<string>('');
   const [deleteCompanyContactsAfterDays, setDeleteCompanyContactsAfterDays] = useState<number>(7);
@@ -17,9 +21,27 @@ export default function ConfigPage() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
+  // Redirect non-super-admins
   useEffect(() => {
-    fetchConfig();
-  }, []);
+    if (!authLoading && user && !user.isSuperAdmin) {
+      router.push('/dashboard');
+    }
+  }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (user?.isSuperAdmin) {
+      fetchConfig();
+    }
+  }, [user]);
+
+  // Don't render anything for non-super-admins
+  if (authLoading || !user?.isSuperAdmin) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-neutral-500" />
+      </div>
+    );
+  }
 
   const fetchConfig = async () => {
     setLoading(true);

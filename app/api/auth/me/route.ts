@@ -17,15 +17,22 @@ export async function GET() {
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     
-    // Fetch fresh user data from database to get latest name
+    // Fetch fresh user data from database to get latest name and isSuperAdmin
     await dbConnect();
-    const user = await AdminUser.findOne({ email: decoded.email }).select('email name');
+    const user = await AdminUser.findOne({ email: decoded.email }).select('_id email name isSuperAdmin');
+    
+    // If user doesn't exist in database (was deleted), invalidate session
+    if (!user) {
+      return NextResponse.json({ authenticated: false }, { status: 401 });
+    }
     
     return NextResponse.json({
       authenticated: true,
       user: { 
-        email: decoded.email, 
-        name: user?.name || decoded.name || '' 
+        id: user._id.toString(),
+        email: user.email, 
+        name: user.name || '',
+        isSuperAdmin: user.isSuperAdmin || false
       },
       token: token, // Return token for socket connection
     });

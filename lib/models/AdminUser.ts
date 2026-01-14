@@ -15,6 +15,10 @@ const schema = new mongoose.Schema(
       type: String,
       required: false,
     },
+    isSuperAdmin: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );

@@ -28,7 +28,13 @@ export async function PATCH(request: Request) {
   }
 
   await dbConnect();
+  
   try {
+    // Check if current user is super admin
+    if (!session.isSuperAdmin) {
+      return NextResponse.json({ error: 'Only super admins can modify system configuration' }, { status: 403 });
+    }
+
     const {
       isSignupAllowed,
       appleRelayEmail,

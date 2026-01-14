@@ -19,14 +19,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  const clearSession = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (error) {
+      // Ignore errors when clearing session
+    }
+    setUser(null);
+    // Only redirect if not already on login page
+    if (pathname !== '/login' && pathname !== '/signup') {
+      router.push('/login');
+    }
+  };
+
   const checkAuth = async () => {
     try {
       const res = await fetch('/api/auth/me');
       if (res.ok) {
         const data = await res.json();
-        setUser(data.user);
+        // If user was deleted, authenticated will be false
+        if (data.authenticated && data.user) {
+          setUser(data.user);
+        } else {
+          // User was deleted or session invalid, clear session
+          await clearSession();
+        }
       } else {
-        setUser(null);
+        // Session invalid, clear it
+        await clearSession();
       }
     } catch (error) {
       console.error('Auth check failed:', error);
@@ -38,7 +58,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     checkAuth();
+    
+    // Periodically check if user still exists (every 30 seconds)
+    const interval = setInterval(() => {
+      if (user) {
+        // Only check if user is logged in
+        checkAuth();
+      }
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
+
+  // Check auth on route changes (catches deleted users immediately)
+  useEffect(() => {
+    if (user && pathname && pathname.startsWith('/dashboard')) {
+      checkAuth();
+    }
+  }, [pathname]);
 
   const login = (userData: any) => {
     setUser(userData);
@@ -46,9 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    setUser(null);
-    router.push('/login');
+    await clearSession();
   };
 
   return (

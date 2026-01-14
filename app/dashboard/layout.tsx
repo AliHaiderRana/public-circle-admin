@@ -36,9 +36,9 @@ const sidebarItems = [
   { name: 'Campaign Runs', href: '/dashboard/campaign-runs', icon: Play },
   { name: 'Stripe Dashboard', href: '/dashboard/stripe', icon: CreditCard },
   { name: 'Cron Jobs', href: '/dashboard/crons', icon: Clock },
-  { name: 'Admin Users', href: '/dashboard/admins', icon: Shield },
+  { name: 'Admin Users', href: '/dashboard/admins', icon: Shield, superAdminOnly: true },
   { name: 'Profile', href: '/dashboard/profile', icon: UserCircle },
-  { name: 'System Configuration', href: '/dashboard/config', icon: Settings },
+  { name: 'System Configuration', href: '/dashboard/config', icon: Settings, superAdminOnly: true },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -77,7 +77,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
 
             <nav className="flex-1 px-4 space-y-2">
-              {sidebarItems.map((item) => {
+              {sidebarItems
+                .filter((item: any) => {
+                  // Hide super-admin-only items for non-super-admin users
+                  if (item.superAdminOnly && !user?.isSuperAdmin) {
+                    return false;
+                  }
+                  return true;
+                })
+                .map((item) => {
                 const isActive = pathname === item.href;
                 return (
                   <Link 

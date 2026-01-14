@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -8,15 +9,28 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { UserPlus, User, Mail, Calendar } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 interface Admin {
   _id: string;
   email: string;
   name?: string;
   createdAt: string;
+  isSuperAdmin?: boolean;
 }
 
 export default function AdminsPage() {
+  const { user } = useAuth();
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -24,6 +38,8 @@ export default function AdminsPage() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [message, setMessage] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmingAdminId, setConfirmingAdminId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAdmins();
@@ -39,6 +55,35 @@ export default function AdminsPage() {
       setMessage('Failed to load admins');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!user?.isSuperAdmin) return;
+
+    // Prevent deleting yourself
+    if (user.id && user.id === id) {
+      setMessage("You can't delete your own admin account.");
+      return;
+    }
+
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/admins?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        setMessage('Admin deleted successfully');
+        fetchAdmins();
+      } else {
+        const data = await res.json();
+        setMessage(data.error || 'Failed to delete admin');
+      }
+    } catch (error) {
+      setMessage('Failed to delete admin');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -74,10 +119,12 @@ export default function AdminsPage() {
           <h2 className="text-3xl font-bold tracking-tight">Admin Users</h2>
           <p className="text-neutral-500">Manage administrator accounts</p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)}>
-          <UserPlus className="mr-2 h-4 w-4" />
-          Add Admin
-        </Button>
+        {user?.isSuperAdmin && (
+          <Button onClick={() => setShowForm(!showForm)}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Add Admin
+          </Button>
+        )}
       </div>
 
       {message && (
@@ -172,9 +219,11 @@ export default function AdminsPage() {
                     <div className="flex flex-col items-center gap-2">
                       <User size={40} className="text-neutral-300" />
                       <p>No admin users found.</p>
-                      <Button variant="outline" size="sm" onClick={() => setShowForm(true)}>
-                        Add your first admin
-                      </Button>
+                      {user?.isSuperAdmin && (
+                        <Button variant="outline" size="sm" onClick={() => setShowForm(true)}>
+                          Add your first admin
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -201,6 +250,49 @@ export default function AdminsPage() {
                         {new Date(admin.createdAt).toLocaleDateString()}
                       </div>
                     </TableCell>
+                    {user?.isSuperAdmin && admin._id !== user?.id && (
+                      <TableCell align="right">
+                        <AlertDialog
+                          open={confirmingAdminId === admin._id}
+                          onOpenChange={(open) => {
+                            setConfirmingAdminId(open ? admin._id : null);
+                          }}
+                        >
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-red-500 border-red-200 hover:bg-red-50"
+                              onClick={() => setConfirmingAdminId(admin._id)}
+                              disabled={deletingId === admin._id}
+                            >
+                              {deletingId === admin._id ? 'Deleting...' : 'Delete'}
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete admin user?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. The selected admin will permanently lose access to the
+                                admin panel.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-red-600 hover:bg-red-700 text-white"
+                                onClick={async () => {
+                                  await handleDelete(admin._id);
+                                  setConfirmingAdminId(null);
+                                }}
+                              >
+                                Confirm delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}
