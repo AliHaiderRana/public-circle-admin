@@ -68,10 +68,22 @@ export default function CronsPage() {
 
   const fetchCrons = async () => {
     setLoading(true);
+    setMessage(null);
     try {
       const res = await fetch("/api/crons", {
         credentials: "include",
       });
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        setMessage({ 
+          text: errorData.error || errorData.details || `Failed to load crons (${res.status})`, 
+          type: "error" 
+        });
+        setCrons([]);
+        return;
+      }
+      
       const data = await res.json();
       setCrons(data.crons || []);
       if (data.crons?.length === 0) {
@@ -80,8 +92,13 @@ export default function CronsPage() {
           type: "info",
         });
       }
-    } catch (error) {
-      setMessage({ text: "Failed to load crons", type: "error" });
+    } catch (error: any) {
+      console.error("Failed to load crons:", error);
+      setMessage({ 
+        text: `Failed to load crons: ${error.message || 'Network error'}`, 
+        type: "error" 
+      });
+      setCrons([]);
     } finally {
       setLoading(false);
     }

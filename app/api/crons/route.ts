@@ -16,29 +16,39 @@ export async function GET() {
   }
 
   try {
+    console.log("[API] Fetching crons from:", API_BASE_URL);
     const res = await fetch(`${API_BASE_URL}/crons`, {
       headers: {
         "x-internal-api-key": INTERNAL_API_KEY,
       },
     });
 
+    console.log("[API] Backend response status:", res.status);
+
     if (!res.ok) {
       const errorBody = await res.json().catch(() => ({}));
+      console.error("[API] Backend error:", errorBody);
       return NextResponse.json(
         {
-          error: "Failed to fetch crons",
-          details: errorBody?.error || errorBody?.message,
+          error: "Failed to fetch crons from backend",
+          details: errorBody?.error || errorBody?.message || `Backend returned ${res.status}`,
+          backendUrl: API_BASE_URL,
         },
         { status: res.status }
       );
     }
 
     const data = await res.json();
+    console.log("[API] Successfully fetched", data.crons?.length || 0, "crons");
     return NextResponse.json(data);
   } catch (error: any) {
     console.error("[API] Error fetching crons via backend:", error);
     return NextResponse.json(
-      { error: "Failed to fetch crons", details: error.message },
+      { 
+        error: "Failed to connect to backend", 
+        details: error.message,
+        backendUrl: API_BASE_URL 
+      },
       { status: 500 }
     );
   }
