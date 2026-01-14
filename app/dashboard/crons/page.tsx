@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -26,6 +27,7 @@ import {
   CheckCircle2,
   Loader2,
   Database,
+  History,
 } from "lucide-react";
 import {
   Dialog,
@@ -49,6 +51,7 @@ interface Cron {
 }
 
 export default function CronsPage() {
+  const router = useRouter();
   const [crons, setCrons] = useState<Cron[]>([]);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState<string | null>(null);
@@ -340,6 +343,16 @@ export default function CronsPage() {
                       <TableCell className="space-x-2">
                         <Button
                           size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            router.push(`/dashboard/crons/${cron.name}`)
+                          }
+                        >
+                          <History className="mr-2 h-4 w-4" />
+                          View History
+                        </Button>
+                        <Button
+                          size="sm"
                           onClick={() => triggerCron(cron.name)}
                           disabled={triggering === cron.name}
                         >
@@ -353,10 +366,11 @@ export default function CronsPage() {
                         {cron.lastError && (
                           <Button
                             size="sm"
-                            variant="outline"
+                            variant="destructive"
                             onClick={() => setErrorDialogCron(cron)}
                           >
-                            View Error
+                            <AlertCircle className="mr-1 h-3 w-3" />
+                            Error
                           </Button>
                         )}
                       </TableCell>
