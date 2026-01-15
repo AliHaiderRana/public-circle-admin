@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 import { UserPlus, User, Mail, Calendar } from 'lucide-react';
 import {
   AlertDialog,
@@ -186,6 +187,7 @@ export default function AdminsPage() {
               <TableRow>
                 <TableHead className="pl-6">Name</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>Role</TableHead>
                 <TableHead>Created At</TableHead>
               </TableRow>
             </TableHeader>
@@ -206,6 +208,9 @@ export default function AdminsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
+                      <Skeleton className="h-5 w-[90px] rounded-full" />
+                    </TableCell>
+                    <TableCell>
                       <div className="flex items-center gap-2">
                         <Skeleton className="h-4 w-4 rounded" />
                         <Skeleton className="h-4 w-[100px]" />
@@ -215,7 +220,7 @@ export default function AdminsPage() {
                 ))
               ) : admins.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center h-48 text-neutral-500">
+                  <TableCell colSpan={4} className="text-center h-48 text-neutral-500">
                     <div className="flex flex-col items-center gap-2">
                       <User size={40} className="text-neutral-300" />
                       <p>No admin users found.</p>
@@ -243,6 +248,11 @@ export default function AdminsPage() {
                         <Mail size={14} className="text-neutral-400" />
                         {admin.email}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={admin.isSuperAdmin ? "default" : "secondary"} className="text-xs">
+                        {admin.isSuperAdmin ? 'Super Admin' : 'Admin'}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2 text-sm text-neutral-600">

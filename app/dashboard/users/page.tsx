@@ -129,7 +129,7 @@ export default function UsersPage() {
                 <TableHead className="pl-6">User</TableHead>
                 <TableHead>Email Address</TableHead>
                 <TableHead>Company</TableHead>
-                <TableHead>Kind</TableHead>
+                <TableHead>Role</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right pr-6">Actions</TableHead>
               </TableRow>
@@ -192,7 +192,7 @@ export default function UsersPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="capitalize text-[10px]">
-                        {user.kind?.toLowerCase() || 'primary'}
+                        {user.role?.name === 'Admin' ? 'Super Admin' : user.role?.name || 'Admin'}
                       </Badge>
                     </TableCell>
                     <TableCell>

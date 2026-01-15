@@ -55,6 +55,7 @@ export default function CronsPage() {
   const [crons, setCrons] = useState<Cron[]>([]);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState<string | null>(null);
+  const [cronStatuses, setCronStatuses] = useState<Record<string, 'in-progress' | 'completed' | 'failed'>>({});
   const [seeding, setSeeding] = useState(false);
   const [message, setMessage] = useState<{
     text: string;
@@ -139,6 +140,7 @@ export default function CronsPage() {
 
   const triggerCron = async (cronName: string) => {
     setTriggering(cronName);
+    setCronStatuses(prev => ({ ...prev, [cronName]: 'in-progress' }));
     setMessage(null);
 
     try {
@@ -150,6 +152,7 @@ export default function CronsPage() {
       const data = await res.json();
 
       if (res.ok) {
+        setCronStatuses(prev => ({ ...prev, [cronName]: 'completed' }));
         setMessage({
           text: `${cronName} triggered successfully${
             data.data?.durationMs ? ` (${data.data.durationMs}ms)` : ""
@@ -157,14 +160,24 @@ export default function CronsPage() {
           type: "success",
         });
         // Refresh to get updated lastRunAt
-        fetchCrons();
+        setTimeout(() => {
+          fetchCrons();
+          // Clear completed status after refresh
+          setCronStatuses(prev => {
+            const newStatuses = { ...prev };
+            delete newStatuses[cronName];
+            return newStatuses;
+          });
+        }, 2000);
       } else {
+        setCronStatuses(prev => ({ ...prev, [cronName]: 'failed' }));
         setMessage({
           text: data.error || "Failed to trigger cron",
           type: "error",
         });
       }
     } catch (error) {
+      setCronStatuses(prev => ({ ...prev, [cronName]: 'failed' }));
       setMessage({ text: "Failed to trigger cron", type: "error" });
     } finally {
       setTriggering(null);
@@ -340,8 +353,28 @@ export default function CronsPage() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        {cron.lastError ? (
+                        {cronStatuses[cron.name] === 'in-progress' ? (
+                          <Badge className="text-xs bg-blue-100 text-blue-700 border-blue-200">
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            In Progress
+                          </Badge>
+                        ) : cronStatuses[cron.name] === 'completed' ? (
+                          <Badge className="text-xs bg-green-100 text-green-700 border-green-200">
+                            <CheckCircle2 className="mr-1 h-3 w-3" />
+                            Success
+                          </Badge>
+                        ) : cronStatuses[cron.name] === 'failed' ? (
                           <Badge variant="destructive" className="text-xs">
+                            <AlertCircle className="mr-1 h-3 w-3" />
+                            Failed
+                          </Badge>
+                        ) : cron.lastError ? (
+                          <Badge 
+                            variant="destructive" 
+                            className="text-xs cursor-pointer hover:bg-red-600" 
+                            onClick={() => setErrorDialogCron(cron)}
+                          >
+                            <AlertCircle className="mr-1 h-3 w-3" />
                             Error
                           </Badge>
                         ) : cron.lastRunAt ? (
@@ -357,39 +390,31 @@ export default function CronsPage() {
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell className="space-x-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            router.push(`/dashboard/crons/${cron.name}`)
-                          }
-                        >
-                          <History className="mr-2 h-4 w-4" />
-                          View History
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => triggerCron(cron.name)}
-                          disabled={triggering === cron.name}
-                        >
-                          {triggering === cron.name ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <Play className="mr-2 h-4 w-4" />
-                          )}
-                          {triggering === cron.name ? "Running..." : "Trigger"}
-                        </Button>
-                        {cron.lastError && (
+                      <TableCell>
+                        <div className="flex items-center gap-2">
                           <Button
                             size="sm"
-                            variant="destructive"
-                            onClick={() => setErrorDialogCron(cron)}
+                            variant="outline"
+                            onClick={() =>
+                              router.push(`/dashboard/crons/${cron.name}`)
+                            }
                           >
-                            <AlertCircle className="mr-1 h-3 w-3" />
-                            Error
+                            <History className="mr-2 h-4 w-4" />
+                            View History
                           </Button>
-                        )}
+                          <Button
+                            size="sm"
+                            onClick={() => triggerCron(cron.name)}
+                            disabled={triggering === cron.name}
+                          >
+                            {triggering === cron.name ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Play className="mr-2 h-4 w-4" />
+                            )}
+                            {triggering === cron.name ? "Running..." : "Trigger"}
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

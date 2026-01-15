@@ -162,14 +162,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               
               <div className="flex items-center gap-3">
                 <NotificationDropdown />
-                <div className="hidden lg:flex items-center gap-3 px-3 py-2 bg-neutral-100 dark:bg-neutral-700 rounded-lg">
-                  <Search size={16} className="text-neutral-500" />
-                  <input 
-                    type="text" 
-                    placeholder="Search..." 
-                    className="bg-transparent border-none outline-none text-sm w-32 lg:w-48"
-                  />
-                </div>
               </div>
             </div>
           </header>

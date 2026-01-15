@@ -16,8 +16,10 @@ import {
   Play,
   BarChart3,
   Clock,
-  CheckCircle2
+  CheckCircle2,
+  Info
 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface CampaignDetail {
   _id: string;
@@ -160,6 +162,14 @@ export default function CampaignDetailPage() {
           View Campaign Runs
         </Button>
       </div>
+
+      {/* Info Alert */}
+      <Alert className="bg-blue-50 border-blue-200">
+        <Info className="h-4 w-4 text-blue-600" />
+        <AlertDescription className="text-blue-800">
+          We're maintaining only 30 records for each campaign run. Historical data beyond the most recent 30 records will not be available.
+        </AlertDescription>
+      </Alert>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

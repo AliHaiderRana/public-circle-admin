@@ -37,6 +37,7 @@ export async function GET(request: Request) {
     const [users, totalCount] = await Promise.all([
       User.find(query)
         .populate('company', 'name')
+        .populate('role', 'name')
         .sort({ createdAt: sortOrder })
         .skip(skip)
         .limit(limit),

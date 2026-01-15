@@ -145,16 +145,16 @@ export default function ActivitySection({ campaignData, campaignLoading }: Activ
             Quick Actions
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
           {campaignLoading ? (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {Array.from({ length: 4 }).map((_, i) => (
                 <Skeleton key={i} className="h-16 w-full" />
               ))}
             </div>
           ) : (
-            <>
-              <Link href="/dashboard/users">
+            <div className="flex flex-col gap-3">
+              <Link href="/dashboard/users" className="block">
                 <div className="w-full text-left px-4 py-3 rounded-lg border hover:bg-neutral-50 hover:border-neutral-300 transition-all cursor-pointer">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
@@ -168,7 +168,7 @@ export default function ActivitySection({ campaignData, campaignLoading }: Activ
                 </div>
               </Link>
               
-              <Link href="/dashboard/campaigns">
+              <Link href="/dashboard/campaigns" className="block">
                 <div className="w-full text-left px-4 py-3 rounded-lg border hover:bg-neutral-50 hover:border-neutral-300 transition-all cursor-pointer">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
@@ -182,7 +182,7 @@ export default function ActivitySection({ campaignData, campaignLoading }: Activ
                 </div>
               </Link>
               
-              <Link href="/dashboard/companies">
+              <Link href="/dashboard/companies" className="block">
                 <div className="w-full text-left px-4 py-3 rounded-lg border hover:bg-neutral-50 hover:border-neutral-300 transition-all cursor-pointer">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
@@ -196,7 +196,7 @@ export default function ActivitySection({ campaignData, campaignLoading }: Activ
                 </div>
               </Link>
               
-              <Link href="/dashboard/customer-requests">
+              <Link href="/dashboard/customer-requests" className="block">
                 <div className="w-full text-left px-4 py-3 rounded-lg border hover:bg-neutral-50 hover:border-neutral-300 transition-all cursor-pointer">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
@@ -217,7 +217,7 @@ export default function ActivitySection({ campaignData, campaignLoading }: Activ
                   </div>
                 </div>
               </Link>
-            </>
+            </div>
           )}
         </CardContent>
       </Card>

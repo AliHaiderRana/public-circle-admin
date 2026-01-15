@@ -32,6 +32,7 @@ import {
   Activity,
   Database,
   Timer,
+  Info,
 } from "lucide-react";
 import {
   Dialog,
@@ -40,6 +41,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface CronDetails {
   name: string;
@@ -455,6 +457,11 @@ export default function CronDetailPage() {
                 </CardDescription>
               </div>
             </div>
+            <Alert className="mt-4 bg-blue-50 border-blue-200">
+              <AlertDescription className="text-blue-800">
+                We're maintaining only the 30 most recent execution records for this cron job. Historical data beyond the most recent 30 records will not be available.
+              </AlertDescription>
+            </Alert>
           </CardHeader>
           <CardContent className="p-0">
             {historyLoading ? (
