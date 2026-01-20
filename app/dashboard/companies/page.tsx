@@ -39,6 +39,8 @@ import {
   Filter,
   ArrowUp,
   ArrowDown,
+  Send,
+  Mail,
 } from "lucide-react";
 
 export default function CompaniesPage() {
@@ -51,6 +53,7 @@ export default function CompaniesPage() {
   const [cityFilter, setCityFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [sortBy, setSortBy] = useState<string>("createdAt");
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
@@ -74,6 +77,7 @@ export default function CompaniesPage() {
     cityFilter,
     statusFilter,
     sortOrder,
+    sortBy,
   ]);
 
   const fetchCompanies = async () => {
@@ -83,6 +87,7 @@ export default function CompaniesPage() {
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
         sort: sortOrder,
+        sortBy: sortBy,
         ...(searchTerm && { search: searchTerm }),
         ...(companySizeFilter && { companySize: companySizeFilter }),
         ...(countryFilter && { country: countryFilter }),
@@ -121,6 +126,16 @@ export default function CompaniesPage() {
 
   const toggleSortOrder = () => {
     setSortOrder((prev) => (prev === "desc" ? "asc" : "desc"));
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  };
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder((prev) => (prev === "desc" ? "asc" : "desc"));
+    } else {
+      setSortBy(field);
+      setSortOrder("desc");
+    }
     setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
@@ -173,24 +188,6 @@ export default function CompaniesPage() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={toggleSortOrder}
-                className="flex items-center gap-1"
-              >
-                {sortOrder === "desc" ? (
-                  <>
-                    <ArrowDown className="h-4 w-4" />
-                    Newest First
-                  </>
-                ) : (
-                  <>
-                    <ArrowUp className="h-4 w-4" />
-                    Oldest First
-                  </>
-                )}
-              </Button>
               <div className="relative w-72">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 h-4 w-4" />
                 <Input
@@ -301,8 +298,58 @@ export default function CompaniesPage() {
                 <TableHead className="pl-6">Company Name</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead>Size</TableHead>
+                <TableHead>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleSort('campaignCount')}
+                    className="flex items-center gap-1 -ml-2 h-auto p-1 font-medium hover:bg-transparent"
+                  >
+                    Campaigns
+                    {sortBy === 'campaignCount' && (
+                      sortOrder === "desc" ? (
+                        <ArrowDown size={14} className="text-primary" />
+                      ) : (
+                        <ArrowUp size={14} className="text-primary" />
+                      )
+                    )}
+                  </Button>
+                </TableHead>
+                <TableHead>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleSort('contactCount')}
+                    className="flex items-center gap-1 -ml-2 h-auto p-1 font-medium hover:bg-transparent"
+                  >
+                    Contacts
+                    {sortBy === 'contactCount' && (
+                      sortOrder === "desc" ? (
+                        <ArrowDown size={14} className="text-primary" />
+                      ) : (
+                        <ArrowUp size={14} className="text-primary" />
+                      )
+                    )}
+                  </Button>
+                </TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Registered</TableHead>
+                <TableHead>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleSort('createdAt')}
+                    className="flex items-center gap-1 -ml-2 h-auto p-1 font-medium hover:bg-transparent"
+                  >
+                    Registered
+                    {sortBy === 'createdAt' && (
+                      sortOrder === "desc" ? (
+                        <ArrowDown size={14} className="text-primary" />
+                      ) : (
+                        <ArrowUp size={14} className="text-primary" />
+                      )
+                    )}
+                  </Button>
+                </TableHead>
                 <TableHead className="pl-6">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -320,6 +367,12 @@ export default function CompaniesPage() {
                       <Skeleton className="h-4 w-[60px]" />
                     </TableCell>
                     <TableCell>
+                      <Skeleton className="h-4 w-[80px]" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-[80px]" />
+                    </TableCell>
+                    <TableCell>
                       <Skeleton className="h-5 w-[80px] rounded-full" />
                     </TableCell>
                     <TableCell>
@@ -333,7 +386,7 @@ export default function CompaniesPage() {
               ) : companies.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={8}
                     className="text-center h-48 text-neutral-500"
                   >
                     <div className="flex flex-col items-center gap-2">
@@ -376,6 +429,22 @@ export default function CompaniesPage() {
                     </TableCell>
                     <TableCell className="text-sm text-neutral-600">
                       {company.companySize || "N/A"}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Send size={14} className="text-neutral-500" />
+                        <span className="font-medium">
+                          {company.campaignCount || 0}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Mail size={14} className="text-neutral-500" />
+                        <span className="font-medium">
+                          {company.contactCount || 0}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge

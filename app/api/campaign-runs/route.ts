@@ -46,22 +46,46 @@ export async function GET(request: Request) {
       ];
     }
 
-    // Filter by company name - find matching company IDs
+    // Filter by company - handle both ID and name
     if (companyFilter) {
-      const matchingCompanies = await Company.find({
-        name: { $regex: `^${companyFilter}$`, $options: 'i' }
-      }).select('_id');
-      const companyIds = matchingCompanies.map(c => c._id);
-      query.company = { $in: companyIds };
+      // Check if it's a valid ObjectId (24 hex characters)
+      if (companyFilter.match(/^[0-9a-fA-F]{24}$/)) {
+        // It's an ID, use it directly
+        query.company = companyFilter;
+      } else {
+        // It's a name, find matching company IDs
+        const matchingCompanies = await Company.find({
+          name: { $regex: `^${companyFilter}$`, $options: 'i' }
+        }).select('_id');
+        const companyIds = matchingCompanies.map(c => c._id);
+        if (companyIds.length > 0) {
+          query.company = { $in: companyIds };
+        } else {
+          // No matching companies, return empty result
+          query.company = { $in: [] };
+        }
+      }
     }
 
-    // Filter by campaign name - find matching campaign IDs
+    // Filter by campaign - handle both ID and name
     if (campaignFilter) {
-      const matchingCampaigns = await Campaign.find({
-        campaignName: { $regex: `^${campaignFilter}$`, $options: 'i' }
-      }).select('_id');
-      const campaignIds = matchingCampaigns.map(c => c._id);
-      query.campaign = { $in: campaignIds };
+      // Check if it's a valid ObjectId (24 hex characters)
+      if (campaignFilter.match(/^[0-9a-fA-F]{24}$/)) {
+        // It's an ID, use it directly
+        query.campaign = campaignFilter;
+      } else {
+        // It's a name, find matching campaign IDs
+        const matchingCampaigns = await Campaign.find({
+          campaignName: { $regex: `^${campaignFilter}$`, $options: 'i' }
+        }).select('_id');
+        const campaignIds = matchingCampaigns.map(c => c._id);
+        if (campaignIds.length > 0) {
+          query.campaign = { $in: campaignIds };
+        } else {
+          // No matching campaigns, return empty result
+          query.campaign = { $in: [] };
+        }
+      }
     }
     
     const skip = (page - 1) * limit;

@@ -42,6 +42,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Play,
 } from "lucide-react";
 
 interface Company {
@@ -339,6 +340,7 @@ export default function CampaignsPage() {
                 <TableHead>Company</TableHead>
                 <TableHead>Subject</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Campaign Runs</TableHead>
                 <TableHead>
                   <Button
                     variant="ghost"
@@ -376,6 +378,9 @@ export default function CampaignsPage() {
                     <TableCell>
                       <Skeleton className="h-4 w-[100px]" />
                     </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-[100px]" />
+                    </TableCell>
                     <TableCell className="pl-8">
                       <Skeleton className="h-8 w-24" />
                     </TableCell>
@@ -384,7 +389,7 @@ export default function CampaignsPage() {
               ) : campaigns.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="text-center h-48 text-neutral-500"
                   >
                     <div className="flex flex-col items-center gap-2">
@@ -424,6 +429,35 @@ export default function CampaignsPage() {
                       {campaign.emailSubject}
                     </TableCell>
                     <TableCell>{getStatusBadge(campaign.status)}</TableCell>
+                    <TableCell>
+                      {campaign.campaignRunsCount > 0 ? (
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1 text-sm">
+                            <Play size={14} className="text-neutral-500" />
+                            <span className="font-medium">
+                              {campaign.campaignRunsCount}
+                            </span>
+                            <span className="text-neutral-500 text-xs">
+                              {campaign.campaignRunsCount === 1 ? "run" : "runs"}
+                            </span>
+                          </div>
+                          {campaign.campaignRuns && campaign.campaignRuns.length > 0 && (
+                            <div className="text-xs text-neutral-500">
+                              <div>
+                                Latest: {new Date(campaign.campaignRuns[0].createdAt).toLocaleDateString()}
+                              </div>
+                              {campaign.campaignRuns[0].emailsSentCount > 0 && (
+                                <div className="text-neutral-400">
+                                  {campaign.campaignRuns[0].emailsSentCount} emails
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-neutral-400">No runs</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-sm">
                       <div>
                         {new Date(campaign.createdAt).toLocaleDateString()}

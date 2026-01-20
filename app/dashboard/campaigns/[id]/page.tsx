@@ -46,6 +46,7 @@ interface CampaignDetail {
   isRecurring: boolean;
   isOnGoing: boolean;
   description?: string;
+  campaignRunsCount?: number;
 }
 
 export default function CampaignDetailPage() {
@@ -172,7 +173,7 @@ export default function CampaignDetailPage() {
       </Alert>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <Card className="hover:shadow-lg transition-shadow duration-200 border-0 shadow-md">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -239,6 +240,25 @@ export default function CampaignDetailPage() {
               </div>
               <div className="h-14 w-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
                 <Users className="h-7 w-7 text-white" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow duration-200 border-0 shadow-md">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <Play className="h-4 w-4 text-indigo-500" />
+                  Campaign Runs
+                </p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">
+                  {campaign.campaignRunsCount || 0}
+                </p>
+              </div>
+              <div className="h-14 w-14 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                <Play className="h-7 w-7 text-white" />
               </div>
             </div>
           </CardContent>

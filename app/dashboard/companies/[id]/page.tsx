@@ -20,7 +20,8 @@ import {
   TrendingUp,
   Ban,
   CheckCircle,
-  Loader2
+  Loader2,
+  Play
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -253,8 +254,15 @@ export default function CompanyDetailPage() {
           </div>
         </div>
 
-        {/* Block/Unblock Actions */}
+        {/* Actions */}
         <div className="flex items-center gap-2">
+          <Button 
+            onClick={() => router.push(`/dashboard/campaign-runs?company=${companyDetails.company.id}`)}
+            className="flex items-center gap-2"
+          >
+            <Play className="h-4 w-4" />
+            View Campaign Runs
+          </Button>
           {companyDetails.company.status === 'ACTIVE' ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>

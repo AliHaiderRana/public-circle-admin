@@ -64,6 +64,18 @@ export default function CampaignRunsPage() {
     campaigns: [] as string[]
   });
 
+  // Sync filters with URL search params when they change
+  useEffect(() => {
+    const companyParam = searchParams.get('company') || '';
+    const campaignParam = searchParams.get('campaign') || '';
+    if (companyParam && companyParam !== companyFilter) {
+      setCompanyFilter(companyParam);
+    }
+    if (campaignParam && campaignParam !== campaignFilter) {
+      setCampaignFilter(campaignParam);
+    }
+  }, [searchParams, companyFilter, campaignFilter]);
+
   // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => {

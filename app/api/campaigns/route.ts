@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Campaign from '@/lib/models/Campaign';
 import Company from '@/lib/models/Company';
+import CampaignRun from '@/lib/models/CampaignRun';
+import EmailsSent from '@/lib/models/EmailsSent';
 import { getServerSession } from '@/lib/auth';
 
 export async function GET(request: Request) {
@@ -52,8 +54,66 @@ export async function GET(request: Request) {
       Campaign.countDocuments(query)
     ]);
     
+    // Fetch campaign runs for all campaigns
+    const campaignIds = campaigns.map(c => c._id);
+    const campaignRuns = await CampaignRun.find({
+      campaign: { $in: campaignIds }
+    })
+      .populate('campaign', 'campaignName')
+      .sort({ createdAt: -1 });
+    
+    // Get email counts for campaign runs
+    const campaignRunIds = campaignRuns.map(run => run._id);
+    const emailCounts = await EmailsSent.aggregate([
+      { $match: { campaignRun: { $in: campaignRunIds } } },
+      {
+        $group: {
+          _id: '$campaignRun',
+          totalCount: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    // Create maps for easy lookup
+    const campaignRunsMap = new Map();
+    const emailCountMap = new Map();
+    
+    campaignRuns.forEach(run => {
+      // Handle both populated and unpopulated campaign references
+      const campaignId = (run.campaign?._id || run.campaign)?.toString();
+      if (campaignId) {
+        if (!campaignRunsMap.has(campaignId)) {
+          campaignRunsMap.set(campaignId, []);
+        }
+        campaignRunsMap.get(campaignId).push(run);
+      }
+    });
+    
+    emailCounts.forEach(item => {
+      emailCountMap.set(item._id.toString(), item.totalCount);
+    });
+    
+    // Add campaign runs to each campaign
+    const campaignsWithRuns = campaigns.map(campaign => {
+      const campaignId = campaign._id.toString();
+      const runs = campaignRunsMap.get(campaignId) || [];
+      const runsWithEmailCounts = runs.map((run: any) => ({
+        _id: run._id,
+        createdAt: run.createdAt,
+        updatedAt: run.updatedAt,
+        isDataStoredOnWarehouse: run.isDataStoredOnWarehouse,
+        emailsSentCount: emailCountMap.get(run._id.toString()) || 0
+      }));
+      
+      return {
+        ...campaign.toObject(),
+        campaignRuns: runsWithEmailCounts,
+        campaignRunsCount: runsWithEmailCounts.length
+      };
+    });
+    
     return NextResponse.json({
-      campaigns,
+      campaigns: campaignsWithRuns,
       pagination: {
         page,
         limit,

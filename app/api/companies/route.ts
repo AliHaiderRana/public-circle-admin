@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Company from '@/lib/models/Company';
+import Campaign from '@/lib/models/Campaign';
+import CompanyContact from '@/lib/models/CompanyContact';
 import { getServerSession } from '@/lib/auth';
 
 export async function GET(request: Request) {
@@ -18,6 +20,7 @@ export async function GET(request: Request) {
     const status = searchParams.get('status') || '';
     const city = searchParams.get('city') || '';
     const sort = searchParams.get('sort') || 'desc';
+    const sortBy = searchParams.get('sortBy') || 'createdAt';
 
     // Build search query
     let query: any = {};
@@ -52,23 +55,82 @@ export async function GET(request: Request) {
     const skip = (page - 1) * limit;
     const sortOrder = sort === 'asc' ? 1 : -1;
     
-    const [companies, totalCount, distinctCountries, distinctSizes, distinctCities] = await Promise.all([
-      Company.find(query)
-        .sort({ createdAt: sortOrder })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
+    // First, get all companies matching the query (without pagination) to calculate counts
+    const [allCompanies, totalCount, distinctCountries, distinctSizes, distinctCities] = await Promise.all([
+      Company.find(query).lean(),
       Company.countDocuments(query),
       Company.distinct('country'),
       Company.distinct('companySize'),
       Company.distinct('city')
     ]);
 
-    // Convert ObjectId to string for consistent comparison
-    const formattedCompanies = companies.map(company => ({
-      ...company,
-      _id: company._id.toString()
-    }));
+    // Get company IDs to fetch counts
+    const companyIds = allCompanies.map(c => c._id);
+    
+    // Fetch campaign counts for all companies
+    const campaignCounts = await Campaign.aggregate([
+      { $match: { company: { $in: companyIds } } },
+      { $group: { _id: '$company', count: { $sum: 1 } } }
+    ]);
+    
+    // Fetch contact counts for all companies
+    const contactCounts = await CompanyContact.aggregate([
+      { $match: { public_circles_company: { $in: companyIds } } },
+      { $group: { _id: '$public_circles_company', count: { $sum: 1 } } }
+    ]);
+    
+    // Create maps for easy lookup
+    const campaignCountMap = new Map();
+    const contactCountMap = new Map();
+    
+    campaignCounts.forEach(item => {
+      campaignCountMap.set(item._id.toString(), item.count);
+    });
+    
+    contactCounts.forEach(item => {
+      contactCountMap.set(item._id.toString(), item.count);
+    });
+
+    // Convert ObjectId to string for consistent comparison and add counts
+    const formattedCompanies = allCompanies.map(company => {
+      const companyId = company._id.toString();
+      return {
+        ...company,
+        _id: companyId,
+        campaignCount: campaignCountMap.get(companyId) || 0,
+        contactCount: contactCountMap.get(companyId) || 0
+      };
+    });
+
+    // Sort by the requested field
+    let sortedCompanies = formattedCompanies;
+    if (sortBy === 'campaignCount' || sortBy === 'contactCount') {
+      sortedCompanies = formattedCompanies.sort((a, b) => {
+        const aValue = a[sortBy] || 0;
+        const bValue = b[sortBy] || 0;
+        return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
+      });
+    } else {
+      // For other fields, use MongoDB sort
+      sortedCompanies = formattedCompanies.sort((a, b) => {
+        const aValue = a[sortBy] || '';
+        const bValue = b[sortBy] || '';
+        if (sortBy === 'createdAt') {
+          const aDate = new Date(aValue).getTime();
+          const bDate = new Date(bValue).getTime();
+          return sortOrder === 'asc' ? aDate - bDate : bDate - aDate;
+        }
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortOrder === 'asc' 
+            ? aValue.localeCompare(bValue)
+            : bValue.localeCompare(aValue);
+        }
+        return sortOrder === 'asc' ? (aValue > bValue ? 1 : -1) : (aValue < bValue ? 1 : -1);
+      });
+    }
+
+    // Apply pagination after sorting
+    const companies = sortedCompanies.slice(skip, skip + limit);
 
     return NextResponse.json({
       companies: formattedCompanies,

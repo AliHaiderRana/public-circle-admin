@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Campaign from '@/lib/models/Campaign';
 import Company from '@/lib/models/Company';
+import CampaignRun from '@/lib/models/CampaignRun';
 import { getServerSession } from '@/lib/auth';
 
 export async function GET(
@@ -40,7 +41,15 @@ export async function GET(
       }, { status: 404 });
     }
 
-    return NextResponse.json({ campaign });
+    // Fetch campaign runs count for this campaign
+    const campaignRunsCount = await CampaignRun.countDocuments({ campaign: id });
+
+    return NextResponse.json({ 
+      campaign: {
+        ...campaign,
+        campaignRunsCount
+      }
+    });
   } catch (error) {
     console.error('Error fetching campaign details:', error);
     return NextResponse.json({ error: 'Failed to fetch campaign details' }, { status: 500 });
