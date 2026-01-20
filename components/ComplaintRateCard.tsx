@@ -2,7 +2,17 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Info, ExternalLink, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
-import React, { useState } from 'react';
+import React from 'react';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+} from 'recharts';
 
 interface ReputationData {
   date: string;
@@ -18,9 +28,6 @@ interface ComplaintRateCardProps {
 }
 
 export default function ComplaintRateCard({ data, currentRate, status }: ComplaintRateCardProps) {
-  const [tooltipVisible, setTooltipVisible] = useState(false);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
-
   const getStatusIcon = () => {
     switch (status) {
       case 'Healthy':
@@ -47,22 +54,31 @@ export default function ComplaintRateCard({ data, currentRate, status }: Complai
     }
   };
 
-  // Calculate position for current rate (0.8% max scale)
-  const currentRatePosition = Math.max(0, Math.min(100, (currentRate / 0.8) * 100));
-  const currentRateTop = 100 - currentRatePosition; // Invert for top positioning
+  // Generate chart data - use actual data or create sample data
+  const chartData = data && data.length > 0
+    ? data.map(d => ({
+        date: new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        complaintRate: d.complaintRate,
+      }))
+    : [
+        { date: 'Now', complaintRate: currentRate },
+      ];
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    setTooltipVisible(true);
-    // Position tooltip relative to the graph area
-    const graphRect = e.currentTarget.getBoundingClientRect();
-    setTooltipPosition({
-      x: e.clientX - graphRect.left + 10, // 10px offset from cursor
-      y: e.clientY - graphRect.top + 10,
-    });
-  };
+  // If only one data point, duplicate it to show a line
+  const displayData = chartData.length === 1
+    ? [{ ...chartData[0], date: 'Previous' }, chartData[0]]
+    : chartData;
 
-  const handleMouseLeave = () => {
-    setTooltipVisible(false);
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-gray-900 text-white px-3 py-2 rounded-lg shadow-lg text-sm">
+          <p className="font-medium">{label}</p>
+          <p className="text-blue-300">Complaint Rate: {payload[0].value.toFixed(3)}%</p>
+        </div>
+      );
+    }
+    return null;
   };
 
   return (
@@ -87,104 +103,90 @@ export default function ComplaintRateCard({ data, currentRate, status }: Complai
           <p className="text-gray-600 text-sm font-medium">Historic complaint rate</p>
           <p className="text-3xl font-bold text-gray-900">{currentRate.toFixed(3)}%</p>
         </div>
-        
-        <div 
-          className="h-56 mb-6 relative bg-gray-50 rounded cursor-crosshair"
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-        >
-          {/* Y-axis labels */}
-          <div className="absolute left-2 top-2 text-xs text-gray-500">0.8%</div>
-          <div className="absolute left-2 top-1/4 text-xs text-gray-500">0.5%</div>
-          <div className="absolute left-2 top-1/2 text-xs text-gray-500">0.1%</div>
-          <div className="absolute left-2 bottom-2 text-xs text-gray-500">0%</div>
-          
-          {/* Horizontal grid lines */}
-          <div className="absolute left-8 right-0 top-2 border-t border-gray-200"></div>
-          <div className="absolute left-8 right-0 top-1/4 border-t border-gray-200"></div>
-          <div className="absolute left-8 right-0 top-1/2 border-t border-gray-200"></div>
-          <div className="absolute left-8 right-0 bottom-2 border-t border-gray-200"></div>
-          
-          {/* Warning Line (0.1%) */}
-          <div 
-            className="absolute left-8 right-0 border-t-2 border-dashed border-yellow-500"
-            style={{ top: '50%' }}
-          ></div>
-          
-          {/* Account at Risk Line (0.5%) */}
-          <div 
-            className="absolute left-8 right-0 border-t-2 border-dashed border-red-500"
-            style={{ top: '25%' }}
-          ></div>
-          
-          {/* Historic Rate Bar */}
-          <div 
-            className="absolute left-8 right-4 bg-blue-500 opacity-80"
-            style={{ 
-              top: `${currentRateTop}%`, 
-              height: '2px',
-              width: 'calc(100% - 32px)'
-            }}
-          ></div>
-          
-          {/* Current Rate Label */}
-          <div 
-            className="absolute right-2 text-sm font-bold text-blue-600 bg-white px-1 rounded"
-            style={{ top: `${Math.max(0, currentRateTop - 8)}%` }}
-          >
-            {currentRate.toFixed(3)}%
-          </div>
 
-          {/* Tooltip */}
-          {tooltipVisible && (
-            <div 
-              className="absolute bg-gray-900 text-white px-3 py-2 rounded shadow-lg z-10 pointer-events-none"
-              style={{ 
-                left: `${tooltipPosition.x}px`, 
-                top: `${tooltipPosition.y}px`,
-                transform: 'translate(-50%, -100%)'
-              }}
+        <div className="h-56 mb-6">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart
+              data={displayData}
+              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
             >
-              <div className="text-xs space-y-1">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <span>Historic complaint rate: {currentRate.toFixed(3)}%</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                  <span>Warning threshold: 0.1%</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                  <span>Account at risk: 0.5%</span>
-                </div>
-              </div>
-              {/* Tooltip arrow */}
-              <div 
-                className="absolute w-2 h-2 bg-gray-900 transform rotate-45"
-                style={{ 
-                  bottom: '-4px',
-                  left: '50%',
-                  transform: 'translateX(-50%) rotate(45deg)'
+              <defs>
+                <linearGradient id="complaintGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 12, fill: '#6B7280' }}
+                tickLine={false}
+                axisLine={{ stroke: '#E5E7EB' }}
+              />
+              <YAxis
+                domain={[0, 0.8]}
+                ticks={[0, 0.1, 0.5, 0.8]}
+                tick={{ fontSize: 12, fill: '#6B7280' }}
+                tickLine={false}
+                axisLine={{ stroke: '#E5E7EB' }}
+                tickFormatter={(value) => `${value}%`}
+              />
+              <Tooltip content={<CustomTooltip />} />
+
+              {/* Warning threshold line (0.1%) */}
+              <ReferenceLine
+                y={0.1}
+                stroke="#EAB308"
+                strokeDasharray="5 5"
+                strokeWidth={2}
+                label={{
+                  value: 'Warning (0.1%)',
+                  position: 'right',
+                  fill: '#EAB308',
+                  fontSize: 11,
                 }}
-              ></div>
-            </div>
-          )}
+              />
+
+              {/* Account at risk line (0.5%) */}
+              <ReferenceLine
+                y={0.5}
+                stroke="#EF4444"
+                strokeDasharray="5 5"
+                strokeWidth={2}
+                label={{
+                  value: 'Risk (0.5%)',
+                  position: 'right',
+                  fill: '#EF4444',
+                  fontSize: 11,
+                }}
+              />
+
+              <Area
+                type="monotone"
+                dataKey="complaintRate"
+                stroke="#3B82F6"
+                strokeWidth={2}
+                fill="url(#complaintGradient)"
+                dot={{ fill: '#3B82F6', strokeWidth: 2, r: 4 }}
+                activeDot={{ r: 6, fill: '#3B82F6', stroke: '#fff', strokeWidth: 2 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
 
         <div className="flex items-center justify-between pt-2">
           <div className="flex items-center gap-6 text-sm">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-blue-500 rounded-sm"></div>
-              <span className="text-gray-600 font-medium">Historic complaint rate</span>
+              <span className="text-gray-600 font-medium">Complaint rate</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-0.5 bg-yellow-500 border-t border-dashed border-yellow-500"></div>
+              <div className="w-6 h-0.5 border-t-2 border-dashed border-yellow-500"></div>
               <span className="text-gray-600 font-medium">Warning (0.1%)</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-0.5 bg-red-500 border-t border-dashed border-red-500"></div>
-              <span className="text-gray-600 font-medium">Account at risk (0.5%)</span>
+              <div className="w-6 h-0.5 border-t-2 border-dashed border-red-500"></div>
+              <span className="text-gray-600 font-medium">Risk (0.5%)</span>
             </div>
           </div>
           <button className="flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors">

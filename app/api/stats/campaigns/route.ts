@@ -20,7 +20,7 @@ export async function GET() {
       Campaign.countDocuments({ status: 'ACTIVE' }),
       Campaign.countDocuments({}),
       CampaignRun.find({})
-        .populate('campaign', 'campaignName')
+        .populate('campaign', 'campaignName status')
         .populate('company', 'name')
         .sort({ createdAt: -1 })
         .limit(3),
@@ -40,8 +40,7 @@ export async function GET() {
         type: 'campaign_run',
         name: run.campaign?.campaignName || 'Campaign Run',
         company: run.company,
-        status: run.status,
-        emailsSent: run.emailsSent,
+        status: run.campaign?.status || 'UNKNOWN',
         createdAt: run.createdAt,
         updatedAt: run.updatedAt
       })),

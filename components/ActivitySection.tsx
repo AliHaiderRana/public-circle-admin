@@ -51,18 +51,22 @@ export default function ActivitySection({ campaignData, campaignLoading }: Activ
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string | undefined) => {
     switch (status) {
       case 'COMPLETED':
         return <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Completed</Badge>;
+      case 'SENT':
+        return <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Sent</Badge>;
       case 'PENDING':
         return <Badge className="bg-yellow-100 text-yellow-800"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
       case 'REJECTED':
         return <Badge className="bg-red-100 text-red-800"><XCircle className="w-3 h-3 mr-1" />Rejected</Badge>;
       case 'ACTIVE':
         return <Badge className="bg-blue-100 text-blue-800"><Activity className="w-3 h-3 mr-1" />Active</Badge>;
+      case 'PAUSED':
+        return <Badge className="bg-gray-100 text-gray-800"><Clock className="w-3 h-3 mr-1" />Paused</Badge>;
       default:
-        return <Badge className="bg-gray-100 text-gray-800">{status}</Badge>;
+        return status ? <Badge className="bg-gray-100 text-gray-800">{status}</Badge> : null;
     }
   };
 

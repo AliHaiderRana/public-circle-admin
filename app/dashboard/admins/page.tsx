@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { UserPlus, User, Mail, Calendar } from 'lucide-react';
+import { UserPlus, User, Mail, Calendar, Eye, EyeOff } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +41,7 @@ export default function AdminsPage() {
   const [message, setMessage] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmingAdminId, setConfirmingAdminId] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     fetchAdmins();
@@ -141,7 +142,7 @@ export default function AdminsPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleCreate} className="space-y-4">
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="name">Name</Label>
                 <Input
                   id="name"
@@ -149,7 +150,7 @@ export default function AdminsPage() {
                   onChange={(e) => setName(e.target.value)}
                 />
               </div>
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
@@ -159,17 +160,27 @@ export default function AdminsPage() {
                   required
                 />
               </div>
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-700"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 pt-2">
                 <Button type="submit">Create Admin</Button>
                 <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
                   Cancel

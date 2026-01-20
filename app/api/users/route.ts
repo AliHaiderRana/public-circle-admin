@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import User from '@/lib/models/User';
-import Company from '@/lib/models/Company'; // Ensure Company model is loaded for populate
+import Company from '@/lib/models/Company';
+import Role from '@/lib/models/Role';
 import { getServerSession } from '@/lib/auth';
 
 export async function GET(request: Request) {
@@ -16,19 +17,42 @@ export async function GET(request: Request) {
     const search = searchParams.get('search') || '';
     const sort = searchParams.get('sort') || 'desc';
 
-    // Ensure Company model is registered for populate
+    // Ensure models are registered for populate
     const _Company = Company;
+    const _Role = Role;
     
     // Build search query
     let query: any = {};
     if (search) {
-      query = {
-        $or: [
-          { firstName: { $regex: search, $options: 'i' } },
-          { lastName: { $regex: search, $options: 'i' } },
-          { emailAddress: { $regex: search, $options: 'i' } }
-        ]
-      };
+      const searchTerms = search.trim().split(/\s+/);
+
+      if (searchTerms.length > 1) {
+        // Multi-word search: match all terms across firstName/lastName
+        query = {
+          $or: [
+            // Match firstName + lastName combination
+            {
+              $and: searchTerms.map(term => ({
+                $or: [
+                  { firstName: { $regex: term, $options: 'i' } },
+                  { lastName: { $regex: term, $options: 'i' } }
+                ]
+              }))
+            },
+            // Also match email
+            { emailAddress: { $regex: search, $options: 'i' } }
+          ]
+        };
+      } else {
+        // Single word search
+        query = {
+          $or: [
+            { firstName: { $regex: search, $options: 'i' } },
+            { lastName: { $regex: search, $options: 'i' } },
+            { emailAddress: { $regex: search, $options: 'i' } }
+          ]
+        };
+      }
     }
     
     const skip = (page - 1) * limit;

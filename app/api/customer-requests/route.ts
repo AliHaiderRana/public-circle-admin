@@ -18,6 +18,7 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
+    const type = searchParams.get('type') || '';
 
     const allowedTypes = [
       CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_PRIMARY_KEY,
@@ -29,19 +30,32 @@ export async function GET(request: Request) {
     let query: any = {
       type: { $in: allowedTypes }
     };
-    
-    if (search) {
-      query.$or = [
-        { companyName: { $regex: search, $options: 'i' } },
-        { type: { $regex: search, $options: 'i' } }
-      ];
+
+    // Type filter
+    if (type && allowedTypes.includes(type as any)) {
+      query.type = type;
     }
-    
+
     if (status) {
       query.requestStatus = status;
     }
-    
+
     const skip = (page - 1) * limit;
+
+    // If search is provided, we need to search by company name
+    // First get matching company IDs, then filter requests
+    let companyIds: string[] = [];
+    if (search) {
+      const matchingCompanies = await Company.find({
+        name: { $regex: search, $options: 'i' }
+      }).select('_id');
+      companyIds = matchingCompanies.map(c => c._id.toString());
+
+      query.$or = [
+        { companyId: { $in: companyIds } },
+        { reason: { $regex: search, $options: 'i' } }
+      ];
+    }
 
     const [requests, totalCount] = await Promise.all([
       CustomerRequest.find(query)

@@ -137,8 +137,12 @@ export default function CustomerRequestsPage() {
     }
   };
 
-  // Get unique values for filters
-  const uniqueTypes = [...new Set(requests.map(r => r.type).filter(Boolean))];
+  // Request types for filter
+  const requestTypes = [
+    { value: CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_PRIMARY_KEY, label: 'PRIMARY KEY' },
+    { value: CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_EMAIL_KEY, label: 'EMAIL KEY' },
+    { value: CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_FILTERS, label: 'FILTERS' },
+  ];
 
   return (
     <div className="space-y-8">
@@ -197,9 +201,9 @@ export default function CustomerRequestsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  {uniqueTypes.map(type => (
-                    <SelectItem key={type} value={type}>
-                      {type.replace('EDIT_CONTACTS_', '').replace(/_/g, ' ')}
+                  {requestTypes.map(type => (
+                    <SelectItem key={type.value} value={type.value}>
+                      {type.label}
                     </SelectItem>
                   ))}
                 </SelectContent>

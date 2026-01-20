@@ -46,6 +46,7 @@ export default function CampaignRunsPage() {
   const searchParams = useSearchParams();
   const [campaignRuns, setCampaignRuns] = useState<CampaignRun[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [companyFilter, setCompanyFilter] = useState(searchParams.get('company') || '');
   const [campaignFilter, setCampaignFilter] = useState(searchParams.get('campaign') || '');
@@ -58,6 +59,19 @@ export default function CampaignRunsPage() {
     total: 0,
     pages: 0
   });
+  const [filterOptions, setFilterOptions] = useState({
+    companies: [] as string[],
+    campaigns: [] as string[]
+  });
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput);
+      setPagination(prev => ({ ...prev, page: 1 }));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   useEffect(() => {
     fetchCampaignRuns();
@@ -83,6 +97,9 @@ export default function CampaignRunsPage() {
       if (data.campaignRuns) {
         setCampaignRuns(data.campaignRuns);
         setPagination(data.pagination);
+        if (data.filters) {
+          setFilterOptions(data.filters);
+        }
       } else {
         setCampaignRuns([]);
       }
@@ -99,11 +116,11 @@ export default function CampaignRunsPage() {
   };
 
   const handleSearch = (value: string) => {
-    setSearchTerm(value);
-    setPagination(prev => ({ ...prev, page: 1 }));
+    setSearchInput(value);
   };
 
   const clearFilters = () => {
+    setSearchInput('');
     setSearchTerm('');
     setCompanyFilter('');
     setCampaignFilter('');
@@ -121,9 +138,6 @@ export default function CampaignRunsPage() {
     setPagination(prev => ({ ...prev, page: 1 }));
   };
 
-  // Get unique values for filters
-  const uniqueCompanies = [...new Set(campaignRuns.map(r => r.company?.name).filter(Boolean))];
-  const uniqueCampaigns = [...new Set(campaignRuns.map(r => r.campaign?.campaignName).filter(Boolean))];
 
   return (
     <div className="space-y-8">
@@ -162,10 +176,10 @@ export default function CampaignRunsPage() {
               </div>
               <div className="relative w-72">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 h-4 w-4" />
-                <Input 
-                  placeholder="Search campaign runs..." 
+                <Input
+                  placeholder="Search campaign runs..."
                   className="pl-10"
-                  value={searchTerm}
+                  value={searchInput}
                   onChange={(e) => handleSearch(e.target.value)}
                 />
               </div>
@@ -178,31 +192,31 @@ export default function CampaignRunsPage() {
                 <span className="text-sm font-medium">Filters:</span>
               </div>
               
-              <Select value={companyFilter || 'all'} onValueChange={(value) => {
-                setCompanyFilter(value === 'all' ? '' : value);
+              <Select value={companyFilter || '__all__'} onValueChange={(value) => {
+                setCompanyFilter(value === '__all__' ? '' : value);
                 setPagination(prev => ({ ...prev, page: 1 }));
               }}>
                 <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Company" />
+                  <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Companies</SelectItem>
-                  {uniqueCompanies.map(company => (
+                <SelectContent className="max-h-[300px]">
+                  <SelectItem value="__all__">All Companies</SelectItem>
+                  {filterOptions.companies.map(company => (
                     <SelectItem key={company} value={company}>{company}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
 
-              <Select value={campaignFilter || 'all'} onValueChange={(value) => {
-                setCampaignFilter(value === 'all' ? '' : value);
+              <Select value={campaignFilter || '__all__'} onValueChange={(value) => {
+                setCampaignFilter(value === '__all__' ? '' : value);
                 setPagination(prev => ({ ...prev, page: 1 }));
               }}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Campaign" />
+                <SelectTrigger className="w-52">
+                  <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Campaigns</SelectItem>
-                  {uniqueCampaigns.map(campaign => (
+                <SelectContent className="max-h-[300px]">
+                  <SelectItem value="__all__">All Campaigns</SelectItem>
+                  {filterOptions.campaigns.map(campaign => (
                     <SelectItem key={campaign} value={campaign}>{campaign}</SelectItem>
                   ))}
                 </SelectContent>
@@ -268,7 +282,7 @@ export default function CampaignRunsPage() {
                     )}
                   </Button>
                 </TableHead>
-                <TableHead className="text-right pr-6">Actions</TableHead>
+                <TableHead className="pl-8">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -280,7 +294,7 @@ export default function CampaignRunsPage() {
                     <TableCell><Skeleton className="h-4 w-[80px]" /></TableCell>
                     <TableCell><Skeleton className="h-5 w-[80px] rounded-full" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-[100px]" /></TableCell>
-                    <TableCell className="text-right pr-6"><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
+                    <TableCell className="pl-8"><Skeleton className="h-8 w-24" /></TableCell>
                   </TableRow>
                 ))
               ) : campaignRuns.length === 0 ? (
@@ -314,27 +328,28 @@ export default function CampaignRunsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Mail size={16} className="text-neutral-500" />
-                        <div className="flex flex-col flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{run.emailsSentCount.toLocaleString()}</span>
-                            {run.emailsSentCount > 0 && (
-                              <Badge variant="outline" className="text-xs">
-                                {run.emailsSentCount === 1 ? 'email' : 'emails'}
-                              </Badge>
-                            )}
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center">
+                          <Mail size={14} className="text-neutral-600" />
+                        </div>
+                        <div>
+                          <div className="font-semibold text-neutral-900">
+                            {run.emailsSentCount.toLocaleString()}
                           </div>
-                          {run.emailCounts && (
-                            <div className="flex gap-2 text-xs">
-                              {run.emailCounts.to > 0 && (
-                                <span className="text-neutral-900">TO: {run.emailCounts.to}</span>
-                              )}
+                          {run.emailCounts && (run.emailCounts.cc > 0 || run.emailCounts.bcc > 0) && (
+                            <div className="flex items-center gap-1.5 text-xs text-neutral-500">
+                              <span>{run.emailCounts.to} TO</span>
                               {run.emailCounts.cc > 0 && (
-                                <span className="text-blue-600">CC: {run.emailCounts.cc}</span>
+                                <>
+                                  <span className="text-neutral-300">•</span>
+                                  <span>{run.emailCounts.cc} CC</span>
+                                </>
                               )}
                               {run.emailCounts.bcc > 0 && (
-                                <span className="text-purple-600">BCC: {run.emailCounts.bcc}</span>
+                                <>
+                                  <span className="text-neutral-300">•</span>
+                                  <span>{run.emailCounts.bcc} BCC</span>
+                                </>
                               )}
                             </div>
                           )}
@@ -365,9 +380,9 @@ export default function CampaignRunsPage() {
                         {new Date(run.createdAt).toLocaleTimeString()}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right pr-6">
-                      <Button 
-                        variant="outline" 
+                    <TableCell className="pl-8">
+                      <Button
+                        variant="outline"
                         size="sm"
                         onClick={() => router.push(`/dashboard/campaign-runs/${run._id}`)}
                       >

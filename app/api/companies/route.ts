@@ -52,21 +52,24 @@ export async function GET(request: Request) {
     const skip = (page - 1) * limit;
     const sortOrder = sort === 'asc' ? 1 : -1;
     
-    const [companies, totalCount] = await Promise.all([
+    const [companies, totalCount, distinctCountries, distinctSizes, distinctCities] = await Promise.all([
       Company.find(query)
         .sort({ createdAt: sortOrder })
         .skip(skip)
         .limit(limit)
         .lean(),
-      Company.countDocuments(query)
+      Company.countDocuments(query),
+      Company.distinct('country'),
+      Company.distinct('companySize'),
+      Company.distinct('city')
     ]);
-    
+
     // Convert ObjectId to string for consistent comparison
     const formattedCompanies = companies.map(company => ({
       ...company,
       _id: company._id.toString()
     }));
-    
+
     return NextResponse.json({
       companies: formattedCompanies,
       pagination: {
@@ -74,6 +77,11 @@ export async function GET(request: Request) {
         limit,
         total: totalCount,
         pages: Math.ceil(totalCount / limit)
+      },
+      filters: {
+        countries: distinctCountries.filter(Boolean).sort(),
+        sizes: distinctSizes.filter(Boolean).sort(),
+        cities: distinctCities.filter(Boolean).sort()
       }
     });
   } catch (error: any) {

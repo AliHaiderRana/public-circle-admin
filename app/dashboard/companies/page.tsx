@@ -1,43 +1,80 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
-import { Search, Building2, Users as UsersIcon, Globe, MapPin, ChevronLeft, ChevronRight, Filter, ArrowUp, ArrowDown } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import {
+  Search,
+  Building2,
+  Users as UsersIcon,
+  Globe,
+  MapPin,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react";
 
 export default function CompaniesPage() {
   const router = useRouter();
   const [companies, setCompanies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [companySizeFilter, setCompanySizeFilter] = useState('');
-  const [countryFilter, setCountryFilter] = useState('');
-  const [cityFilter, setCityFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [companySizeFilter, setCompanySizeFilter] = useState("");
+  const [countryFilter, setCountryFilter] = useState("");
+  const [cityFilter, setCityFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
     total: 0,
-    pages: 0
+    pages: 0,
+  });
+  const [filterOptions, setFilterOptions] = useState({
+    countries: [] as string[],
+    sizes: [] as string[],
+    cities: [] as string[],
   });
 
   useEffect(() => {
     fetchCompanies();
-  }, [pagination.page, pagination.limit, searchTerm, companySizeFilter, countryFilter, cityFilter, statusFilter, sortOrder]);
+  }, [
+    pagination.page,
+    pagination.limit,
+    searchTerm,
+    companySizeFilter,
+    countryFilter,
+    cityFilter,
+    statusFilter,
+    sortOrder,
+  ]);
 
   const fetchCompanies = async () => {
     setLoading(true);
@@ -50,20 +87,23 @@ export default function CompaniesPage() {
         ...(companySizeFilter && { companySize: companySizeFilter }),
         ...(countryFilter && { country: countryFilter }),
         ...(cityFilter && { city: cityFilter }),
-        ...(statusFilter && { status: statusFilter })
+        ...(statusFilter && { status: statusFilter }),
       });
-      
+
       const res = await fetch(`/api/companies?${params}`);
       const data = await res.json();
-      
+
       if (data.companies) {
         setCompanies(data.companies);
         setPagination(data.pagination);
+        if (data.filters) {
+          setFilterOptions(data.filters);
+        }
       } else {
         setCompanies([]);
       }
     } catch (err) {
-      console.error('Failed to load companies');
+      console.error("Failed to load companies");
       setCompanies([]);
     } finally {
       setLoading(false);
@@ -71,51 +111,52 @@ export default function CompaniesPage() {
   };
 
   const handlePageChange = (newPage: number) => {
-    setPagination(prev => ({ ...prev, page: newPage }));
+    setPagination((prev) => ({ ...prev, page: newPage }));
   };
 
   const handleSearch = (value: string) => {
     setSearchTerm(value);
-    setPagination(prev => ({ ...prev, page: 1 }));
+    setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
   const toggleSortOrder = () => {
-    setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
-    setPagination(prev => ({ ...prev, page: 1 }));
+    setSortOrder((prev) => (prev === "desc" ? "asc" : "desc"));
+    setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
   const clearFilters = () => {
-    setSearchTerm('');
-    setCompanySizeFilter('');
-    setCountryFilter('');
-    setCityFilter('');
-    setStatusFilter('');
-    setSortOrder('desc');
-    setPagination(prev => ({ ...prev, page: 1 }));
+    setSearchTerm("");
+    setCompanySizeFilter("");
+    setCountryFilter("");
+    setCityFilter("");
+    setStatusFilter("");
+    setSortOrder("desc");
+    setPagination((prev) => ({ ...prev, page: 1 }));
   };
-
-  // Get unique values for filters
-  const uniqueCountries = [...new Set(companies.map(c => c.country).filter(Boolean))];
-  const uniqueSizes = [...new Set(companies.map(c => c.companySize).filter(Boolean))];
-  const uniqueCities = [...new Set(companies.map(c => c.city).filter(Boolean))];
 
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Companies</h2>
-          <p className="text-neutral-500">Manage all registered organizations and their settings.</p>
+          <p className="text-neutral-500">
+            Manage all registered organizations and their settings.
+          </p>
         </div>
         <div className="flex items-center gap-4 text-sm text-neutral-500 bg-white dark:bg-neutral-800 p-2 rounded-lg border">
           <div className="flex items-center gap-1 px-2 border-r">
             <Building2 size={16} />
-            <span className="font-bold text-neutral-900">{pagination.total}</span> Total
+            <span className="font-bold text-neutral-900">
+              {pagination.total}
+            </span>{" "}
+            Total
           </div>
           <div className="flex items-center gap-1 px-2">
             <Globe size={16} />
             <span className="font-bold text-neutral-900">
-              {uniqueCountries.length}
-            </span> Countries
+              {filterOptions.countries.length}
+            </span>{" "}
+            Countries
           </div>
         </div>
       </div>
@@ -126,7 +167,9 @@ export default function CompaniesPage() {
             <div className="space-y-1">
               <CardTitle>Organization List</CardTitle>
               <CardDescription>
-                {pagination.total > 0 ? `Showing ${companies.length} of ${pagination.total} companies` : 'Search and filter companies by name or location.'}
+                {pagination.total > 0
+                  ? `Showing ${companies.length} of ${pagination.total} companies`
+                  : "Search and filter companies by name or location."}
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -136,7 +179,7 @@ export default function CompaniesPage() {
                 onClick={toggleSortOrder}
                 className="flex items-center gap-1"
               >
-                {sortOrder === 'desc' ? (
+                {sortOrder === "desc" ? (
                   <>
                     <ArrowDown className="h-4 w-4" />
                     Newest First
@@ -150,8 +193,8 @@ export default function CompaniesPage() {
               </Button>
               <div className="relative w-72">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 h-4 w-4" />
-                <Input 
-                  placeholder="Search companies..." 
+                <Input
+                  placeholder="Search companies..."
                   className="pl-10"
                   value={searchTerm}
                   onChange={(e) => handleSearch(e.target.value)}
@@ -159,63 +202,81 @@ export default function CompaniesPage() {
               </div>
             </div>
           </div>
-          
+
           {/* Filters */}
           <div className="flex items-center gap-4 pt-4 border-t">
             <div className="flex items-center gap-2">
               <Filter size={16} className="text-neutral-500" />
               <span className="text-sm font-medium">Filters:</span>
             </div>
-            
-            <Select value={companySizeFilter} onValueChange={(value) => {
-              setCompanySizeFilter(value === 'all' ? '' : value);
-              setPagination(prev => ({ ...prev, page: 1 }));
-            }}>
+
+            <Select
+              value={companySizeFilter || "all"}
+              onValueChange={(value) => {
+                setCompanySizeFilter(value === "all" ? "" : value);
+                setPagination((prev) => ({ ...prev, page: 1 }));
+              }}
+            >
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Company Size" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Sizes</SelectItem>
-                {uniqueSizes.map(size => (
-                  <SelectItem key={size} value={size}>{size}</SelectItem>
+                {filterOptions.sizes.map((size) => (
+                  <SelectItem key={size} value={size}>
+                    {size}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
-            <Select value={countryFilter || 'all'} onValueChange={(value) => {
-              setCountryFilter(value === 'all' ? '' : value);
-              setPagination(prev => ({ ...prev, page: 1 }));
-            }}>
+            <Select
+              value={countryFilter || "all"}
+              onValueChange={(value) => {
+                setCountryFilter(value === "all" ? "" : value);
+                setPagination((prev) => ({ ...prev, page: 1 }));
+              }}
+            >
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Country" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Countries</SelectItem>
-                {uniqueCountries.map(country => (
-                  <SelectItem key={country} value={country}>{country}</SelectItem>
+                {filterOptions.countries.map((country) => (
+                  <SelectItem key={country} value={country}>
+                    {country}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
-            <Select value={cityFilter || 'all'} onValueChange={(value) => {
-              setCityFilter(value === 'all' ? '' : value);
-              setPagination(prev => ({ ...prev, page: 1 }));
-            }}>
+            <Select
+              value={cityFilter || "all"}
+              onValueChange={(value) => {
+                setCityFilter(value === "all" ? "" : value);
+                setPagination((prev) => ({ ...prev, page: 1 }));
+              }}
+            >
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="City" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Cities</SelectItem>
-                {uniqueCities.map(city => (
-                  <SelectItem key={city} value={city}>{city}</SelectItem>
+                {filterOptions.cities.map((city) => (
+                  <SelectItem key={city} value={city}>
+                    {city}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
-            <Select value={statusFilter || 'all'} onValueChange={(value) => {
-              setStatusFilter(value === 'all' ? '' : value);
-              setPagination(prev => ({ ...prev, page: 1 }));
-            }}>
+            <Select
+              value={statusFilter || "all"}
+              onValueChange={(value) => {
+                setStatusFilter(value === "all" ? "" : value);
+                setPagination((prev) => ({ ...prev, page: 1 }));
+              }}
+            >
               <SelectTrigger className="w-32">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -242,28 +303,49 @@ export default function CompaniesPage() {
                 <TableHead>Size</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Registered</TableHead>
-                <TableHead className="text-right pr-6">Actions</TableHead>
+                <TableHead className="pl-6">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell className="pl-6"><Skeleton className="h-4 w-[150px]" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-[120px]" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-[60px]" /></TableCell>
-                    <TableCell><Skeleton className="h-5 w-[80px] rounded-full" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-[100px]" /></TableCell>
-                    <TableCell className="text-right pr-6"><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
+                    <TableCell className="pl-6">
+                      <Skeleton className="h-4 w-[150px]" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-[120px]" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-[60px]" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-5 w-[80px] rounded-full" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-[100px]" />
+                    </TableCell>
+                    <TableCell className="pl-6">
+                      <Skeleton className="h-8 w-16" />
+                    </TableCell>
                   </TableRow>
                 ))
               ) : companies.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center h-48 text-neutral-500">
+                  <TableCell
+                    colSpan={6}
+                    className="text-center h-48 text-neutral-500"
+                  >
                     <div className="flex flex-col items-center gap-2">
                       <Building2 size={40} className="text-neutral-300" />
                       <p>No companies found matching your search.</p>
-                      <Button variant="outline" size="sm" onClick={clearFilters}>Clear filters</Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={clearFilters}
+                      >
+                        Clear filters
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -273,7 +355,11 @@ export default function CompaniesPage() {
                     <TableCell className="pl-6 font-medium">
                       <div className="flex items-center gap-2">
                         {company.logo ? (
-                          <img src={company.logo} alt="" className="w-6 h-6 rounded-sm object-contain" />
+                          <img
+                            src={company.logo}
+                            alt=""
+                            className="w-6 h-6 rounded-sm object-contain"
+                          />
                         ) : (
                           <div className="w-6 h-6 bg-neutral-100 flex items-center justify-center rounded-sm">
                             <Building2 size={12} className="text-neutral-400" />
@@ -288,32 +374,42 @@ export default function CompaniesPage() {
                         {company.city}, {company.country}
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm text-neutral-600">{company.companySize || 'N/A'}</TableCell>
+                    <TableCell className="text-sm text-neutral-600">
+                      {company.companySize || "N/A"}
+                    </TableCell>
                     <TableCell>
-                      <Badge 
+                      <Badge
                         className={
-                          company.status === 'ACTIVE' 
-                            ? 'bg-neutral-900 text-white' 
-                            : company.status === 'BLOCKED'
-                            ? 'bg-red-500 text-white'
-                            : company.status === 'SUSPENDED'
-                            ? 'bg-yellow-500 text-white'
-                            : ''
-                        } 
-                        variant={company.status === 'ACTIVE' ? 'default' : 'secondary'}
+                          company.status === "ACTIVE"
+                            ? "bg-neutral-900 text-white"
+                            : company.status === "BLOCKED"
+                              ? "bg-red-500 text-white"
+                              : company.status === "SUSPENDED"
+                                ? "bg-yellow-500 text-white"
+                                : ""
+                        }
+                        variant={
+                          company.status === "ACTIVE" ? "default" : "secondary"
+                        }
                       >
                         {company.status}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm">
-                      <div>{new Date(company.createdAt).toLocaleDateString()}</div>
-                      <div className="text-xs text-neutral-500">{new Date(company.createdAt).toLocaleTimeString()}</div>
+                      <div>
+                        {new Date(company.createdAt).toLocaleDateString()}
+                      </div>
+                      <div className="text-xs text-neutral-500">
+                        {new Date(company.createdAt).toLocaleTimeString()}
+                      </div>
                     </TableCell>
-                    <TableCell className="text-right pr-6">
-                      <Button 
-                        variant="outline" 
+                    <TableCell className="pl-6">
+                      <Button
+                        variant="outline"
                         size="sm"
-                        onClick={() => router.push(`/dashboard/companies/${company._id}`)}
+                        onClick={() =>
+                          router.push(`/dashboard/companies/${company._id}`)
+                        }
                       >
                         View Details
                       </Button>
@@ -323,17 +419,22 @@ export default function CompaniesPage() {
               )}
             </TableBody>
           </Table>
-          
+
           {pagination.pages > 1 && (
             <div className="flex items-center justify-between px-6 py-4 border-t">
               <div className="text-sm text-neutral-500">
-                Page {pagination.page} of {pagination.pages} ({pagination.total} total companies)
+                Page {pagination.page} of {pagination.pages} ({pagination.total}{" "}
+                total companies)
               </div>
               <div className="flex items-center gap-2">
-                <Select 
-                  value={pagination.limit.toString()} 
+                <Select
+                  value={pagination.limit.toString()}
                   onValueChange={(value) => {
-                    setPagination(prev => ({ ...prev, limit: parseInt(value), page: 1 }));
+                    setPagination((prev) => ({
+                      ...prev,
+                      limit: parseInt(value),
+                      page: 1,
+                    }));
                   }}
                 >
                   <SelectTrigger className="w-20">
@@ -346,7 +447,7 @@ export default function CompaniesPage() {
                     <SelectItem value="50">50</SelectItem>
                   </SelectContent>
                 </Select>
-                
+
                 <Button
                   variant="outline"
                   size="sm"
