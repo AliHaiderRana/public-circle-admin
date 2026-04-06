@@ -54,7 +54,7 @@ export async function GET(
         kind: USER_KIND.PRIMARY,
         status: { $ne: "DELETED" },
       })
-        .select("emailAddress firstName lastName phoneNumber profilePicture createdAt status")
+        .select("_id emailAddress firstName lastName phoneNumber profilePicture createdAt status")
         .lean(),
       
       // Secondary users (exclude deleted)
@@ -63,7 +63,7 @@ export async function GET(
         kind: USER_KIND.SECONDARY,
         status: { $ne: "DELETED" },
       })
-        .select("emailAddress firstName lastName phoneNumber profilePicture createdAt status")
+        .select("_id emailAddress firstName lastName phoneNumber profilePicture createdAt status")
         .lean(),
       
       // Total contacts
@@ -149,6 +149,26 @@ export async function GET(
       archived: 0,
     };
 
+    const mapUser = (u: {
+      _id: unknown;
+      emailAddress?: string;
+      firstName?: string;
+      lastName?: string;
+      phoneNumber?: string;
+      profilePicture?: string;
+      createdAt?: Date;
+      status?: string;
+    }) => ({
+      id: String(u._id),
+      emailAddress: u.emailAddress,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      phoneNumber: u.phoneNumber,
+      profilePicture: u.profilePicture,
+      createdAt: u.createdAt,
+      status: u.status,
+    });
+
     const response = {
       company: {
         id: company._id,
@@ -159,8 +179,8 @@ export async function GET(
         createdAt: company.createdAt,
       },
       users: {
-        primary: primaryUsers,
-        secondary: secondaryUsers,
+        primary: primaryUsers.map(mapUser),
+        secondary: secondaryUsers.map(mapUser),
         totalUsers: primaryUsers.length + secondaryUsers.length,
       },
       contacts: {

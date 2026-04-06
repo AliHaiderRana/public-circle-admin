@@ -21,7 +21,8 @@ import {
   Ban,
   CheckCircle,
   Loader2,
-  Play
+  Play,
+  LogIn,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -46,6 +47,7 @@ interface CompanyDetails {
   };
   users: {
     primary: Array<{
+      id: string;
       emailAddress: string;
       firstName: string;
       lastName: string;
@@ -55,6 +57,7 @@ interface CompanyDetails {
       status: string;
     }>;
     secondary: Array<{
+      id: string;
       emailAddress: string;
       firstName: string;
       lastName: string;
@@ -86,6 +89,7 @@ export default function CompanyDetailPage() {
   const [companyDetails, setCompanyDetails] = useState<CompanyDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [impersonateUserId, setImpersonateUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (params.id) {
@@ -153,6 +157,38 @@ export default function CompanyDetailPage() {
       alert(error instanceof Error ? error.message : 'Failed to unblock company');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleLoginAsUser = async (userId: string) => {
+    if (!companyDetails) return;
+    setImpersonateUserId(userId);
+    try {
+      const response = await fetch('/api/impersonate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          companyId: companyDetails.company.id,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          typeof data?.error === 'string' ? data.error : 'Failed to start impersonation'
+        );
+      }
+      if (typeof data.redirectUrl !== 'string' || !data.redirectUrl) {
+        throw new Error('Invalid redirect URL from server');
+      }
+      window.open(data.redirectUrl, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      console.error('Impersonation error:', error);
+      alert(
+        error instanceof Error ? error.message : 'Failed to open Public Circle as this user'
+      );
+    } finally {
+      setImpersonateUserId(null);
     }
   };
 
@@ -513,8 +549,8 @@ export default function CompanyDetailPage() {
               </h4>
               {companyDetails.users.primary.length > 0 ? (
                 <div className="space-y-3">
-                  {companyDetails.users.primary.map((user, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100 hover:shadow-md transition-shadow">
+                  {companyDetails.users.primary.map((user) => (
+                    <div key={user.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100 hover:shadow-md transition-shadow">
                       <div className="flex items-center gap-3">
                         {user.profilePicture ? (
                           <img
@@ -547,7 +583,7 @@ export default function CompanyDetailPage() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
                         {user.status !== 'ACTIVE' && (
                           <Badge 
                             className={
@@ -562,6 +598,24 @@ export default function CompanyDetailPage() {
                           </Badge>
                         )}
                         <Badge className="bg-blue-500 text-white border-blue-500">Primary</Badge>
+                        {companyDetails.company.status === 'ACTIVE' &&
+                          user.status === 'ACTIVE' && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-1 shrink-0"
+                              disabled={impersonateUserId !== null}
+                              onClick={() => handleLoginAsUser(user.id)}
+                            >
+                              {impersonateUserId === user.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <LogIn className="h-4 w-4" />
+                              )}
+                              Login as user
+                            </Button>
+                          )}
                       </div>
                     </div>
                   ))}
@@ -582,8 +636,8 @@ export default function CompanyDetailPage() {
               </h4>
               {companyDetails.users.secondary.length > 0 ? (
                 <div className="space-y-3">
-                  {companyDetails.users.secondary.map((user, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-100 hover:shadow-md transition-shadow">
+                  {companyDetails.users.secondary.map((user) => (
+                    <div key={user.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-100 hover:shadow-md transition-shadow">
                       <div className="flex items-center gap-3">
                         {user.profilePicture ? (
                           <img
@@ -616,7 +670,7 @@ export default function CompanyDetailPage() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
                         {user.status !== 'ACTIVE' && (
                           <Badge 
                             className={
@@ -631,6 +685,24 @@ export default function CompanyDetailPage() {
                           </Badge>
                         )}
                         <Badge variant="secondary" className="bg-purple-100 text-purple-800 border-purple-200">Secondary</Badge>
+                        {companyDetails.company.status === 'ACTIVE' &&
+                          user.status === 'ACTIVE' && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-1 shrink-0"
+                              disabled={impersonateUserId !== null}
+                              onClick={() => handleLoginAsUser(user.id)}
+                            >
+                              {impersonateUserId === user.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <LogIn className="h-4 w-4" />
+                              )}
+                              Login as user
+                            </Button>
+                          )}
                       </div>
                     </div>
                   ))}
