@@ -438,7 +438,7 @@ export default function UsersPage() {
                         ) : (
                           <LogIn className="h-4 w-4" />
                         )}
-                        Login as user
+                        Login as this user
                       </Button>
                     </TableCell>
                   </TableRow>

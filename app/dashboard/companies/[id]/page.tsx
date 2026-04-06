@@ -613,7 +613,7 @@ export default function CompanyDetailPage() {
                               ) : (
                                 <LogIn className="h-4 w-4" />
                               )}
-                              Login as user
+                              Login as this user
                             </Button>
                           )}
                       </div>
@@ -700,7 +700,7 @@ export default function CompanyDetailPage() {
                               ) : (
                                 <LogIn className="h-4 w-4" />
                               )}
-                              Login as user
+                              Login as this user
                             </Button>
                           )}
                       </div>
