@@ -58,15 +58,26 @@ export async function POST(request: Request) {
       }),
     });
 
-    const payload = await res.json().catch(() => ({}));
+    const rawBody = await res.text();
+    let payload: any = {};
+    try {
+      payload = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      payload = {};
+    }
 
     if (!res.ok) {
+      const upstreamMessage =
+        typeof payload?.message === "string"
+          ? payload.message
+          : typeof payload?.error === "string"
+            ? payload.error
+            : rawBody?.slice(0, 300);
+
       return NextResponse.json(
         {
-          error:
-            typeof payload?.message === "string"
-              ? payload.message
-              : "Failed to create impersonation session",
+          error: upstreamMessage || "Failed to create impersonation session",
+          upstreamStatus: res.status,
         },
         { status: res.status }
       );
@@ -91,10 +102,14 @@ export async function POST(request: Request) {
     redirectUrl.searchParams.set("adminName", impersonatedBy?.name ?? session.name ?? "");
 
     return NextResponse.json({ redirectUrl: redirectUrl.toString() });
-  } catch (e) {
+  } catch (e: any) {
     console.error("[impersonate]", e);
     return NextResponse.json(
-      { error: "Failed to reach API server" },
+      {
+        error: "Failed to reach API server",
+        details:
+          typeof e?.message === "string" ? e.message : "Unknown network error",
+      },
       { status: 502 }
     );
   }
