@@ -16,6 +16,7 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const search = searchParams.get('search') || '';
     const sort = searchParams.get('sort') || 'desc';
+    const companyId = searchParams.get('companyId') || '';
 
     // Ensure models are registered for populate
     const _Company = Company;
@@ -53,6 +54,10 @@ export async function GET(request: Request) {
           ]
         };
       }
+    }
+
+    if (companyId) {
+      query.company = companyId;
     }
     
     const skip = (page - 1) * limit;

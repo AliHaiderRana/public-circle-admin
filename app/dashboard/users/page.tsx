@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -30,14 +30,23 @@ import {
   ChevronRight,
   ArrowUp,
   ArrowDown,
+  LogIn,
+  Loader2,
+  ChevronsUpDown,
 } from "lucide-react";
 
 export default function UsersPage() {
   const [users, setUsers] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<Array<{ _id: string; name: string; logo?: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [companySearchTerm, setCompanySearchTerm] = useState("");
+  const [companyFilter, setCompanyFilter] = useState("all");
+  const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [impersonateUserId, setImpersonateUserId] = useState<string | null>(null);
+  const companyDropdownRef = useRef<HTMLDivElement | null>(null);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
@@ -56,7 +65,29 @@ export default function UsersPage() {
 
   useEffect(() => {
     fetchUsers();
-  }, [pagination.page, pagination.limit, searchTerm, sortOrder]);
+  }, [pagination.page, pagination.limit, searchTerm, sortOrder, companyFilter]);
+
+  useEffect(() => {
+    fetchCompanies();
+  }, []);
+
+  const fetchCompanies = async () => {
+    try {
+      const res = await fetch('/api/companies?page=1&limit=500&sort=asc');
+      const data = await res.json();
+      if (Array.isArray(data?.companies)) {
+        setCompanies(data.companies.map((company: any) => ({
+          _id: String(company._id),
+          name: company.name || 'Unnamed Company',
+          logo: company.logo || '',
+        })));
+      } else {
+        setCompanies([]);
+      }
+    } catch {
+      setCompanies([]);
+    }
+  };
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -66,6 +97,7 @@ export default function UsersPage() {
         limit: pagination.limit.toString(),
         sort: sortOrder,
         ...(searchTerm && { search: searchTerm }),
+        ...(companyFilter !== "all" && { companyId: companyFilter }),
       });
 
       const res = await fetch(`/api/users?${params}`);
@@ -93,9 +125,72 @@ export default function UsersPage() {
     setSearchInput(value);
   };
 
+  const handleCompanyFilter = (value: string) => {
+    setCompanyFilter(value);
+    setCompanyDropdownOpen(false);
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  const filteredCompanies = useMemo(() => {
+    const term = companySearchTerm.trim().toLowerCase();
+    if (!term) return companies;
+    return companies.filter((company) => company.name.toLowerCase().includes(term));
+  }, [companies, companySearchTerm]);
+
+  const selectedCompanyLabel = useMemo(() => {
+    if (companyFilter === 'all') return 'All companies';
+    const selected = companies.find((c) => c._id === companyFilter);
+    return selected?.name || 'All companies';
+  }, [companies, companyFilter]);
+
+  useEffect(() => {
+    const onDocClick = (event: MouseEvent) => {
+      if (!companyDropdownRef.current) return;
+      if (!companyDropdownRef.current.contains(event.target as Node)) {
+        setCompanyDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
   const toggleSortOrder = () => {
     setSortOrder((prev) => (prev === "desc" ? "asc" : "desc"));
     setPagination((prev) => ({ ...prev, page: 1 }));
+  };
+
+  const handleLoginAsUser = async (user: any) => {
+    const companyId = user?.company?._id;
+    if (!companyId) {
+      alert('User does not belong to a company.');
+      return;
+    }
+
+    setImpersonateUserId(user._id);
+    try {
+      const response = await fetch('/api/impersonate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user._id,
+          companyId,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          typeof data?.error === 'string' ? data.error : 'Failed to start impersonation'
+        );
+      }
+      if (typeof data.redirectUrl !== 'string' || !data.redirectUrl) {
+        throw new Error('Invalid redirect URL from server');
+      }
+      window.open(data.redirectUrl, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to login as user');
+    } finally {
+      setImpersonateUserId(null);
+    }
   };
 
   return (
@@ -121,6 +216,67 @@ export default function UsersPage() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-4">
+              <div className="relative w-64" ref={companyDropdownRef}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-between"
+                  onClick={() => setCompanyDropdownOpen((prev) => !prev)}
+                >
+                  <span className="truncate">{selectedCompanyLabel}</span>
+                  <ChevronsUpDown className="h-4 w-4 opacity-60" />
+                </Button>
+                {companyDropdownOpen && (
+                  <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg">
+                    <div className="p-2 border-b">
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-neutral-500 h-4 w-4" />
+                        <Input
+                          placeholder="Search company..."
+                          className="pl-8 h-8"
+                          value={companySearchTerm}
+                          onChange={(e) => setCompanySearchTerm(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto p-1">
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-neutral-100"
+                        onClick={() => handleCompanyFilter("all")}
+                      >
+                        <Building2 size={14} className="text-neutral-500" />
+                        <span className="truncate">All companies</span>
+                      </button>
+                      {filteredCompanies.length === 0 ? (
+                        <div className="px-2 py-2 text-xs text-neutral-500">No company found</div>
+                      ) : (
+                        filteredCompanies.map((company) => (
+                          <button
+                            key={company._id}
+                            type="button"
+                            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-neutral-100"
+                            onClick={() => handleCompanyFilter(company._id)}
+                          >
+                            {company.logo ? (
+                              <img
+                                src={company.logo}
+                                alt={company.name}
+                                className="h-5 w-5 rounded object-cover border"
+                              />
+                            ) : (
+                              <div className="h-5 w-5 rounded bg-neutral-100 border flex items-center justify-center">
+                                <Building2 size={12} className="text-neutral-500" />
+                              </div>
+                            )}
+                            <span className="truncate">{company.name}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
               <Button
                 variant="outline"
                 size="sm"
@@ -270,8 +426,19 @@ export default function UsersPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="pl-6">
-                      <Button variant="ghost" size="sm">
-                        Manage
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1"
+                        disabled={impersonateUserId !== null || !user.company?._id}
+                        onClick={() => handleLoginAsUser(user)}
+                      >
+                        {impersonateUserId === user._id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <LogIn className="h-4 w-4" />
+                        )}
+                        Login as this user
                       </Button>
                     </TableCell>
                   </TableRow>
