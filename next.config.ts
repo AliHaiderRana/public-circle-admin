@@ -6,7 +6,25 @@ const nextConfig = {
   // correctly in Vercel serverless functions.
   serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
   outputFileTracingIncludes: {
-    "/*": ["./node_modules/@sparticuz/chromium/bin/**"],
+    // App Router API routes
+    "/api/:path*": [
+      "./node_modules/@sparticuz/chromium/**",
+      "./node_modules/puppeteer-core/**",
+    ],
+    // Extra safety for direct route matching
+    "/api/templates/sample": [
+      "./node_modules/@sparticuz/chromium/**",
+      "./node_modules/puppeteer-core/**",
+    ],
+    "/api/templates/sample/route": [
+      "./node_modules/@sparticuz/chromium/**",
+      "./node_modules/puppeteer-core/**",
+    ],
+    // Global fallback
+    "/*": [
+      "./node_modules/@sparticuz/chromium/**",
+      "./node_modules/puppeteer-core/**",
+    ],
   },
   webpack: (config: any, { isServer }: { isServer: boolean }) => {
     if (isServer) {
