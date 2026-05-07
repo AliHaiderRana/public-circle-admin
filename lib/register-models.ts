@@ -7,6 +7,9 @@ import Campaign from './models/Campaign';
 import CampaignRun from './models/CampaignRun';
 import EmailsSent from './models/EmailsSent';
 import CompanyContact from './models/CompanyContact';
+import Template from './models/Template';
+import TemplateCategory from './models/TemplateCategory';
+import EditorAsset from './models/EditorAsset';
 
 export function registerModels() {
   // Accessing the models ensures they are registered with Mongoose
@@ -19,6 +22,9 @@ export function registerModels() {
     Campaign,
     CampaignRun,
     EmailsSent,
-    CompanyContact
+    CompanyContact,
+    Template,
+    TemplateCategory,
+    EditorAsset,
   };
 }

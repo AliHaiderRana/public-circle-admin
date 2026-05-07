@@ -21,7 +21,9 @@ import {
   CreditCard,
   UserCircle,
   Shield,
-  Clock
+  Clock,
+  FileText,
+  FolderTree,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -34,6 +36,8 @@ const sidebarItems = [
   { name: 'Users', href: '/dashboard/users', icon: Users },
   { name: 'Campaigns', href: '/dashboard/campaigns', icon: TrendingUp },
   { name: 'Campaign Runs', href: '/dashboard/campaign-runs', icon: Play },
+  { name: 'Sample Templates', href: '/dashboard/templates', icon: FileText },
+  { name: 'Template Categories', href: '/dashboard/template-categories', icon: FolderTree },
   { name: 'Stripe Dashboard', href: '/dashboard/stripe', icon: CreditCard },
   { name: 'Cron Jobs', href: '/dashboard/crons', icon: Clock },
   { name: 'Admin Users', href: '/dashboard/admins', icon: Shield, superAdminOnly: true },
