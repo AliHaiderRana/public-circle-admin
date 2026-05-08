@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/specification/main/schema/mcp.json",
+  "name": "public-circle-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for Public Circle project - exposes project files, search, and safe shell commands to LLMs",
+  "server": {
+    "command": "node",
+    "args": ["dist/index.js"],
+    "env": {
+      "MCP_REPO_ROOT": "/Users/waqasraza/Documents/Wander/public-circle"
+    }
+  },
+  "capabilities": {
+    "resources": {
+      "templates": [
+        {
+          "uriTemplate": "file://{path}",
+          "name": "Project File",
+          "description": "Read a file from the project repository"
+        },
+        {
+          "uriTemplate": "search://{pattern}",
+          "name": "Code Search",
+          "description": "Search for a pattern across the project"
+        }
+      ]
+    },
+    "tools": [
+      {
+        "name": "shell_command",
+        "description": "Execute allowlisted shell commands (rg, ls, cat, sed, awk, grep, find, head, tail, wc)"
+      },
+      {
+        "name": "search_code",
+        "description": "Search for a pattern across the project codebase"
+      },
+      {
+        "name": "read_file",
+        "description": "Read the contents of a project file"
+      },
+      {
+        "name": "list_directory",
+        "description": "List contents of a project directory"
+      }
+    ]
+  },
+  "security": {
+    "sandboxed": true,
+    "allowedPaths": ["/Users/waqasraza/Documents/Wander/public-circle"],
+    "deniedCommands": ["rm", "mv", "cp", "chmod", "chown", "curl", "wget", "npm", "npx", "yarn", "pnpm"],
+    "networkAccess": false
+  }
+}
