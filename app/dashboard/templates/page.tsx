@@ -303,7 +303,9 @@ export default function TemplatesPage() {
     setPreviewHtml('');
 
     try {
-      const res = await fetch(`/api/templates/sample/${templateId}`, { cache: 'no-store' });
+      const res = await fetch(`/api/templates/sample/${templateId}?includeArchived=true`, {
+        cache: 'no-store',
+      });
       const payload = await res.json();
       if (!res.ok) {
         throw new Error(payload.error || 'Failed to load template preview');
@@ -526,12 +528,18 @@ export default function TemplatesPage() {
                     </div>
 
                     <div className={cn('mt-auto grid grid-cols-[1fr_auto_auto_auto] items-center gap-2')}>
-                      <Button asChild variant="secondary" size="sm">
-                        <Link href={`/dashboard/templates/${template._id}`}>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Edit Template
-                        </Link>
-                      </Button>
+                      {template.status === 'ACTIVE' ? (
+                        <Button asChild variant="secondary" size="sm">
+                          <Link href={`/dashboard/templates/${template._id}`}>
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Edit Template
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button variant="secondary" size="sm" disabled>
+                          Archived
+                        </Button>
+                      )}
 
                       <Button
                         variant="outline"

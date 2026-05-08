@@ -29,7 +29,7 @@ const updateTemplateSchema = z
   });
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession();
@@ -41,15 +41,22 @@ export async function GET(
 
   try {
     const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const includeArchived = searchParams.get('includeArchived') === 'true';
     if (!objectIdSchema.safeParse(id).success) {
       return NextResponse.json({ error: 'Invalid template ID' }, { status: 400 });
     }
 
-    const template = await Template.findOne({
+    const query: Record<string, unknown> = {
       _id: id,
       kind: TEMPLATE_KINDS.SAMPLE,
-      status: TEMPLATE_STATUS.ACTIVE,
-    })
+    };
+
+    if (!includeArchived) {
+      query.status = TEMPLATE_STATUS.ACTIVE;
+    }
+
+    const template = await Template.findOne(query)
       .populate({ path: 'category', select: 'name slug isPopular status' })
       .lean();
 
