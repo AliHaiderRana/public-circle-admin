@@ -37,11 +37,19 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search')?.trim() || '';
     const categoryId = searchParams.get('categoryId')?.trim() || '';
+    const statusParam = searchParams.get('status')?.trim().toUpperCase() || 'ACTIVE';
 
     const query: Record<string, unknown> = {
       kind: TEMPLATE_KINDS.SAMPLE,
-      status: TEMPLATE_STATUS.ACTIVE,
     };
+
+    if (statusParam === 'ACTIVE') {
+      query.status = TEMPLATE_STATUS.ACTIVE;
+    } else if (statusParam === 'ARCHIVED') {
+      query.status = TEMPLATE_STATUS.ARCHIVED;
+    } else if (statusParam !== 'ALL') {
+      return NextResponse.json({ error: 'Invalid status filter' }, { status: 400 });
+    }
 
     if (search) {
       query.$or = [

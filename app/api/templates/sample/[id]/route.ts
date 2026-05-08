@@ -178,26 +178,18 @@ export async function DELETE(
       return NextResponse.json({ error: 'Invalid template ID' }, { status: 400 });
     }
 
-    const template = await Template.findOneAndUpdate(
+    const template = await Template.findOneAndDelete(
       {
         _id: id,
         kind: TEMPLATE_KINDS.SAMPLE,
-        status: TEMPLATE_STATUS.ACTIVE,
       },
-      {
-        status: TEMPLATE_STATUS.ARCHIVED,
-        deletedAt: new Date(),
-        updatedAt: new Date(),
-        updatedBy: session.userId,
-      },
-      { new: true }
     ).lean();
 
     if (!template) {
       return NextResponse.json({ error: 'Template not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, message: 'Template deleted permanently' });
   } catch (error) {
     console.error('Failed to delete template:', error);
     return NextResponse.json({ error: 'Failed to delete template' }, { status: 500 });
