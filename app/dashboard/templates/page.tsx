@@ -8,6 +8,7 @@ import {
   Pencil,
   Trash2,
   Archive,
+  ArchiveRestore,
   FolderTree,
   Image as ImageIcon,
   Sparkles,
@@ -16,7 +17,6 @@ import {
   Eye,
   Loader2,
   X,
-  RotateCcw,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -94,6 +94,10 @@ export default function TemplatesPage() {
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null);
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{
+    templateId: string;
+    type: 'archive' | 'unarchive' | 'delete';
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadAll = async () => {
@@ -162,6 +166,7 @@ export default function TemplatesPage() {
   };
 
   const handleArchive = async (template: TemplateRecord) => {
+    setPendingAction({ templateId: template._id, type: 'archive' });
     try {
       const res = await fetch(`/api/templates/sample/${template._id}/archive`, {
         method: 'PATCH',
@@ -176,10 +181,13 @@ export default function TemplatesPage() {
       setTemplateToArchive(null);
     } catch (error: any) {
       setErrorMessage(error.message || 'Failed to archive template');
+    } finally {
+      setPendingAction(null);
     }
   };
 
   const handleDelete = async (template: TemplateRecord) => {
+    setPendingAction({ templateId: template._id, type: 'delete' });
     try {
       const res = await fetch(`/api/templates/sample/${template._id}`, {
         method: 'DELETE',
@@ -194,10 +202,13 @@ export default function TemplatesPage() {
       setTemplateToDelete(null);
     } catch (error: any) {
       setErrorMessage(error.message || 'Failed to delete template');
+    } finally {
+      setPendingAction(null);
     }
   };
 
   const handleUnarchive = async (template: TemplateRecord) => {
+    setPendingAction({ templateId: template._id, type: 'unarchive' });
     try {
       const res = await fetch(`/api/templates/sample/${template._id}/unarchive`, {
         method: 'PATCH',
@@ -212,6 +223,8 @@ export default function TemplatesPage() {
       setTemplateToUnarchive(null);
     } catch (error: any) {
       setErrorMessage(error.message || 'Failed to unarchive template');
+    } finally {
+      setPendingAction(null);
     }
   };
 
@@ -335,7 +348,7 @@ export default function TemplatesPage() {
 
           <div className="flex items-center gap-2">
             <Button asChild variant="outline" size="icon" className="h-10 w-10">
-              <Link href="/dashboard/template-categories" aria-label="Manage Categories">
+              <Link href="/dashboard/template-categories" aria-label="Manage Categories" title="Manage categories">
                 <FolderTree className="h-4 w-4" />
               </Link>
             </Button>
@@ -479,7 +492,13 @@ export default function TemplatesPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {filteredTemplates.map((template) => (
+              {filteredTemplates.map((template) => {
+                  const isArchiving = pendingAction?.templateId === template._id && pendingAction.type === 'archive';
+                  const isUnarchiving = pendingAction?.templateId === template._id && pendingAction.type === 'unarchive';
+                  const isDeleting = pendingAction?.templateId === template._id && pendingAction.type === 'delete';
+                  const isActionPending = isArchiving || isUnarchiving || isDeleting;
+
+                  return (
                 <Card
                   key={template._id}
                   className="group relative flex h-full overflow-hidden"
@@ -503,6 +522,7 @@ export default function TemplatesPage() {
                         type="button"
                         className="absolute inset-0 flex items-center justify-center bg-black/45 opacity-0 transition-opacity group-hover:opacity-100"
                         onClick={() => handlePreviewTemplate(template._id)}
+                        title="Preview template"
                       >
                         <div className="text-center text-white">
                           <Eye className="mx-auto h-7 w-7" />
@@ -530,7 +550,7 @@ export default function TemplatesPage() {
                     <div className={cn('mt-auto grid grid-cols-[1fr_auto_auto_auto] items-center gap-2')}>
                       {template.status === 'ACTIVE' ? (
                         <Button asChild variant="secondary" size="sm">
-                          <Link href={`/dashboard/templates/${template._id}`}>
+                          <Link href={`/dashboard/templates/${template._id}`} title="Edit template">
                             <Pencil className="mr-2 h-4 w-4" />
                             Edit Template
                           </Link>
@@ -545,6 +565,8 @@ export default function TemplatesPage() {
                         variant="outline"
                         size="icon"
                         onClick={() => handlePreviewTemplate(template._id)}
+                        title="Preview template"
+                        disabled={isActionPending}
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
@@ -554,18 +576,30 @@ export default function TemplatesPage() {
                           variant="outline"
                           size="icon"
                           aria-label="Archive template"
+                          title="Archive template"
                           onClick={() => setTemplateToArchive(template)}
+                          disabled={isActionPending}
                         >
-                          <Archive className="h-4 w-4" />
+                          {isArchiving ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Archive className="h-4 w-4" />
+                          )}
                         </Button>
                       ) : (
                         <Button
                           variant="outline"
                           size="icon"
                           aria-label="Unarchive template"
+                          title="Unarchive template"
                           onClick={() => setTemplateToUnarchive(template)}
+                          disabled={isActionPending}
                         >
-                          <RotateCcw className="h-4 w-4" />
+                          {isUnarchiving ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <ArchiveRestore className="h-4 w-4" />
+                          )}
                         </Button>
                       )}
 
@@ -573,14 +607,21 @@ export default function TemplatesPage() {
                         variant="outline"
                         size="icon"
                         aria-label="Delete template permanently"
+                        title="Delete template permanently"
                         onClick={() => setTemplateToDelete(template)}
+                        disabled={isActionPending}
                       >
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        {isDeleting ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-destructive" />
+                        ) : (
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        )}
                       </Button>
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                  );
+                })}
             </div>
           )}
         </section>
