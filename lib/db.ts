@@ -1,40 +1,54 @@
 import mongoose from 'mongoose';
 import { registerModels } from './register-models';
 
-const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGODB_URL!;
-
-if (!MONGODB_URI) {
-  throw new Error('Please define the MONGODB_URI environment variable inside .env.local');
+function getMongoUri(): string {
+  const raw = process.env.MONGODB_URI || process.env.MONGODB_URL;
+  const uri = typeof raw === 'string' ? raw.trim() : '';
+  if (!uri) {
+    throw new Error(
+      'Set MONGODB_URI or MONGODB_URL in .env.local (staging) — see server/.env',
+    );
+  }
+  return uri;
 }
 
-/**
- * Global is used here to maintain a cached connection across hot reloads
- * in development. This prevents connections growing exponentially
- * during API Route usage.
- */
-let cached = (global as any).mongoose;
+type MongooseCache = {
+  conn: typeof mongoose | null;
+  promise: Promise<typeof mongoose> | null;
+  uri: string | null;
+};
+
+let cached = (global as typeof globalThis & { mongoose?: MongooseCache }).mongoose;
 
 if (!cached) {
-  cached = (global as any).mongoose = { conn: null, promise: null };
+  cached = (global as typeof globalThis & { mongoose?: MongooseCache }).mongoose = {
+    conn: null,
+    promise: null,
+    uri: null,
+  };
 }
 
 async function dbConnect() {
-  if (cached.conn) {
-    return cached.conn;
+  const uri = getMongoUri();
+
+  if (cached!.conn && cached!.uri === uri) {
+    return cached!.conn;
   }
 
-  if (!cached.promise) {
-    const opts = {
-      bufferCommands: false,
-    };
-
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      return mongoose;
-    });
+  if (cached!.conn && cached!.uri !== uri) {
+    await mongoose.disconnect();
+    cached!.conn = null;
+    cached!.promise = null;
   }
-  cached.conn = await cached.promise;
+
+  if (!cached!.promise) {
+    cached!.uri = uri;
+    cached!.promise = mongoose.connect(uri, { bufferCommands: false }).then((instance) => instance);
+  }
+
+  cached!.conn = await cached!.promise;
   registerModels();
-  return cached.conn;
+  return cached!.conn;
 }
 
 export default dbConnect;

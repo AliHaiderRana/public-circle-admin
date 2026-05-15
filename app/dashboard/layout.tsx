@@ -24,6 +24,7 @@ import {
   Clock,
   FileText,
   FolderTree,
+  Layers,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -39,6 +40,7 @@ const sidebarItems = [
   { name: 'Sample Templates', href: '/dashboard/templates', icon: FileText },
   { name: 'Template Categories', href: '/dashboard/template-categories', icon: FolderTree },
   { name: 'Stripe Dashboard', href: '/dashboard/stripe', icon: CreditCard },
+  { name: 'Plan Quotas', href: '/dashboard/plans', icon: Layers },
   { name: 'Cron Jobs', href: '/dashboard/crons', icon: Clock },
   { name: 'Admin Users', href: '/dashboard/admins', icon: Shield, superAdminOnly: true },
   { name: 'Profile', href: '/dashboard/profile', icon: UserCircle },
