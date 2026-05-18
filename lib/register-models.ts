@@ -10,6 +10,7 @@ import CompanyContact from './models/CompanyContact';
 import Template from './models/Template';
 import TemplateCategory from './models/TemplateCategory';
 import EditorAsset from './models/EditorAsset';
+import Plan from './models/Plan';
 
 export function registerModels() {
   // Accessing the models ensures they are registered with Mongoose
@@ -26,5 +27,6 @@ export function registerModels() {
     Template,
     TemplateCategory,
     EditorAsset,
+    Plan,
   };
 }

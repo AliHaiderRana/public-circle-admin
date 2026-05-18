@@ -24,6 +24,7 @@ export const MODELS = {
   TOPUP: "topup",
   CUSTOMER_REQUESTS: "customer-requests",
   COMPANY_GROUPING: "company-grouping",
+  PROJECT: "project",
   BALANCE_DEDUCTION: "balance-deduction",
   UN_SUBSCRIBED_USERS: "un-subscribed-users",
   APP_CONFIG: "app-config",
