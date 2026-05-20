@@ -76,6 +76,10 @@ const schema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    hasDedicatedIp: {
+      type: Boolean,
+      default: false,
+    },
     isPlanBandwidthExceeded: {
       type: Boolean,
       default: false,

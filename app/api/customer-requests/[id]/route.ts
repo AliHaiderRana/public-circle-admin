@@ -49,6 +49,12 @@ export async function PATCH(
           case CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_FILTERS:
             company.isContactFilterLocked = false;
             break;
+          case CUSTOMER_REQUEST_TYPE.DEDICATED_IP_ENABLED:
+            company.hasDedicatedIp = true;
+            break;
+          case CUSTOMER_REQUEST_TYPE.DEDICATED_IP_DISABLED:
+            company.hasDedicatedIp = false;
+            break;
         }
         
         // Handle validation for SES status fields - set to HEALTHY if invalid value exists
