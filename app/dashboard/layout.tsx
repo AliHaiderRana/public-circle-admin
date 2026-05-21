@@ -25,6 +25,7 @@ import {
   FileText,
   FolderTree,
   Layers,
+  Languages,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -45,6 +46,7 @@ const sidebarItems = [
   { name: 'Admin Users', href: '/dashboard/admins', icon: Shield, superAdminOnly: true },
   { name: 'Profile', href: '/dashboard/profile', icon: UserCircle },
   { name: 'System Configuration', href: '/dashboard/config', icon: Settings, superAdminOnly: true },
+  { name: 'Translations', href: '/dashboard/translations', icon: Languages, superAdminOnly: true },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
