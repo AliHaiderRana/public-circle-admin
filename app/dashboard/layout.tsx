@@ -43,10 +43,10 @@ const sidebarItems = [
   { name: 'Stripe Dashboard', href: '/dashboard/stripe', icon: CreditCard },
   { name: 'Plan Quotas', href: '/dashboard/plans', icon: Layers },
   { name: 'Cron Jobs', href: '/dashboard/crons', icon: Clock },
+  { name: 'Translations', href: '/dashboard/translations', icon: Languages },
   { name: 'Admin Users', href: '/dashboard/admins', icon: Shield, superAdminOnly: true },
   { name: 'Profile', href: '/dashboard/profile', icon: UserCircle },
   { name: 'System Configuration', href: '/dashboard/config', icon: Settings, superAdminOnly: true },
-  { name: 'Translations', href: '/dashboard/translations', icon: Languages, superAdminOnly: true },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

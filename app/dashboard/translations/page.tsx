@@ -175,13 +175,13 @@ export default function TranslationsPage() {
   }, [prefix, search, pagination.page, pagination.limit]);
 
   useEffect(() => {
-    if (!authLoading && user && !user.isSuperAdmin) {
-      router.push('/dashboard');
+    if (!authLoading && !user) {
+      router.push('/login');
     }
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    if (user?.isSuperAdmin) {
+    if (user) {
       fetchLocales().then((list) => {
         setNewValues(Object.fromEntries(list.map((l) => [l.code, ''])));
       });
@@ -189,7 +189,7 @@ export default function TranslationsPage() {
   }, [user, fetchLocales]);
 
   useEffect(() => {
-    if (user?.isSuperAdmin && locales.length) {
+    if (user && locales.length) {
       fetchTranslations();
     }
   }, [user, locales.length, fetchTranslations]);
@@ -336,7 +336,7 @@ export default function TranslationsPage() {
     }
   };
 
-  if (authLoading || !user?.isSuperAdmin) {
+  if (authLoading || !user) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-neutral-500" />

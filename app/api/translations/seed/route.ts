@@ -5,8 +5,8 @@ const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
 
 export async function POST(request: Request) {
   const session = await getServerSession();
-  if (!session?.isSuperAdmin) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);

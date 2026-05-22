@@ -8,9 +8,6 @@ export async function GET(request: Request) {
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  if (!session.isSuperAdmin) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
 
   const { searchParams } = new URL(request.url);
   const params = new URLSearchParams();
@@ -47,8 +44,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const session = await getServerSession();
-  if (!session?.isSuperAdmin) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
@@ -78,8 +75,8 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   const session = await getServerSession();
-  if (!session?.isSuperAdmin) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
@@ -106,8 +103,8 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   const session = await getServerSession();
-  if (!session?.isSuperAdmin) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const key = new URL(request.url).searchParams.get('key');

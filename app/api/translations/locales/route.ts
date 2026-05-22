@@ -28,8 +28,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const session = await getServerSession();
-  if (!session?.isSuperAdmin) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
