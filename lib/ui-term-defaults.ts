@@ -2,12 +2,29 @@ import mongoose from 'mongoose';
 import {
   DEFAULT_UI_TERMS,
   UI_TERM_KEYS,
-  UI_LOCALES,
 } from '@/lib/ui-term-constants';
 
-export { DEFAULT_UI_TERMS, UI_TERM_KEYS, UI_LOCALES };
+export { DEFAULT_UI_TERMS, UI_TERM_KEYS };
 
 const LEGACY_COLLECTION = 'ui-term-translations';
+
+function mapDescriptionsToObject(
+  descriptions: Map<string, string> | Record<string, string> | undefined
+): Record<string, string> {
+  if (!descriptions) return {};
+  if (descriptions instanceof Map) return Object.fromEntries(descriptions);
+  return { ...descriptions };
+}
+
+async function getLocaleCodes(): Promise<string[]> {
+  const SupportedLocale = (await import('@/lib/models/SupportedLocale')).default;
+  const locales = await SupportedLocale.find({ enabled: true })
+    .sort({ isDefault: -1, sortOrder: 1, createdAt: 1 })
+    .select('code')
+    .lean();
+  if (locales.length) return locales.map((l) => l.code);
+  return ['en-US', 'en-GB', 'en-CA', 'fr'];
+}
 
 async function migrateLegacyTermsIfNeeded() {
   const legacyCol = mongoose.connection.collection(LEGACY_COLLECTION);
@@ -31,12 +48,9 @@ async function migrateLegacyTermsIfNeeded() {
   }
 
   for (const key of Object.keys(grouped)) {
-    const descriptions = Object.fromEntries(
-      UI_LOCALES.map((locale) => [locale, grouped[key].descriptions[locale] ?? ''])
-    );
     await UiTerm.findOneAndUpdate(
       { key },
-      { key, label: grouped[key].label, descriptions },
+      { key, label: grouped[key].label, descriptions: grouped[key].descriptions },
       { upsert: true, runValidators: true }
     );
   }
@@ -44,26 +58,86 @@ async function migrateLegacyTermsIfNeeded() {
   await legacyCol.deleteMany({});
 }
 
-/** Server-only: seeds MongoDB (4 documents, one per term) */
-export async function seedUiTermsIfEmpty() {
+/** Upsert all default context-help rows into MongoDB (admin + public-circle). */
+export async function seedUiTermsDefaults() {
   const UiTerm = (await import('@/lib/models/UiTerm')).default;
 
   await migrateLegacyTermsIfNeeded();
 
-  const count = await UiTerm.countDocuments();
-  if (count >= UI_TERM_KEYS.length) return;
+  const localeCodes = await getLocaleCodes();
+  const defaultLocale = localeCodes[0] || 'en-US';
 
   for (const key of UI_TERM_KEYS) {
-    const existing = await UiTerm.findOne({ key });
-    if (existing) continue;
-
     const defaults = DEFAULT_UI_TERMS[key];
     if (!defaults) continue;
 
-    await UiTerm.create({
-      key,
-      label: defaults.label,
-      descriptions: defaults.descriptions,
-    });
+    const descriptions: Record<string, string> = {};
+    for (const code of localeCodes) {
+      descriptions[code] =
+        defaults.descriptions[code as keyof typeof defaults.descriptions] ||
+        defaults.descriptions['en-US'] ||
+        '';
+    }
+
+    await UiTerm.findOneAndUpdate(
+      { key },
+      {
+        key,
+        label: defaults.label,
+        descriptions,
+      },
+      { upsert: true, runValidators: true }
+    );
   }
+
+  return readAllUiTerms();
+}
+
+export async function readAllUiTerms() {
+  const UiTerm = (await import('@/lib/models/UiTerm')).default;
+  const docs = await UiTerm.find().select('key label descriptions').sort({ key: 1 }).lean();
+
+  return docs.map((doc) => ({
+    key: doc.key,
+    label: doc.label,
+    descriptions: mapDescriptionsToObject(
+      doc.descriptions as Map<string, string> | Record<string, string>
+    ),
+  }));
+}
+
+export async function upsertUiTermDoc(payload: {
+  key: string;
+  label: string;
+  descriptions: Record<string, string>;
+}) {
+  const UiTerm = (await import('@/lib/models/UiTerm')).default;
+  const localeCodes = await getLocaleCodes();
+
+  const normalized: Record<string, string> = {};
+  for (const code of localeCodes) {
+    const value = (payload.descriptions[code] ?? '').trim();
+    if (!value) {
+      throw new Error(`Tooltip description is required for locale "${code}"`);
+    }
+    normalized[code] = value;
+  }
+
+  const doc = await UiTerm.findOneAndUpdate(
+    { key: payload.key },
+    {
+      key: payload.key,
+      label: payload.label.trim(),
+      descriptions: normalized,
+    },
+    { new: true, upsert: true, runValidators: true }
+  ).lean();
+
+  return {
+    key: doc!.key,
+    label: doc!.label,
+    descriptions: mapDescriptionsToObject(
+      doc!.descriptions as Map<string, string> | Record<string, string>
+    ),
+  };
 }

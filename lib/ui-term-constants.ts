@@ -17,24 +17,24 @@ export const DEFAULT_UI_TERMS: Record<string, UiTermDefaults> = {
     label: 'Fields',
     descriptions: {
       'en-US':
-        'Contact attributes used to filter, segment, and personalize your campaigns.',
+        'Fields are contact attributes (e.g. email, city, subscription status). Use them to build filters and power segment rules.',
       'en-GB':
-        'Contact attributes used to filter, segment, and personalise your campaigns.',
+        'Fields are contact attributes (e.g. email, city, subscription status). Use them to build filters and power segment rules.',
       'en-CA':
-        'Contact attributes used to filter, segment, and personalize your campaigns.',
-      fr: 'Attributs de contact utilisés pour filtrer, segmenter et personnaliser vos campagnes.',
+        'Fields are contact attributes (e.g. email, city, subscription status). Use them to build filters and power segment rules.',
+      fr: "Les champs sont des attributs de contact (ex. e-mail, ville, statut d'abonnement). Utilisez-les pour créer des filtres et des règles de segment.",
     },
   },
   segment: {
     label: 'Segment',
     descriptions: {
       'en-US':
-        'A saved audience defined by field rules; campaigns send to one or more segments.',
+        'A segment is a saved group of contacts that match your field rules. Campaigns target one or more segments.',
       'en-GB':
-        'A saved audience defined by field rules; campaigns send to one or more segments.',
+        'A segment is a saved group of contacts that match your field rules. Campaigns target one or more segments.',
       'en-CA':
-        'A saved audience defined by field rules; campaigns send to one or more segments.',
-      fr: "Une audience enregistrée définie par des règles de champs ; les campagnes s'envoient à un ou plusieurs segments.",
+        'A segment is a saved group of contacts that match your field rules. Campaigns target one or more segments.',
+      fr: 'Un segment est un groupe enregistré de contacts qui correspondent à vos règles de champs. Les campagnes ciblent un ou plusieurs segments.',
     },
   },
   campaign: {
@@ -78,4 +78,10 @@ export const LOCALE_DISPLAY_NAMES: Record<string, string> = {
   'en-GB': 'English (UK)',
   'en-CA': 'English (CA)',
   fr: 'French',
+};
+
+export type UiTermRow = {
+  key: string;
+  label: string;
+  descriptions: Record<string, string>;
 };

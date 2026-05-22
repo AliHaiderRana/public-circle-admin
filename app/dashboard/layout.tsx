@@ -24,6 +24,7 @@ import {
   FolderTree,
   Layers,
   Languages,
+  Info,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -42,6 +43,7 @@ const sidebarItems = [
   { name: 'Plan Quotas', href: '/dashboard/plans', icon: Layers },
   { name: 'Cron Jobs', href: '/dashboard/crons', icon: Clock },
   { name: 'Translations', href: '/dashboard/translations', icon: Languages },
+  { name: 'Context help', href: '/dashboard/ui-hints', icon: Info },
   { name: 'Admin Users', href: '/dashboard/admins', icon: Shield, superAdminOnly: true },
   { name: 'Profile', href: '/dashboard/profile', icon: UserCircle },
   { name: 'System Configuration', href: '/dashboard/config', icon: Settings, superAdminOnly: true },
