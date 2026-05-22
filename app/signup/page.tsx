@@ -60,7 +60,7 @@ export default function SignupPage() {
 
   if (isAllowed === false) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-neutral-50 dark:bg-neutral-900 px-4">
+      <div className="flex items-center justify-center min-h-screen bg-muted/40 px-4">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Signup Disabled</CardTitle>
@@ -77,7 +77,7 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-neutral-50 dark:bg-neutral-900 px-4">
+    <div className="flex items-center justify-center min-h-screen bg-muted/40 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold">Admin Signup</CardTitle>
@@ -113,7 +113,7 @@ export default function SignupPage() {
           </form>
         </CardContent>
         <CardFooter className="flex justify-center">
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-muted-foreground">
             Already have an account?{' '}
             <Link href="/login" className="text-primary hover:underline">
               Login
