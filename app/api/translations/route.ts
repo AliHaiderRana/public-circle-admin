@@ -16,6 +16,8 @@ export async function GET(request: Request) {
   params.set('limit', searchParams.get('limit') || '10');
   const search = searchParams.get('search');
   if (search) params.set('search', search);
+  const searchScope = searchParams.get('searchScope');
+  if (searchScope) params.set('searchScope', searchScope);
 
   try {
     const res = await fetch(`${API_BASE_URL}/translations?${params}`, {
@@ -34,6 +36,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       prefix: data.prefix,
       search: data.search,
+      searchScope: data.searchScope,
       translations: data.translations ?? [],
       pagination: data.pagination,
     });

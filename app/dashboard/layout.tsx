@@ -4,19 +4,17 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import NotificationDropdown from '@/components/NotificationDropdown';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { 
-  LayoutDashboard, 
-  Building2, 
-  Users, 
-  Settings, 
+import { cn } from '@/lib/utils';
+import {
+  LayoutDashboard,
+  Building2,
+  Users,
+  Settings,
   LogOut,
   Menu,
   X,
   ClipboardList,
   TrendingUp,
-  Bell,
-  Search,
   Play,
   CreditCard,
   UserCircle,
@@ -56,129 +54,120 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <ProtectedRoute>
-      <div className="flex h-screen bg-neutral-100 dark:bg-neutral-900">
-        {/* Sidebar */}
-        <aside className={`
-          fixed inset-y-0 left-0 z-40 w-64 bg-white dark:bg-neutral-800 border-r border-neutral-200 dark:border-neutral-700 transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:flex-shrink-0
-          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        `}>
-          <div className="flex flex-col h-full">
-            <div className="p-6 hidden lg:block">
-              <div className="flex items-center gap-3">
-                <img 
-                  src="/logo-single.png" 
-                  alt="Public Circle Admin" 
-                  className="h-8 w-8 rounded-lg object-cover"
-                />
-                <h1 className="text-xl font-bold text-primary">Public Circle Admin</h1>
-              </div>
+      <div className="flex h-screen bg-background text-foreground">
+        <aside
+          className={cn(
+            'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 lg:shrink-0',
+            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          )}
+        >
+          <div className="hidden border-b border-sidebar-border p-6 lg:block">
+            <div className="flex items-center gap-3">
+              <img
+                src="/logo-single.png"
+                alt="Public Circle Admin"
+                className="h-8 w-8 rounded-lg object-cover"
+              />
+              <h1 className="text-lg font-semibold text-sidebar-foreground">
+                Public Circle Admin
+              </h1>
             </div>
-            <div className="p-4 lg:hidden">
-              <div className="flex items-center gap-3">
-                <img 
-                  src="/logo-single.png" 
-                  alt="Public Circle Admin" 
-                  className="h-6 w-6 rounded-lg object-cover"
-                />
-                <h1 className="text-lg font-bold text-primary">Public Circle Admin</h1>
-              </div>
+          </div>
+          <div className="border-b border-sidebar-border p-4 lg:hidden">
+            <div className="flex items-center gap-3">
+              <img
+                src="/logo-single.png"
+                alt="Public Circle Admin"
+                className="h-6 w-6 rounded-lg object-cover"
+              />
+              <h1 className="text-base font-semibold">Public Circle Admin</h1>
             </div>
+          </div>
 
-            <nav className="flex-1 px-4 space-y-2">
-              {sidebarItems
-                .filter((item: any) => {
-                  // Hide super-admin-only items for non-super-admin users
-                  if (item.superAdminOnly && !user?.isSuperAdmin) {
-                    return false;
-                  }
-                  return true;
-                })
-                .map((item) => {
+          <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+            {sidebarItems
+              .filter((item) => {
+                if (item.superAdminOnly && !user?.isSuperAdmin) return false;
+                return true;
+              })
+              .map((item) => {
                 const isActive = pathname === item.href;
                 return (
-                  <Link 
-                    key={item.href} 
+                  <Link
+                    key={item.href}
                     href={item.href}
-                    className={`
-                      flex items-center gap-3 px-4 py-2 rounded-lg transition-colors
-                      ${isActive 
-                        ? 'bg-primary text-primary-foreground' 
-                        : 'text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700'}
-                    `}
+                    className={cn(
+                      'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                      isActive
+                        ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+                        : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                    )}
                     onClick={() => setIsSidebarOpen(false)}
                   >
-                    <item.icon size={20} />
-                    <span className="text-sm font-medium">{item.name}</span>
+                    <item.icon className="size-5 shrink-0" />
+                    <span>{item.name}</span>
                   </Link>
                 );
               })}
-            </nav>
+          </nav>
 
-            <div className="p-4 border-t border-neutral-200 dark:border-neutral-700">
-              <div className="flex items-center gap-3 mb-4 px-4">
-                <div className="bg-primary/10 text-primary p-2 rounded-full">
-                  <Users size={20} />
-                </div>
-                <div className="overflow-hidden">
-                  <p className="text-sm font-medium truncate">{user?.email}</p>
-                  <p className="text-xs text-neutral-500">Administrator</p>
-                </div>
+          <div className="border-t border-sidebar-border p-4">
+            <div className="mb-3 flex items-center gap-3 px-2">
+              <div className="flex size-9 items-center justify-center rounded-full bg-sidebar-accent text-sidebar-accent-foreground">
+                <Users className="size-4" />
               </div>
-              <Button 
-                variant="ghost" 
-                className="w-full justify-start gap-3 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                onClick={logout}
-              >
-                <LogOut size={20} />
-                <span className="text-sm">Logout</span>
-              </Button>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{user?.email}</p>
+                <p className="text-xs text-muted-foreground">Administrator</p>
+              </div>
             </div>
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={logout}
+            >
+              <LogOut className="size-4" />
+              Logout
+            </Button>
           </div>
         </aside>
 
-        {/* Overlay for mobile sidebar */}
         {isSidebarOpen && (
-          <div 
-            className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          <div
+            className="fixed inset-0 z-30 bg-black/50 lg:hidden"
             onClick={() => setIsSidebarOpen(false)}
+            aria-hidden
           />
         )}
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden lg:ml-0">
-          {/* Header */}
-          <header className="bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700 px-4 py-3 lg:px-6 lg:h-16 flex-shrink-0">
-            <div className="flex items-center justify-between h-full">
-                <div className="flex items-center gap-3">
-                  <Button 
-                    variant="ghost" 
-                    size="icon"
-                    className="lg:hidden"
-                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                  >
-                    {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
-                  </Button>
-                  <div className="flex items-center gap-2">
-                    <img 
-                      src="/logo-single.png" 
-                      alt="Public Circle Admin" 
-                      className="h-6 w-6 rounded-lg object-cover"
-                    />
-                    <h1 className="text-lg font-bold text-primary">Public Circle Admin</h1>
-                  </div>
-                </div>
-              
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <header className="flex h-14 shrink-0 items-center border-b border-border bg-card px-4 lg:h-16 lg:px-6">
+            <div className="flex w-full items-center justify-between">
               <div className="flex items-center gap-3">
-                <NotificationDropdown />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="lg:hidden"
+                  onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                >
+                  {isSidebarOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+                  <span className="sr-only">Toggle menu</span>
+                </Button>
+                <div className="flex items-center gap-2 lg:hidden">
+                  <img
+                    src="/logo-single.png"
+                    alt="Public Circle Admin"
+                    className="size-6 rounded-lg object-cover"
+                  />
+                  <span className="text-sm font-semibold">Public Circle Admin</span>
+                </div>
               </div>
+              <NotificationDropdown />
             </div>
           </header>
 
-          {/* Main Content */}
-          <main className="flex-1 overflow-y-auto bg-neutral-50 dark:bg-neutral-900">
-            <div className="p-4 lg:p-8">
-              {children}
-            </div>
+          <main className="flex-1 overflow-y-auto bg-muted/30">
+            <div className="p-4 lg:p-8">{children}</div>
           </main>
         </div>
       </div>
