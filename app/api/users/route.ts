@@ -3,6 +3,7 @@ import dbConnect from '@/lib/db';
 import User from '@/lib/models/User';
 import Company from '@/lib/models/Company';
 import Role from '@/lib/models/Role';
+import OnboardingProgress from '@/lib/models/OnboardingProgress';
 import { getServerSession } from '@/lib/auth';
 
 export async function GET(request: Request) {
@@ -19,9 +20,8 @@ export async function GET(request: Request) {
     const companyId = searchParams.get('companyId') || '';
 
     // Ensure models are registered for populate
-    const _Company = Company;
-    const _Role = Role;
-    
+    void Company; void Role; void OnboardingProgress;
+
     // Build search query
     let query: any = {};
     if (search) {
@@ -69,12 +69,39 @@ export async function GET(request: Request) {
         .populate('role', 'name')
         .sort({ createdAt: sortOrder })
         .skip(skip)
-        .limit(limit),
+        .limit(limit)
+        .lean(),
       User.countDocuments(query)
     ]);
-    
+
+    // Attach tour step counts to each user
+    const userIds = users.map((u: any) => u._id);
+    const progressDocs = await OnboardingProgress.find({ user: { $in: userIds } })
+      .select('user steps isCompleted isSkipped')
+      .lean();
+
+    const progressByUser = new Map(
+      progressDocs.map((p: any) => [String(p.user), p])
+    );
+
+    const usersWithProgress = users.map((u: any) => {
+      const progress = progressByUser.get(String(u._id));
+      return {
+        ...u,
+        tourSteps: progress
+          ? {
+              total: progress.steps.length,
+              completed: progress.steps.filter((s: any) => s.isCompleted).length,
+              isCompleted: progress.isCompleted,
+              isSkipped: progress.isSkipped,
+              steps: progress.steps,
+            }
+          : null,
+      };
+    });
+
     return NextResponse.json({
-      users,
+      users: usersWithProgress,
       pagination: {
         page,
         limit,
