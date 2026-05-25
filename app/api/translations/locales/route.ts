@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
+import dbConnect from '@/lib/db';
+import { syncDescriptionsForNewLocale } from '@/lib/ui-term-defaults';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
 
@@ -51,6 +53,22 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: body.message || 'Failed to add language' },
         { status: res.status }
+      );
+    }
+
+    const code = String(payload.code ?? '').trim();
+    try {
+      await dbConnect();
+      await syncDescriptionsForNewLocale({ code });
+    } catch (syncErr) {
+      const message =
+        syncErr instanceof Error ? syncErr.message : 'Context help sync failed';
+      return NextResponse.json(
+        {
+          error: `${message}. Language was added for translations; fix MongoDB or retry.`,
+          locale: body.data,
+        },
+        { status: 500 }
       );
     }
 

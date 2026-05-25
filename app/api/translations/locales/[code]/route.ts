@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
+import dbConnect from '@/lib/db';
+import { stripLocaleFromAllTerms } from '@/lib/ui-term-defaults';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
 
@@ -26,6 +28,22 @@ export async function DELETE(
         { status: res.status }
       );
     }
+
+    try {
+      await dbConnect();
+      await stripLocaleFromAllTerms({ code });
+    } catch (syncErr) {
+      const message =
+        syncErr instanceof Error ? syncErr.message : 'Context help sync failed';
+      return NextResponse.json(
+        {
+          error: `${message}. Language was removed from translations; fix MongoDB or retry.`,
+          data: body.data,
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({ data: body.data });
   } catch {
     return NextResponse.json({ error: 'Failed to connect to backend' }, { status: 502 });
