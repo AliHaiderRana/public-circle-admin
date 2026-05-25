@@ -33,7 +33,16 @@ import {
   LogIn,
   Loader2,
   ChevronsUpDown,
+  CheckCircle2,
+  Circle,
+  MapPin,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export default function UsersPage() {
   const [users, setUsers] = useState<any[]>([]);
@@ -46,6 +55,7 @@ export default function UsersPage() {
   const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [impersonateUserId, setImpersonateUserId] = useState<string | null>(null);
+  const [tourModalUser, setTourModalUser] = useState<any>(null);
   const companyDropdownRef = useRef<HTMLDivElement | null>(null);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -316,6 +326,7 @@ export default function UsersPage() {
                 <TableHead>Company</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Tour Steps</TableHead>
                 <TableHead className="pl-6">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -338,6 +349,9 @@ export default function UsersPage() {
                     <TableCell>
                       <Skeleton className="h-5 w-[80px] rounded-full" />
                     </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-5 w-[60px] rounded-full" />
+                    </TableCell>
                     <TableCell className="pl-6">
                       <Skeleton className="h-8 w-16" />
                     </TableCell>
@@ -346,7 +360,7 @@ export default function UsersPage() {
               ) : users.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="text-center h-48 text-neutral-500"
                   >
                     <div className="flex flex-col items-center gap-2">
@@ -425,6 +439,28 @@ export default function UsersPage() {
                         {user.status}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
+                          <CheckCircle2
+                            className={`h-3.5 w-3.5 shrink-0 ${user.tourSteps?.isCompleted ? 'text-green-600' : 'text-neutral-200'}`}
+                          />
+                          <span className={`text-xs font-medium ${user.tourSteps?.isCompleted ? 'text-green-600' : 'text-neutral-600'}`}>
+                            {user.tourSteps ? user.tourSteps.completed : 0}/{user.tourSteps ? user.tourSteps.total : 9}
+                          </span>
+                        </div>
+                        {user.tourSteps && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs text-neutral-500 hover:text-neutral-900"
+                            onClick={() => setTourModalUser(user)}
+                          >
+                            View
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="pl-6">
                       <Button
                         variant="outline"
@@ -477,6 +513,63 @@ export default function UsersPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Tour Steps Modal */}
+      <Dialog open={!!tourModalUser} onOpenChange={(open) => !open && setTourModalUser(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-neutral-500" />
+              Tour Steps —{" "}
+              {tourModalUser?.firstName
+                ? `${tourModalUser.firstName} ${tourModalUser.lastName || ''}`.trim()
+                : tourModalUser?.emailAddress}
+            </DialogTitle>
+          </DialogHeader>
+
+          {tourModalUser?.tourSteps && (
+            <div className="space-y-1 pt-2">
+              {/* Summary */}
+              <div className="flex items-center justify-between pb-3 border-b mb-3">
+                <span className="text-sm text-neutral-500">
+                  {tourModalUser.tourSteps.completed} of {tourModalUser.tourSteps.total} steps completed
+                </span>
+                {tourModalUser.tourSteps.isCompleted && (
+                  <span className="text-xs font-medium text-green-600 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
+                    Tour Complete
+                  </span>
+                )}
+                {tourModalUser.tourSteps.isSkipped && (
+                  <span className="text-xs font-medium text-neutral-500 bg-neutral-100 border px-2 py-0.5 rounded-full">
+                    Skipped
+                  </span>
+                )}
+              </div>
+
+              {/* Step list */}
+              <div className="space-y-2">
+                {(tourModalUser.tourSteps.steps || []).map((step: any, i: number) => (
+                  <div key={i} className="flex items-start gap-3 py-1">
+                    {step.isCompleted ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                    ) : (
+                      <Circle className="h-4 w-4 text-neutral-300 mt-0.5 shrink-0" />
+                    )}
+                    <div>
+                      <p className={`text-sm font-medium leading-tight ${step.isCompleted ? 'text-neutral-900' : 'text-neutral-400'}`}>
+                        {step.title || `Step ${i + 1}`}
+                      </p>
+                      {step.description && (
+                        <p className="text-xs text-neutral-400 mt-0.5">{step.description}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

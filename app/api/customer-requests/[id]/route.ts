@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
+import Stripe from 'stripe';
 import dbConnect from '@/lib/db';
 import CustomerRequest from '@/lib/models/CustomerRequest';
 import Company from '@/lib/models/Company';
 import { CUSTOMER_REQUEST_STATUS, CUSTOMER_REQUEST_TYPE } from '@/lib/constants';
 import { getServerSession } from '@/lib/auth';
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 export async function PATCH(
   request: Request,
@@ -24,9 +27,7 @@ export async function PATCH(
   await dbConnect();
 
   try {
-    // Ensure models are registered
-    const _Company = Company;
-    const _CustomerRequest = CustomerRequest;
+    void Company; void CustomerRequest; // ensure models registered
 
     const custRequest = await CustomerRequest.findById(id);
     if (!custRequest) {
@@ -52,19 +53,90 @@ export async function PATCH(
           case CUSTOMER_REQUEST_TYPE.DEDICATED_IP_ENABLED:
             company.hasDedicatedIp = true;
             break;
-          case CUSTOMER_REQUEST_TYPE.DEDICATED_IP_DISABLED:
+          case CUSTOMER_REQUEST_TYPE.DEDICATED_IP_DISABLED: {
             company.hasDedicatedIp = false;
+            // Remove dedicated IP add-on from Stripe and issue prorated refund
+            if (company.stripeCustomerId) {
+              try {
+                const stripeCustomerId = company.stripeCustomerId as string;
+
+                // Get active subscription with expanded product names
+                const subscriptions = await stripe.subscriptions.list({
+                  customer: stripeCustomerId,
+                  status: 'active',
+                  limit: 5,
+                  expand: ['data.items.data.price'],
+                });
+
+                for (const sub of subscriptions.data) {
+                  let dedicatedItem: any = null;
+                  for (const item of sub.items.data) {
+                    const productId = (item.price as any)?.product;
+                    if (!productId) continue;
+                    const product = await stripe.products.retrieve(productId as string);
+                    if (product.name.toLowerCase().includes('dedicated')) {
+                      dedicatedItem = item;
+                      break;
+                    }
+                  }
+
+                  if (!dedicatedItem) continue;
+
+                  // Remove item with proration — always_invoice creates an immediate
+                  // invoice so the credit lands on the customer balance right away
+                  await stripe.subscriptions.update(sub.id, {
+                    items: [{ id: dedicatedItem.id, deleted: true }],
+                    proration_behavior: 'always_invoice',
+                  });
+
+                  // Refund the credit back to the original payment method
+                  const customer = await stripe.customers.retrieve(stripeCustomerId) as any;
+                  let balance: number = customer.balance ?? 0;
+
+                  if (balance < 0) {
+                    const invoices = await stripe.invoices.list({
+                      subscription: sub.id,
+                      status: 'paid',
+                    });
+
+                    const paidWithCharge = invoices.data.filter((inv: any) => (inv as any).charge);
+
+                    const refunds: Promise<any>[] = [];
+                    for (const invoice of paidWithCharge) {
+                      if (Math.abs(balance) <= 0) break;
+                      const charge = await stripe.charges.retrieve((invoice as any).charge as string) as any;
+                      const refundable = charge.amount - charge.amount_refunded;
+                      if (refundable > 0) {
+                        const refundAmount = Math.min(refundable, Math.abs(balance));
+                        refunds.push(stripe.refunds.create({ charge: charge.id, amount: refundAmount }));
+                        balance += refundAmount;
+                      }
+                    }
+
+                    await Promise.all(refunds);
+
+                    // Zero out the customer balance after refunding
+                    await stripe.customers.update(stripeCustomerId, { balance: 0 });
+                  }
+
+                  break;
+                }
+              } catch (stripeErr) {
+                console.error('Stripe update failed for DEDICATED_IP_DISABLED:', stripeErr);
+              }
+            }
             break;
+          }
         }
-        
-        // Handle validation for SES status fields - set to HEALTHY if invalid value exists
+
+        // Sanitise SES status enum fields
         if (company.sesBounceStatus && !['HEALTHY', 'WARNING', 'RISK'].includes(company.sesBounceStatus)) {
           company.sesBounceStatus = 'HEALTHY';
         }
         if (company.sesComplaintStatus && !['HEALTHY', 'WARNING', 'RISK'].includes(company.sesComplaintStatus)) {
           company.sesComplaintStatus = 'HEALTHY';
         }
-        
+
         await company.save();
       }
     }

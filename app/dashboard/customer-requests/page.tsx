@@ -315,12 +315,7 @@ export default function CustomerRequestsPage() {
                                 onClick={() => handleUpdateStatus(request._id, CUSTOMER_REQUEST_STATUS.COMPLETED)}
                                 disabled={updatingId === request._id}
                               >
-                                {updatingId === request._id ? (
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Check className="mr-2 h-4 w-4" />
-                                )}
-                                Mark as Completed
+                                {updatingId === request._id ? 'Processing...' : 'Mark as Completed'}
                               </Button>
                             ) : (
                               <>
