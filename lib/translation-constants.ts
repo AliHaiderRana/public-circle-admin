@@ -20,7 +20,8 @@ export const TRANSLATION_PREFIXES = [
   { id: 'common', label: 'Common' },
 ] as const;
 
-export const TRANSLATION_KEY_PATTERN = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/;
+/** Lowercase dot keys; segments may include underscores (e.g. global.account.org_settings). */
+export const TRANSLATION_KEY_PATTERN = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/;
 
 export const LOCALE_CODE_PATTERN = /^[a-z]{2}(-[A-Z]{2})?$/;
 
