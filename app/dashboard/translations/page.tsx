@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import {
   Dialog,
   DialogContent,
@@ -116,6 +117,10 @@ export default function TranslationsPage() {
   const [deleteKeyTarget, setDeleteKeyTarget] = useState<string | null>(null);
   const [deleteLocaleTarget, setDeleteLocaleTarget] = useState<SupportedLocaleOption | null>(null);
   const [deletingLocale, setDeletingLocale] = useState(false);
+  const [toggleLocaleTarget, setToggleLocaleTarget] = useState<{
+    loc: SupportedLocaleOption;
+    enabled: boolean;
+  } | null>(null);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editRow, setEditRow] = useState<TranslationRow | null>(null);
@@ -133,6 +138,7 @@ export default function TranslationsPage() {
   const [newLangLabel, setNewLangLabel] = useState('');
   const [newLangShort, setNewLangShort] = useState('');
   const [addingLang, setAddingLang] = useState(false);
+  const [togglingLocaleCode, setTogglingLocaleCode] = useState<string | null>(null);
   const [langError, setLangError] = useState('');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -295,6 +301,45 @@ export default function TranslationsPage() {
       }
     } finally {
       setDeletingKey(null);
+    }
+  };
+
+  const handleToggleLocaleEnabled = async (loc: SupportedLocaleOption, enabled: boolean) => {
+    setLangError('');
+    setTogglingLocaleCode(loc.code);
+    try {
+      const res = await fetch(`/api/translations/locales/${encodeURIComponent(loc.code)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLangError(data.error || 'Failed to update language');
+        return false;
+      }
+      await fetchLocales();
+      setStatusMessage(
+        enabled
+          ? `"${loc.label}" is now available in public-circle.`
+          : `"${loc.label}" is hidden from public-circle.`
+      );
+      return true;
+    } catch {
+      setLangError('Failed to update language');
+      return false;
+    } finally {
+      setTogglingLocaleCode(null);
+    }
+  };
+
+  const confirmToggleLocale = async () => {
+    if (!toggleLocaleTarget) return;
+    const { loc, enabled } = toggleLocaleTarget;
+    const ok = await handleToggleLocaleEnabled(loc, enabled);
+    if (ok) {
+      setToggleLocaleTarget(null);
+      setManageLangOpen(true);
     }
   };
 
@@ -473,8 +518,9 @@ export default function TranslationsPage() {
               <DialogHeader>
                 <DialogTitle>Languages</DialogTitle>
                 <DialogDescription>
-                  Default language is always first. New languages appear at the bottom. Deleting a
-                  language removes it from every translation key.
+                  Disable a language to hide it from public-circle (users cannot select or load
+                  it). Default language cannot be disabled. Deleting removes it from every
+                  translation key.
                 </DialogDescription>
               </DialogHeader>
               <div className="max-h-[50vh] overflow-y-auto border rounded-md">
@@ -483,21 +529,49 @@ export default function TranslationsPage() {
                     <TableRow>
                       <TableHead>Code</TableHead>
                       <TableHead>Label</TableHead>
+                      <TableHead>Public app</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {locales.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={3} className="text-center text-muted-foreground py-6">
+                        <TableCell colSpan={4} className="text-center text-muted-foreground py-6">
                           No languages loaded.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      locales.map((loc) => (
-                        <TableRow key={loc.code}>
+                      locales.map((loc) => {
+                        const isEnabled = loc.enabled !== false;
+                        return (
+                        <TableRow
+                          key={loc.code}
+                          className={!isEnabled ? 'opacity-60' : undefined}
+                        >
                           <TableCell className="font-mono text-sm">{loc.code}</TableCell>
                           <TableCell>{loc.label}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={isEnabled}
+                                disabled={
+                                  togglingLocaleCode === loc.code ||
+                                  loc.isDefault === true
+                                }
+                                onCheckedChange={(checked) =>
+                                  setToggleLocaleTarget({ loc, enabled: checked })
+                                }
+                                aria-label={`${isEnabled ? 'Disable' : 'Enable'} ${loc.label} in public-circle`}
+                              />
+                              <span className="text-xs text-muted-foreground">
+                                {loc.isDefault === true
+                                  ? 'Always on'
+                                  : isEnabled
+                                    ? 'Enabled'
+                                    : 'Disabled'}
+                              </span>
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right">
                             {loc.isDefault === true ? (
                               <Badge variant="secondary">Default</Badge>
@@ -516,7 +590,8 @@ export default function TranslationsPage() {
                             )}
                           </TableCell>
                         </TableRow>
-                      ))
+                      );
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -961,6 +1036,67 @@ export default function TranslationsPage() {
                 </>
               ) : (
                 'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!toggleLocaleTarget}
+        onOpenChange={(open) =>
+          !open && !togglingLocaleCode && setToggleLocaleTarget(null)
+        }
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {toggleLocaleTarget?.enabled
+                ? 'Enable language in public-circle?'
+                : 'Disable language in public-circle?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              {toggleLocaleTarget?.enabled ? (
+                <p>
+                  <span className="font-medium text-foreground">
+                    {toggleLocaleTarget.loc.label} ({toggleLocaleTarget.loc.code})
+                  </span>{' '}
+                  will appear in the language selector on public-circle. Users can select and load
+                  translations for this locale.
+                </p>
+              ) : (
+                <p>
+                  <span className="font-medium text-foreground">
+                    {toggleLocaleTarget?.loc.label} ({toggleLocaleTarget?.loc.code})
+                  </span>{' '}
+                  will be hidden from public-circle. Users cannot select or load this language;
+                  anyone currently using it will fall back to the default language. Translation
+                  data in admin is kept — you can re-enable later.
+                </p>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!togglingLocaleCode}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={cn(
+                !toggleLocaleTarget?.enabled && buttonVariants({ variant: 'destructive' })
+              )}
+              disabled={!!togglingLocaleCode}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmToggleLocale();
+              }}
+            >
+              {togglingLocaleCode ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving…
+                </>
+              ) : toggleLocaleTarget?.enabled ? (
+                'Enable language'
+              ) : (
+                'Disable language'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
