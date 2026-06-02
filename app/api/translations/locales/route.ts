@@ -57,22 +57,27 @@ export async function POST(request: Request) {
     }
 
     const code = String(payload.code ?? '').trim();
-    try {
-      await dbConnect();
-      await syncDescriptionsForNewLocale({ code });
-    } catch (syncErr) {
-      const message =
-        syncErr instanceof Error ? syncErr.message : 'Context help sync failed';
-      return NextResponse.json(
-        {
-          error: `${message}. Language was added for translations; fix MongoDB or retry.`,
-          locale: body.data,
-        },
-        { status: 500 }
-      );
-    }
+    // Keep add-language response snappy; run UI-term sync in background.
+    void (async () => {
+      try {
+        await dbConnect();
+        await syncDescriptionsForNewLocale({ code });
+      } catch (syncErr) {
+        console.error(
+          '[translations/locales] background ui-term sync failed:',
+          syncErr,
+        );
+      }
+    })();
 
-    return NextResponse.json({ locale: body.data }, { status: 201 });
+    return NextResponse.json(
+      {
+        locale: body.data,
+        warning:
+          'Language added. UI-term sync is running in background and may take a moment.',
+      },
+      { status: 201 }
+    );
   } catch {
     return NextResponse.json({ error: 'Failed to connect to backend' }, { status: 502 });
   }
