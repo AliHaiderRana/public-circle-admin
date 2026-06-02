@@ -8,6 +8,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -87,6 +88,7 @@ type AdminTableConfig = {
 };
 
 type SearchScope = 'key' | 'values' | 'any';
+type CreateProgress = { percent: number; stage: string } | null;
 
 export default function TranslationsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -131,6 +133,7 @@ export default function TranslationsPage() {
   const [newValues, setNewValues] = useState<Record<string, string>>({});
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [createProgress, setCreateProgress] = useState<CreateProgress>(null);
 
   const [langOpen, setLangOpen] = useState(false);
   const [manageLangOpen, setManageLangOpen] = useState(false);
@@ -382,7 +385,22 @@ export default function TranslationsPage() {
     }
 
     setCreating(true);
+    setCreateProgress({ percent: 10, stage: 'Preparing translation…' });
+    const pagePrefix = normalizedKey.split('.')[0];
+    const shouldAppearInCurrentTable =
+      prefix === 'all' || normalizedKey.startsWith(`${prefix}.`);
+
+    if (shouldAppearInCurrentTable) {
+      // Optimistic row so the add feels instant.
+      setRows((prev) => [{ key: normalizedKey, values: { ...newValues } }, ...prev]);
+      setPagination((p) => ({ ...p, total: p.total + 1 }));
+    }
+    setAddOpen(false);
+    setNewKey('');
+    setNewValues(emptyValues());
+
     try {
+      setCreateProgress({ percent: 35, stage: 'Saving to database…' });
       const res = await fetch('/api/translations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -390,19 +408,26 @@ export default function TranslationsPage() {
       });
       const data = await res.json();
       if (!res.ok) {
+        if (shouldAppearInCurrentTable) {
+          setRows((prev) => prev.filter((r) => r.key !== normalizedKey));
+          setPagination((p) => ({ ...p, total: Math.max(0, p.total - 1) }));
+        }
         setCreateError(data.error || 'Failed to create');
+        setCreateProgress(null);
+        setAddOpen(true);
         return;
       }
-      setAddOpen(false);
-      setNewKey('');
-      setNewValues(emptyValues());
-      const pagePrefix = normalizedKey.split('.')[0];
+      setCreateProgress({ percent: 70, stage: 'Refreshing table…' });
       if (prefix === 'all' || normalizedKey.startsWith(`${prefix}.`)) {
-        await fetchTranslations();
+        void fetchTranslations().finally(() =>
+          setCreateProgress({ percent: 100, stage: 'Done' })
+        );
       } else {
         handlePrefixChange(pagePrefix);
+        setCreateProgress({ percent: 100, stage: 'Done' });
       }
       setStatusMessage(`Created "${normalizedKey}".`);
+      window.setTimeout(() => setCreateProgress(null), 700);
     } finally {
       setCreating(false);
     }
@@ -762,6 +787,15 @@ export default function TranslationsPage() {
         <p className="text-sm text-muted-foreground rounded-md border bg-muted/40 px-3 py-2">
           {statusMessage}
         </p>
+      )}
+      {createProgress && (
+        <div className="rounded-md border bg-background px-3 py-3 space-y-2">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>{createProgress.stage}</span>
+            <span>{createProgress.percent}%</span>
+          </div>
+          <Progress value={createProgress.percent} className="h-2" />
+        </div>
       )}
       {backendError && (
         <p className="text-sm text-destructive rounded-md border border-destructive/30 bg-destructive/10 px-3 py-3">
