@@ -137,11 +137,24 @@ export default function CustomerRequestsPage() {
     }
   };
 
+  const formatRequestType = (type: string) => {
+    switch (type) {
+      case CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_PRIMARY_KEY: return 'PRIMARY KEY';
+      case CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_EMAIL_KEY: return 'EMAIL KEY';
+      case CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_FILTERS: return 'FILTERS';
+      case CUSTOMER_REQUEST_TYPE.DEDICATED_IP_ENABLED: return 'DEDICATED IP (Enable)';
+      case CUSTOMER_REQUEST_TYPE.DEDICATED_IP_DISABLED: return 'DEDICATED IP (Disable)';
+      default: return type.replace(/_/g, ' ');
+    }
+  };
+
   // Request types for filter
   const requestTypes = [
     { value: CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_PRIMARY_KEY, label: 'PRIMARY KEY' },
     { value: CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_EMAIL_KEY, label: 'EMAIL KEY' },
     { value: CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_FILTERS, label: 'FILTERS' },
+    { value: CUSTOMER_REQUEST_TYPE.DEDICATED_IP_ENABLED, label: 'DEDICATED IP (Enable)' },
+    { value: CUSTOMER_REQUEST_TYPE.DEDICATED_IP_DISABLED, label: 'DEDICATED IP (Disable)' },
   ];
 
   return (
@@ -280,7 +293,7 @@ export default function CustomerRequestsPage() {
                       <TableCell className="pl-6 font-medium">{request.companyId?.name || 'Unknown Company'}</TableCell>
                       <TableCell className="text-xs">
                         <Badge variant="outline">
-                          {request.type.replace('EDIT_CONTACTS_', '').replace(/_/g, ' ')}
+                          {formatRequestType(request.type)}
                         </Badge>
                       </TableCell>
                       <TableCell className="max-w-[200px] truncate" title={request.reason}>
@@ -294,24 +307,38 @@ export default function CustomerRequestsPage() {
                       <TableCell className="text-right pr-6">
                         {request.requestStatus === CUSTOMER_REQUEST_STATUS.PENDING && (
                           <div className="flex justify-end gap-2">
-                            <Button 
-                              variant="outline" 
-                              size="icon" 
-                              className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
-                              onClick={() => handleUpdateStatus(request._id, CUSTOMER_REQUEST_STATUS.COMPLETED)}
-                              disabled={updatingId === request._id}
-                            >
-                              {updatingId === request._id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="icon" 
-                              className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                              onClick={() => handleUpdateStatus(request._id, CUSTOMER_REQUEST_STATUS.REJECTED)}
-                              disabled={updatingId === request._id}
-                            >
-                              {updatingId === request._id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
-                            </Button>
+                            {request.type === CUSTOMER_REQUEST_TYPE.DEDICATED_IP_ENABLED ||
+                            request.type === CUSTOMER_REQUEST_TYPE.DEDICATED_IP_DISABLED ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleUpdateStatus(request._id, CUSTOMER_REQUEST_STATUS.COMPLETED)}
+                                disabled={updatingId === request._id}
+                              >
+                                {updatingId === request._id ? 'Processing...' : 'Mark as Completed'}
+                              </Button>
+                            ) : (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                  onClick={() => handleUpdateStatus(request._id, CUSTOMER_REQUEST_STATUS.COMPLETED)}
+                                  disabled={updatingId === request._id}
+                                >
+                                  {updatingId === request._id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => handleUpdateStatus(request._id, CUSTOMER_REQUEST_STATUS.REJECTED)}
+                                  disabled={updatingId === request._id}
+                                >
+                                  {updatingId === request._id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                                </Button>
+                              </>
+                            )}
                           </div>
                         )}
                       </TableCell>
