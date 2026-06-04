@@ -8,6 +8,7 @@ import {
   escapeRegexEmail,
   parseAuditSortOrder,
 } from '@/lib/audit-query';
+import { isNoiseImpersonationRow } from '@/lib/impersonation-activity-labels';
 
 export async function GET(request: Request) {
   const session = await getServerSession();
@@ -56,22 +57,15 @@ export async function GET(request: Request) {
       filter['metadata.category'] = category;
     }
     if (hideNoise) {
-      filter.$and = [
-        ...(Array.isArray(filter.$and) ? filter.$and : []),
-        {
-          path: {
-            $not: /get-dashboard-data|WEBSOCKET_|^\/users\/me$|^\/auth\/token/i,
-          },
-        },
-        {
-          summary: {
-            $not: /get-dashboard-data|WEBSOCKET_/i,
-          },
-        },
+      filter.$nor = [
+        { path: { $regex: /^WEBSOCKET_/i } },
+        { path: { $regex: /get-dashboard-data/i } },
+        { summary: { $regex: /WEBSOCKET/i } },
+        { summary: { $regex: /get-dashboard-data/i } },
       ];
     }
 
-    const [activities, total] = await Promise.all([
+    const [rawActivities, total] = await Promise.all([
       AdminImpersonationActivity.find(filter)
         .sort({ createdAt: sort === 'asc' ? 1 : -1 })
         .skip(skip)
@@ -79,6 +73,17 @@ export async function GET(request: Request) {
         .lean(),
       AdminImpersonationActivity.countDocuments(filter),
     ]);
+
+    const activities = hideNoise
+      ? rawActivities.filter(
+          (row) =>
+            !isNoiseImpersonationRow({
+              path: row.path ?? null,
+              type: row.type,
+              summary: row.summary ?? null,
+            })
+        )
+      : rawActivities;
 
     const data = activities.map((row) => ({
       id: String(row._id),
