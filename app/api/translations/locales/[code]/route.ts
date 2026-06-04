@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 import dbConnect from '@/lib/db';
 import { stripLocaleFromAllTerms } from '@/lib/ui-term-defaults';
 
@@ -32,6 +37,22 @@ export async function PATCH(
         { error: body.message || 'Failed to update language' },
         { status: res.status }
       );
+    }
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.LOCALE_UPDATE,
+        category: ADMIN_AUDIT_CATEGORY.TRANSLATION,
+        resourceType: 'locale',
+        resourceId: code,
+        details: {
+          code,
+          enabled: payload?.enabled,
+          label: payload?.label,
+          isDefault: payload?.isDefault,
+        },
+      });
     }
 
     return NextResponse.json({ locale: body.data });
@@ -77,6 +98,17 @@ export async function DELETE(
         },
         { status: 500 }
       );
+    }
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.LOCALE_DELETE,
+        category: ADMIN_AUDIT_CATEGORY.TRANSLATION,
+        resourceType: 'locale',
+        resourceId: code,
+        details: { code },
+      });
     }
 
     return NextResponse.json({ data: body.data });

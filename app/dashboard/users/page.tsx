@@ -36,7 +36,9 @@ import {
   CheckCircle2,
   Circle,
   MapPin,
+  ShieldAlert,
 } from "lucide-react";
+import AdminImpersonationActivitySection from "@/components/AdminImpersonationActivitySection";
 import {
   Dialog,
   DialogContent,
@@ -56,6 +58,7 @@ export default function UsersPage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [impersonateUserId, setImpersonateUserId] = useState<string | null>(null);
   const [tourModalUser, setTourModalUser] = useState<any>(null);
+  const [activityModalUser, setActivityModalUser] = useState<any>(null);
   const companyDropdownRef = useRef<HTMLDivElement | null>(null);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -462,20 +465,31 @@ export default function UsersPage() {
                       </div>
                     </TableCell>
                     <TableCell className="pl-6">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1"
-                        disabled={impersonateUserId !== null || !user.company?._id}
-                        onClick={() => handleLoginAsUser(user)}
-                      >
-                        {impersonateUserId === user._id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <LogIn className="h-4 w-4" />
-                        )}
-                        Login as this user
-                      </Button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                          disabled={impersonateUserId !== null || !user.company?._id}
+                          onClick={() => handleLoginAsUser(user)}
+                        >
+                          {impersonateUserId === user._id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <LogIn className="h-4 w-4" />
+                          )}
+                          Login as this user
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1 text-neutral-600"
+                          onClick={() => setActivityModalUser(user)}
+                        >
+                          <ShieldAlert className="h-4 w-4" />
+                          Session log
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -568,6 +582,27 @@ export default function UsersPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!activityModalUser}
+        onOpenChange={(open) => !open && setActivityModalUser(null)}
+      >
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 text-amber-600" />
+              Login as user activity — {activityModalUser?.emailAddress}
+            </DialogTitle>
+          </DialogHeader>
+          {activityModalUser?._id ? (
+            <AdminImpersonationActivitySection
+              userId={activityModalUser._id}
+              compact
+              defaultLimit={10}
+            />
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

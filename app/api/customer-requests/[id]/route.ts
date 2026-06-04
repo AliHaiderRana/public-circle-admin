@@ -4,7 +4,12 @@ import dbConnect from '@/lib/db';
 import CustomerRequest from '@/lib/models/CustomerRequest';
 import Company from '@/lib/models/Company';
 import { CUSTOMER_REQUEST_STATUS, CUSTOMER_REQUEST_TYPE } from '@/lib/constants';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
@@ -34,6 +39,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Request not found' }, { status: 404 });
     }
 
+    const previousStatus = custRequest.requestStatus;
     custRequest.requestStatus = status;
     await custRequest.save();
 
@@ -139,6 +145,22 @@ export async function PATCH(
 
         await company.save();
       }
+    }
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.CUSTOMER_REQUEST_STATUS,
+        category: ADMIN_AUDIT_CATEGORY.CUSTOMER_REQUEST,
+        resourceType: 'customer_request',
+        resourceId: id,
+        details: {
+          previousStatus,
+          status,
+          type: custRequest.type,
+          companyId: String(custRequest.companyId ?? ''),
+        },
+      });
     }
 
     return NextResponse.json(custRequest);

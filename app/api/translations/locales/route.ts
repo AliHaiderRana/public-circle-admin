@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 import dbConnect from '@/lib/db';
 import { syncDescriptionsForNewLocale } from '@/lib/ui-term-defaults';
 
@@ -69,6 +74,17 @@ export async function POST(request: Request) {
         );
       }
     })();
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.LOCALE_CREATE,
+        category: ADMIN_AUDIT_CATEGORY.TRANSLATION,
+        resourceType: 'locale',
+        resourceId: code || body.data?.code,
+        details: { code: code || body.data?.code, label: payload?.label },
+      });
+    }
 
     return NextResponse.json(
       {

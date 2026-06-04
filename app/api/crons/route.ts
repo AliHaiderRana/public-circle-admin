@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
+import { getServerSession, toAdminAuditSession } from "@/lib/auth";
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from "@/lib/admin-audit";
 
 const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:3001";
 const INTERNAL_API_KEY =
@@ -94,6 +99,17 @@ export async function POST(request: Request) {
     }
 
     const data = await res.json();
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.CRON_SEED,
+        category: ADMIN_AUDIT_CATEGORY.CRON,
+        resourceType: 'cron',
+        details: { action: 'seed' },
+      });
+    }
+
     return NextResponse.json(data);
   } catch (error: any) {
     console.error("[API] Error in crons POST proxy:", error);

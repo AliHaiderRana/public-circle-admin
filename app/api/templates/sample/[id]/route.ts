@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import dbConnect from '@/lib/db';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 import Template, {
   TEMPLATE_KINDS,
   TEMPLATE_STATUS,
@@ -161,6 +166,20 @@ export async function PATCH(
       .populate({ path: 'category', select: 'name slug isPopular status' })
       .lean();
 
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.SAMPLE_TEMPLATE_UPDATE,
+        category: ADMIN_AUDIT_CATEGORY.TEMPLATE,
+        resourceType: 'sample_template',
+        resourceId: id,
+        details: {
+          name: template?.name ?? payload.name,
+          fieldsChanged: Object.keys(payload),
+        },
+      });
+    }
+
     return NextResponse.json({ template });
   } catch (error) {
     console.error('Failed to update template:', error);
@@ -194,6 +213,17 @@ export async function DELETE(
 
     if (!template) {
       return NextResponse.json({ error: 'Template not found' }, { status: 404 });
+    }
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.SAMPLE_TEMPLATE_DELETE,
+        category: ADMIN_AUDIT_CATEGORY.TEMPLATE,
+        resourceType: 'sample_template',
+        resourceId: id,
+        details: { name: template.name },
+      });
     }
 
     return NextResponse.json({ success: true, message: 'Template deleted permanently' });

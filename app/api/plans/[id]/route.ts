@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import dbConnect from '@/lib/db';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 import Plan, { normalizePlanQuota } from '@/lib/models/Plan';
 
 export const runtime = 'nodejs';
@@ -53,6 +58,7 @@ export async function PATCH(
     }
 
     const quotaUpdates = parsed.data.quota;
+    const existingPlan = await Plan.findById(id).select('name quota').lean();
     const updateDoc: Record<string, number> = {};
 
     for (const [key, value] of Object.entries(quotaUpdates)) {
@@ -71,6 +77,24 @@ export async function PATCH(
 
     if (!plan) {
       return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+    }
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.PLAN_QUOTA_UPDATE,
+        category: ADMIN_AUDIT_CATEGORY.PLAN,
+        resourceType: 'plan',
+        resourceId: id,
+        details: {
+          planName: plan.name,
+          previousQuota: existingPlan?.quota
+            ? normalizePlanQuota(existingPlan.quota as Record<string, unknown>)
+            : null,
+          quota: normalizePlanQuota(plan.quota as Record<string, unknown>),
+          fieldsChanged: Object.keys(quotaUpdates),
+        },
+      });
     }
 
     return NextResponse.json({

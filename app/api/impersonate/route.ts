@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
+import { getServerSession, toAdminAuditSession } from "@/lib/auth";
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from "@/lib/admin-audit";
 
 const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:3001";
 const INTERNAL_API_KEY =
@@ -84,6 +89,7 @@ export async function POST(request: Request) {
     }
 
     const token = payload?.data?.token as string | undefined;
+    const sessionId = payload?.data?.sessionId as string | undefined;
     const impersonatedBy = payload?.data?.impersonatedBy as
       | { email?: string; name?: string }
       | undefined;
@@ -100,6 +106,20 @@ export async function POST(request: Request) {
     redirectUrl.searchParams.set("token", token);
     redirectUrl.searchParams.set("adminEmail", impersonatedBy?.email ?? session.email ?? "");
     redirectUrl.searchParams.set("adminName", impersonatedBy?.name ?? session.name ?? "");
+    if (sessionId) {
+      redirectUrl.searchParams.set("sessionId", sessionId);
+    }
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.IMPERSONATE_START,
+        category: ADMIN_AUDIT_CATEGORY.IMPERSONATION,
+        resourceType: 'user',
+        resourceId: userId,
+        details: { userId, companyId },
+      });
+    }
 
     return NextResponse.json({ redirectUrl: redirectUrl.toString() });
   } catch (e: any) {

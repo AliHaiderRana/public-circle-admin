@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import AppConfig from '@/lib/models/AppConfig';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 
 export async function GET() {
   await dbConnect();
@@ -63,6 +68,20 @@ export async function PATCH(request: Request) {
         config.deleteCompanyContactsAfterDays = deleteCompanyContactsAfterDays;
       }
       await config.save();
+    }
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.SYSTEM_CONFIG_UPDATE,
+        category: ADMIN_AUDIT_CATEGORY.SYSTEM_CONFIG,
+        resourceType: 'app_config',
+        details: {
+          isSignupAllowed: config.isSignupAllowed,
+          appleRelayEmail: config.appleRelayEmail,
+          deleteCompanyContactsAfterDays: config.deleteCompanyContactsAfterDays,
+        },
+      });
     }
 
     return NextResponse.json({

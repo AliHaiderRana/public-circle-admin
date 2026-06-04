@@ -1,7 +1,9 @@
 import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 import dbConnect from '@/lib/db';
 import AdminUser from '@/lib/models/AdminUser';
+import type { AdminAuditSession } from '@/lib/admin-audit.constants';
 
 const JWT_SECRET = process.env.JWT_SECRET || process.env.ACCESS_TOKEN_SECRET || 'fallback_secret';
 
@@ -27,9 +29,45 @@ export async function getServerSession() {
       userId: user._id.toString(),
       email: user.email,
       name: user.name,
-      isSuperAdmin: user.isSuperAdmin || false
+      isSuperAdmin: user.isSuperAdmin || false,
     };
   } catch (error) {
     return null;
   }
+}
+
+export function toAdminAuditSession(
+  session: Awaited<ReturnType<typeof getServerSession>>
+): AdminAuditSession | null {
+  if (!session?.userId || !session?.email) return null;
+  return {
+    userId: session.userId,
+    email: session.email,
+    name: session.name,
+    isSuperAdmin: session.isSuperAdmin,
+  };
+}
+
+/** Returns 401/403 NextResponse or null when session is a super admin. */
+export async function requireSuperAdminSession(): Promise<
+  | { session: NonNullable<Awaited<ReturnType<typeof getServerSession>>>; error: null }
+  | { session: null; error: NextResponse }
+> {
+  const session = await getServerSession();
+  if (!session) {
+    return {
+      session: null,
+      error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    };
+  }
+  if (!session.isSuperAdmin) {
+    return {
+      session: null,
+      error: NextResponse.json(
+        { error: 'Only super admins can access this resource' },
+        { status: 403 }
+      ),
+    };
+  }
+  return { session, error: null };
 }

@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import Company from '@/lib/models/Company';
 import User from '@/lib/models/User';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 import { USER_STATUS } from '@/lib/constants';
 
 /**
@@ -74,6 +79,20 @@ export async function POST(
       );
 
       await dbSession.commitTransaction();
+
+      const auditSession = toAdminAuditSession(session);
+      if (auditSession) {
+        await logAdminActivity(auditSession, {
+          action: ADMIN_AUDIT_ACTION.COMPANY_UNBLOCK,
+          category: ADMIN_AUDIT_CATEGORY.COMPANY,
+          resourceType: 'company',
+          resourceId: id,
+          details: {
+            companyName: company.name,
+            usersUnblocked: usersUpdateResult.modifiedCount,
+          },
+        });
+      }
 
       return NextResponse.json({
         message: 'Company unblocked successfully',

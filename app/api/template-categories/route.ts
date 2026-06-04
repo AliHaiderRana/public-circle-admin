@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import dbConnect from '@/lib/db';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 import Template, { TEMPLATE_KINDS, TEMPLATE_STATUS } from '@/lib/models/Template';
 import TemplateCategory, {
   TEMPLATE_CATEGORY_STATUS,
@@ -151,6 +156,17 @@ export async function POST(request: Request) {
       slug,
       status: TEMPLATE_CATEGORY_STATUS.ACTIVE,
     });
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.TEMPLATE_CATEGORY_CREATE,
+        category: ADMIN_AUDIT_CATEGORY.TEMPLATE_CATEGORY,
+        resourceType: 'template_category',
+        resourceId: String(category._id),
+        details: { name: category.name },
+      });
+    }
 
     return NextResponse.json({ category }, { status: 201 });
   } catch (error) {

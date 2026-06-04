@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import AdminActivityLogPanel from '@/components/AdminActivityLogPanel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -9,7 +10,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { UserPlus, User, Mail, Calendar, Eye, EyeOff } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { UserPlus, User, Mail, Calendar, Eye, EyeOff, ScrollText } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +49,7 @@ export default function AdminsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmingAdminId, setConfirmingAdminId] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [activityModalAdmin, setActivityModalAdmin] = useState<Admin | null>(null);
 
   useEffect(() => {
     fetchAdmins();
@@ -53,7 +61,7 @@ export default function AdminsPage() {
       const res = await fetch('/api/admins');
       const data = await res.json();
       setAdmins(data.admins || []);
-    } catch (error) {
+    } catch {
       setMessage('Failed to load admins');
     } finally {
       setLoading(false);
@@ -63,7 +71,6 @@ export default function AdminsPage() {
   const handleDelete = async (id: string) => {
     if (!user?.isSuperAdmin) return;
 
-    // Prevent deleting yourself
     if (user.id && user.id === id) {
       setMessage("You can't delete your own admin account.");
       return;
@@ -82,7 +89,7 @@ export default function AdminsPage() {
         const data = await res.json();
         setMessage(data.error || 'Failed to delete admin');
       }
-    } catch (error) {
+    } catch {
       setMessage('Failed to delete admin');
     } finally {
       setDeletingId(null);
@@ -95,7 +102,7 @@ export default function AdminsPage() {
       const res = await fetch('/api/admins', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name })
+        body: JSON.stringify({ email, password, name }),
       });
 
       if (res.ok) {
@@ -109,7 +116,7 @@ export default function AdminsPage() {
         const data = await res.json();
         setMessage(data.error);
       }
-    } catch (error) {
+    } catch {
       setMessage('Failed to create admin');
     }
   };
@@ -119,7 +126,11 @@ export default function AdminsPage() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Admin Users</h2>
-          <p className="text-neutral-500">Manage administrator accounts</p>
+          <p className="text-neutral-500">
+            Create and remove administrator accounts. Use{' '}
+            <strong>Panel audit log</strong> in the sidebar for all panel changes, or{' '}
+            <strong>View activity</strong> on a row for one person.
+          </p>
         </div>
         {user?.isSuperAdmin && (
           <Button onClick={() => setShowForm(!showForm)}>
@@ -144,11 +155,7 @@ export default function AdminsPage() {
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
+                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
@@ -200,6 +207,9 @@ export default function AdminsPage() {
                 <TableHead>Email</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Created At</TableHead>
+                {user?.isSuperAdmin && (
+                  <TableHead className="text-right pr-6">Actions</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -207,39 +217,33 @@ export default function AdminsPage() {
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
                     <TableCell className="pl-6">
-                      <div className="flex items-center gap-3">
-                        <Skeleton className="h-8 w-8 rounded-full" />
-                        <Skeleton className="h-4 w-[120px]" />
-                      </div>
+                      <Skeleton className="h-8 w-32" />
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Skeleton className="h-4 w-4 rounded" />
-                        <Skeleton className="h-4 w-[180px]" />
-                      </div>
+                      <Skeleton className="h-4 w-48" />
                     </TableCell>
                     <TableCell>
-                      <Skeleton className="h-5 w-[90px] rounded-full" />
+                      <Skeleton className="h-5 w-20" />
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Skeleton className="h-4 w-4 rounded" />
-                        <Skeleton className="h-4 w-[100px]" />
-                      </div>
+                      <Skeleton className="h-4 w-24" />
                     </TableCell>
+                    {user?.isSuperAdmin && (
+                      <TableCell className="pr-6">
+                        <Skeleton className="h-8 w-36 ml-auto" />
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               ) : admins.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center h-48 text-neutral-500">
+                  <TableCell
+                    colSpan={user?.isSuperAdmin ? 5 : 4}
+                    className="text-center h-48 text-neutral-500"
+                  >
                     <div className="flex flex-col items-center gap-2">
                       <User size={40} className="text-neutral-300" />
                       <p>No admin users found.</p>
-                      {user?.isSuperAdmin && (
-                        <Button variant="outline" size="sm" onClick={() => setShowForm(true)}>
-                          Add your first admin
-                        </Button>
-                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -261,7 +265,10 @@ export default function AdminsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={admin.isSuperAdmin ? "default" : "secondary"} className="text-xs">
+                      <Badge
+                        variant={admin.isSuperAdmin ? 'default' : 'secondary'}
+                        className="text-xs"
+                      >
                         {admin.isSuperAdmin ? 'Super Admin' : 'Admin'}
                       </Badge>
                     </TableCell>
@@ -271,47 +278,60 @@ export default function AdminsPage() {
                         {new Date(admin.createdAt).toLocaleDateString()}
                       </div>
                     </TableCell>
-                    {user?.isSuperAdmin && admin._id !== user?.id && (
-                      <TableCell align="right">
-                        <AlertDialog
-                          open={confirmingAdminId === admin._id}
-                          onOpenChange={(open) => {
-                            setConfirmingAdminId(open ? admin._id : null);
-                          }}
-                        >
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-red-500 border-red-200 hover:bg-red-50"
-                              onClick={() => setConfirmingAdminId(admin._id)}
-                              disabled={deletingId === admin._id}
+                    {user?.isSuperAdmin && (
+                      <TableCell className="text-right pr-6">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setActivityModalAdmin(admin)}
+                          >
+                            <ScrollText className="h-3.5 w-3.5 mr-1" />
+                            View activity
+                          </Button>
+                          {admin._id !== user?.id && (
+                            <AlertDialog
+                              open={confirmingAdminId === admin._id}
+                              onOpenChange={(open) => {
+                                setConfirmingAdminId(open ? admin._id : null);
+                              }}
                             >
-                              {deletingId === admin._id ? 'Deleting...' : 'Delete'}
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete admin user?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This action cannot be undone. The selected admin will permanently lose access to the
-                                admin panel.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                className="bg-red-600 hover:bg-red-700 text-white"
-                                onClick={async () => {
-                                  await handleDelete(admin._id);
-                                  setConfirmingAdminId(null);
-                                }}
-                              >
-                                Confirm delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-red-500 border-red-200 hover:bg-red-50"
+                                  onClick={() => setConfirmingAdminId(admin._id)}
+                                  disabled={deletingId === admin._id}
+                                >
+                                  {deletingId === admin._id ? 'Deleting...' : 'Delete'}
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete admin user?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This cannot be undone. They will lose access to the admin
+                                    panel.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-red-600 hover:bg-red-700 text-white"
+                                    onClick={async () => {
+                                      await handleDelete(admin._id);
+                                      setConfirmingAdminId(null);
+                                    }}
+                                  >
+                                    Confirm delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                        </div>
                       </TableCell>
                     )}
                   </TableRow>
@@ -321,6 +341,36 @@ export default function AdminsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={!!activityModalAdmin}
+        onOpenChange={(open) => !open && setActivityModalAdmin(null)}
+      >
+        <DialogContent className="max-w-2xl max-h-[min(85vh,720px)] flex flex-col p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-3 shrink-0 border-b">
+            <DialogTitle className="flex items-center gap-2 pr-8">
+              <ScrollText className="h-5 w-5 text-amber-600 shrink-0" />
+              <span className="truncate">
+                Activity — {activityModalAdmin?.name || activityModalAdmin?.email}
+              </span>
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground font-normal">
+              {activityModalAdmin?.email}
+            </p>
+          </DialogHeader>
+          {activityModalAdmin && (
+            <div className="flex flex-1 min-h-0 flex-col px-6 pb-4 pt-2">
+              <AdminActivityLogPanel
+                hideHeader
+                compact
+                adminEmailFilter={activityModalAdmin.email}
+                showFilters={false}
+                defaultLimit={10}
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

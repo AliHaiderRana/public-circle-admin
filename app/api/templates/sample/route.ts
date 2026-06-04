@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import dbConnect from '@/lib/db';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 import Template, {
   TEMPLATE_KINDS,
   TEMPLATE_SOURCE,
@@ -142,6 +147,17 @@ export async function POST(request: Request) {
       templateSource: TEMPLATE_SOURCE.SAMPLE_TEMPLATE,
       updatedBy: session.userId,
     });
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.SAMPLE_TEMPLATE_CREATE,
+        category: ADMIN_AUDIT_CATEGORY.TEMPLATE,
+        resourceType: 'sample_template',
+        resourceId: String(template._id),
+        details: { name: template.name },
+      });
+    }
 
     return NextResponse.json({ template }, { status: 201 });
   } catch (error) {

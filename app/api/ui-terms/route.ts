@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 import dbConnect from '@/lib/db';
 import { deleteUiTermDoc, readAllUiTerms, upsertUiTermDoc } from '@/lib/ui-term-defaults';
 
@@ -29,6 +34,16 @@ export async function PATCH(request: Request) {
     const payload = await request.json();
     await dbConnect();
     const term = await upsertUiTermDoc(payload);
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.UI_TERM_UPSERT,
+        category: ADMIN_AUDIT_CATEGORY.CONTEXT_HELP,
+        resourceType: 'ui_term',
+        resourceId: payload?.key ?? term?.key,
+        details: { key: payload?.key ?? term?.key },
+      });
+    }
     return NextResponse.json({ term });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to save UI hint';
@@ -50,6 +65,16 @@ export async function DELETE(request: Request) {
   try {
     await dbConnect();
     const result = await deleteUiTermDoc(key);
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.UI_TERM_DELETE,
+        category: ADMIN_AUDIT_CATEGORY.CONTEXT_HELP,
+        resourceType: 'ui_term',
+        resourceId: key,
+        details: { key: result.key },
+      });
+    }
     return NextResponse.json({ message: 'Deleted', key: result.key });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to delete UI hint';

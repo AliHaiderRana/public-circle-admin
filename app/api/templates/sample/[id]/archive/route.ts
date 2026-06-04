@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import dbConnect from '@/lib/db';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 import Template, { TEMPLATE_KINDS, TEMPLATE_STATUS } from '@/lib/models/Template';
 
 export const runtime = 'nodejs';
@@ -43,6 +48,17 @@ export async function PATCH(
 
     if (!template) {
       return NextResponse.json({ error: 'Template not found' }, { status: 404 });
+    }
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.SAMPLE_TEMPLATE_ARCHIVE,
+        category: ADMIN_AUDIT_CATEGORY.TEMPLATE,
+        resourceType: 'sample_template',
+        resourceId: id,
+        details: { name: template.name },
+      });
     }
 
     return NextResponse.json({ success: true });

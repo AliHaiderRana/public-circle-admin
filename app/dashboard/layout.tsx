@@ -25,6 +25,8 @@ import {
   Layers,
   Languages,
   Info,
+  ScrollText,
+  ShieldAlert,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -44,6 +46,8 @@ const sidebarItems = [
   { name: 'Cron Jobs', href: '/dashboard/crons', icon: Clock },
   { name: 'Translations', href: '/dashboard/translations', icon: Languages },
   { name: 'Context help', href: '/dashboard/ui-hints', icon: Info },
+  { name: 'Panel audit log', href: '/dashboard/admin-activity', icon: ScrollText, superAdminOnly: true },
+  { name: 'Customer session audit', href: '/dashboard/impersonation-activity', icon: ShieldAlert, superAdminOnly: true },
   { name: 'Admin Users', href: '/dashboard/admins', icon: Shield, superAdminOnly: true },
   { name: 'Profile', href: '/dashboard/profile', icon: UserCircle },
   { name: 'System Configuration', href: '/dashboard/config', icon: Settings, superAdminOnly: true },
@@ -120,7 +124,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{user?.email}</p>
-                <p className="text-xs text-muted-foreground">Administrator</p>
+                <p className="text-xs text-muted-foreground">
+                  {user?.isSuperAdmin ? 'Super Admin' : 'Admin'}
+                </p>
               </div>
             </div>
             <Button

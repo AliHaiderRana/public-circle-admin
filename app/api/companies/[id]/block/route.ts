@@ -3,7 +3,12 @@ import mongoose from 'mongoose';
 import Company from '@/lib/models/Company';
 import User from '@/lib/models/User';
 import Campaign from '@/lib/models/Campaign';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 import { USER_STATUS, CAMPAIGN_STATUS } from '@/lib/constants';
 
 /**
@@ -85,6 +90,21 @@ export async function POST(
       );
 
       await dbSession.commitTransaction();
+
+      const auditSession = toAdminAuditSession(session);
+      if (auditSession) {
+        await logAdminActivity(auditSession, {
+          action: ADMIN_AUDIT_ACTION.COMPANY_BLOCK,
+          category: ADMIN_AUDIT_CATEGORY.COMPANY,
+          resourceType: 'company',
+          resourceId: id,
+          details: {
+            companyName: company.name,
+            usersBlocked: usersUpdateResult.modifiedCount,
+            campaignsPaused: campaignsUpdateResult.modifiedCount,
+          },
+        });
+      }
 
       return NextResponse.json({
         message: 'Company blocked successfully',

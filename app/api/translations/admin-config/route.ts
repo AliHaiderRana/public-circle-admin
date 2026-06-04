@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
 
@@ -52,6 +57,16 @@ export async function PATCH(request: Request) {
         { status: res.status }
       );
     }
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.TRANSLATION_CONFIG_UPDATE,
+        category: ADMIN_AUDIT_CATEGORY.TRANSLATION,
+        resourceType: 'translation_config',
+        details: { changes: payload },
+      });
+    }
+
     return NextResponse.json({ config: body.data });
   } catch {
     return NextResponse.json({ error: 'Failed to connect to backend' }, { status: 502 });

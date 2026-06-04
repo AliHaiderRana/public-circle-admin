@@ -24,6 +24,7 @@ import {
   Play,
   LogIn,
 } from 'lucide-react';
+import AdminImpersonationActivitySection from '@/components/AdminImpersonationActivitySection';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -787,6 +788,12 @@ export default function CompanyDetailPage() {
             </div>
           </CardContent>
         </Card>
+
+        <AdminImpersonationActivitySection
+          companyId={String(params.id)}
+          title="Login as user activity"
+          description="Actions this admin (or any admin) performed in Public Circle while impersonating users in this company."
+        />
       </div>
     </div>
   );
