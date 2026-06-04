@@ -3,6 +3,11 @@ import mongoose from 'mongoose';
 import dbConnect from '@/lib/db';
 import AdminImpersonationActivity from '@/lib/models/AdminImpersonationActivity';
 import { getServerSession } from '@/lib/auth';
+import {
+  buildAuditDateFilter,
+  escapeRegexEmail,
+  parseAuditSortOrder,
+} from '@/lib/audit-query';
 
 export async function GET(request: Request) {
   const session = await getServerSession();
@@ -20,6 +25,11 @@ export async function GET(request: Request) {
     const userId = (searchParams.get('userId') || '').trim();
     const sessionId = (searchParams.get('sessionId') || '').trim();
     const adminEmail = (searchParams.get('adminEmail') || '').trim();
+    const dateFrom = (searchParams.get('dateFrom') || '').trim();
+    const dateTo = (searchParams.get('dateTo') || '').trim();
+    const sort = parseAuditSortOrder(searchParams.get('sort'));
+    const category = (searchParams.get('category') || 'all').trim();
+    const hideNoise = searchParams.get('hideNoise') !== 'false';
     const skip = (page - 1) * limit;
 
     const filter: Record<string, unknown> = {};
@@ -34,14 +44,36 @@ export async function GET(request: Request) {
     }
     if (adminEmail) {
       filter.adminEmail = {
-        $regex: adminEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        $regex: escapeRegexEmail(adminEmail),
         $options: 'i',
       };
+    }
+    const createdAtRange = buildAuditDateFilter(dateFrom, dateTo);
+    if (createdAtRange) {
+      filter.createdAt = createdAtRange;
+    }
+    if (category !== 'all') {
+      filter['metadata.category'] = category;
+    }
+    if (hideNoise) {
+      filter.$and = [
+        ...(Array.isArray(filter.$and) ? filter.$and : []),
+        {
+          path: {
+            $not: /get-dashboard-data|WEBSOCKET_|^\/users\/me$|^\/auth\/token/i,
+          },
+        },
+        {
+          summary: {
+            $not: /get-dashboard-data|WEBSOCKET_/i,
+          },
+        },
+      ];
     }
 
     const [activities, total] = await Promise.all([
       AdminImpersonationActivity.find(filter)
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: sort === 'asc' ? 1 : -1 })
         .skip(skip)
         .limit(limit)
         .lean(),

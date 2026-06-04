@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -15,6 +14,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import AdminActivityPagination from '@/components/AdminActivityPagination';
+import AuditLogFilters from '@/components/AuditLogFilters';
+import type { AuditSortOrder } from '@/lib/audit-query';
 import {
   ADMIN_AUDIT_CATEGORY,
   ADMIN_AUDIT_CATEGORY_LABELS,
@@ -125,6 +126,10 @@ export default function AdminActivityLogPanel({
   const [total, setTotal] = useState(0);
   const [category, setCategory] = useState('all');
   const [adminEmailInput, setAdminEmailInput] = useState(adminEmailProp);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [sort, setSort] = useState<AuditSortOrder>('desc');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const effectiveAdminEmail = adminEmailProp.trim() || adminEmailInput.trim();
 
@@ -134,7 +139,7 @@ export default function AdminActivityLogPanel({
 
   useEffect(() => {
     setPage(1);
-  }, [category, effectiveAdminEmail, limit]);
+  }, [category, effectiveAdminEmail, limit, dateFrom, dateTo, sort]);
 
   const fetchActivities = useCallback(async () => {
     setLoading(true);
@@ -147,7 +152,10 @@ export default function AdminActivityLogPanel({
       if (effectiveAdminEmail) {
         params.set('adminEmail', effectiveAdminEmail);
       }
-      const res = await fetch(`/api/admin-activities?${params}`);
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
+      params.set('sort', sort);
+      const res = await fetch(`/api/admin-activities?${params}&_=${refreshKey}`);
       const json = await res.json();
       if (!res.ok) {
         throw new Error(json?.error || 'Failed to load');
@@ -163,7 +171,9 @@ export default function AdminActivityLogPanel({
     } finally {
       setLoading(false);
     }
-  }, [page, limit, category, effectiveAdminEmail]);
+  }, [page, limit, category, effectiveAdminEmail, dateFrom, dateTo, sort, refreshKey]);
+
+  const handleRefresh = () => setRefreshKey((k) => k + 1);
 
   useEffect(() => {
     void fetchActivities();
@@ -273,47 +283,26 @@ export default function AdminActivityLogPanel({
         </div>
       )}
 
-      {showFilters && !adminEmailProp && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Filters</CardTitle>
-            <CardDescription>Narrow by category or admin email</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end">
-            <div className="space-y-2 flex-1">
-              <Label htmlFor="activity-category-filter">Category</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger id="activity-category-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORY_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2 flex-1">
-              <Label htmlFor="activity-admin-email-filter">Admin email</Label>
-              <Input
-                id="activity-admin-email-filter"
-                placeholder="Filter by admin email…"
-                value={adminEmailInput}
-                onChange={(e) => setAdminEmailInput(e.target.value)}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {showFilters && adminEmailProp && (
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="space-y-2 w-full sm:w-56">
-            <Label htmlFor="activity-category-filter-narrow">Category</Label>
+      {showFilters && (
+        <AuditLogFilters
+          showAdminEmail={!adminEmailProp}
+          adminEmail={adminEmailInput}
+          onAdminEmailChange={adminEmailProp ? undefined : setAdminEmailInput}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+          sort={sort}
+          onSortChange={setSort}
+          onRefresh={handleRefresh}
+          refreshing={loading}
+          title="Filters"
+          description="Filter by category, admin, date range, and sort order."
+        >
+          <div className="space-y-2">
+            <Label htmlFor="activity-category-filter">Category</Label>
             <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger id="activity-category-filter-narrow">
+              <SelectTrigger id="activity-category-filter">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -325,7 +314,7 @@ export default function AdminActivityLogPanel({
               </SelectContent>
             </Select>
           </div>
-        </div>
+        </AuditLogFilters>
       )}
 
       <div className={cn(compact && 'flex flex-col min-h-0 flex-1')}>

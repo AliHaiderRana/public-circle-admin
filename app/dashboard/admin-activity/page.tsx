@@ -31,10 +31,10 @@ export default function AdminActivityPage() {
       <div>
         <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
           <ScrollText className="h-8 w-8 text-amber-600" />
-          Panel audit log
+          Admin panel activity
         </h2>
         <p className="text-neutral-500 mt-1">
-          Every important change made in this admin panel — who did it, what changed, and when.
+          Every important change made in this admin app — who did it, what changed, and when.
           Super admins only.
         </p>
       </div>

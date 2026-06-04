@@ -3,6 +3,11 @@ import dbConnect from '@/lib/db';
 import AdminActivity from '@/lib/models/AdminActivity';
 import { requireSuperAdminSession } from '@/lib/auth';
 import { ADMIN_AUDIT_CATEGORY } from '@/lib/admin-audit.constants';
+import {
+  buildAuditDateFilter,
+  escapeRegexEmail,
+  parseAuditSortOrder,
+} from '@/lib/audit-query';
 
 const VALID_CATEGORIES = new Set<string>(Object.values(ADMIN_AUDIT_CATEGORY));
 
@@ -18,6 +23,9 @@ export async function GET(request: Request) {
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '25', 10)));
     const category = searchParams.get('category') || 'all';
     const adminEmail = (searchParams.get('adminEmail') || '').trim();
+    const dateFrom = (searchParams.get('dateFrom') || '').trim();
+    const dateTo = (searchParams.get('dateTo') || '').trim();
+    const sort = parseAuditSortOrder(searchParams.get('sort'));
     const skip = (page - 1) * limit;
 
     const filter: Record<string, unknown> = {};
@@ -25,12 +33,16 @@ export async function GET(request: Request) {
       filter.category = category;
     }
     if (adminEmail) {
-      filter.adminEmail = { $regex: adminEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+      filter.adminEmail = { $regex: escapeRegexEmail(adminEmail), $options: 'i' };
+    }
+    const createdAtRange = buildAuditDateFilter(dateFrom, dateTo);
+    if (createdAtRange) {
+      filter.createdAt = createdAtRange;
     }
 
     const [activities, total] = await Promise.all([
       AdminActivity.find(filter)
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: sort === 'asc' ? 1 : -1 })
         .skip(skip)
         .limit(limit)
         .lean(),

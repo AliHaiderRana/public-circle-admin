@@ -128,7 +128,7 @@ export default function AdminsPage() {
           <h2 className="text-3xl font-bold tracking-tight">Admin Users</h2>
           <p className="text-neutral-500">
             Create and remove administrator accounts. Use{' '}
-            <strong>Panel audit log</strong> in the sidebar for all panel changes, or{' '}
+            <strong>Admin panel activity</strong> in the sidebar for all panel changes, or{' '}
             <strong>View activity</strong> on a row for one person.
           </p>
         </div>

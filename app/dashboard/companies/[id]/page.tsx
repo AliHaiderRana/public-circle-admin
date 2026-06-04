@@ -792,7 +792,8 @@ export default function CompanyDetailPage() {
         <AdminImpersonationActivitySection
           companyId={String(params.id)}
           title="Login as user activity"
-          description="Actions this admin (or any admin) performed in Public Circle while impersonating users in this company."
+          description="Filter by admin, date, and category. Actions performed in Public Circle while impersonating users in this company."
+          showFilters
         />
       </div>
     </div>
