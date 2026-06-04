@@ -1,6 +1,32 @@
 'use client';
 
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import AdminImpersonationActivitySection from '@/components/AdminImpersonationActivitySection';
+
+function ImpersonationActivityContent() {
+  const searchParams = useSearchParams();
+  const userEmail = (searchParams.get('userEmail') || '').trim();
+  const userId = (searchParams.get('userId') || '').trim();
+
+  const title = userEmail
+    ? `Login as user activity — ${userEmail}`
+    : 'All sessions';
+
+  const description = userEmail
+    ? 'Activity while any admin used Login as user for this customer. Clear the customer email filter to see all users.'
+    : 'Filter by customer email, admin email, date, and category. Newest first by default.';
+
+  return (
+    <AdminImpersonationActivitySection
+      title={title}
+      description={description}
+      defaultLimit={25}
+      userId={userId || undefined}
+      initialUserEmail={userEmail}
+    />
+  );
+}
 
 export default function ImpersonationActivityPage() {
   return (
@@ -12,11 +38,13 @@ export default function ImpersonationActivityPage() {
           Admin app changes are under Admin panel activity.
         </p>
       </div>
-      <AdminImpersonationActivitySection
-        title="All sessions"
-        description="Filter by admin email, date, and category. Newest first by default. Company and user pages offer narrower views."
-        defaultLimit={25}
-      />
+      <Suspense
+        fallback={
+          <p className="text-sm text-muted-foreground">Loading activity filters…</p>
+        }
+      >
+        <ImpersonationActivityContent />
+      </Suspense>
     </div>
   );
 }

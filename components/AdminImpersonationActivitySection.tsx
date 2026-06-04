@@ -40,6 +40,7 @@ export type ImpersonationActivityRow = {
   summary: string | null;
   statusCode: number | null;
   metadata: Record<string, unknown> | null;
+  requestBody: Record<string, unknown> | null;
   createdAt: string;
 };
 
@@ -55,6 +56,8 @@ type AdminImpersonationActivitySectionProps = {
   companyId?: string;
   userId?: string;
   sessionId?: string;
+  /** Pre-fill customer (impersonated) email filter — e.g. from System Users → View activity */
+  initialUserEmail?: string;
   title?: string;
   description?: string;
   defaultLimit?: number;
@@ -72,6 +75,7 @@ export default function AdminImpersonationActivitySection({
   companyId,
   userId,
   sessionId,
+  initialUserEmail = '',
   title = 'Login as user activity',
   description = 'Actions performed in Public Circle while an admin was signed in as this customer.',
   defaultLimit = 15,
@@ -85,6 +89,7 @@ export default function AdminImpersonationActivitySection({
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [adminEmailInput, setAdminEmailInput] = useState('');
+  const [userEmailInput, setUserEmailInput] = useState(initialUserEmail);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [sort, setSort] = useState<AuditSortOrder>('desc');
@@ -93,7 +98,11 @@ export default function AdminImpersonationActivitySection({
 
   useEffect(() => {
     setPage(1);
-  }, [companyId, userId, sessionId, limit, adminEmailInput, dateFrom, dateTo, sort, category]);
+  }, [companyId, userId, sessionId, limit, adminEmailInput, userEmailInput, dateFrom, dateTo, sort, category]);
+
+  useEffect(() => {
+    setUserEmailInput(initialUserEmail);
+  }, [initialUserEmail]);
 
   const fetchActivities = useCallback(async () => {
     setLoading(true);
@@ -108,6 +117,7 @@ export default function AdminImpersonationActivitySection({
       if (userId) params.set('userId', userId);
       if (sessionId) params.set('sessionId', sessionId);
       if (adminEmailInput.trim()) params.set('adminEmail', adminEmailInput.trim());
+      if (userEmailInput.trim()) params.set('userEmail', userEmailInput.trim());
       if (dateFrom) params.set('dateFrom', dateFrom);
       if (dateTo) params.set('dateTo', dateTo);
       if (category !== 'all') params.set('category', category);
@@ -140,6 +150,7 @@ export default function AdminImpersonationActivitySection({
     page,
     limit,
     adminEmailInput,
+    userEmailInput,
     dateFrom,
     dateTo,
     sort,
@@ -166,6 +177,9 @@ export default function AdminImpersonationActivitySection({
       <AuditLogFilters
         adminEmail={adminEmailInput}
         onAdminEmailChange={setAdminEmailInput}
+        userEmail={userEmailInput}
+        onUserEmailChange={setUserEmailInput}
+        showUserEmail
         dateFrom={dateFrom}
         dateTo={dateTo}
         onDateFromChange={setDateFrom}
@@ -175,7 +189,7 @@ export default function AdminImpersonationActivitySection({
         onRefresh={handleRefresh}
         refreshing={loading}
         title="Filters"
-        description="Filter by admin who impersonated, date range, and category. Newest first by default."
+        description="Filter by customer email, admin who impersonated, date range, and category."
       >
         <div className="space-y-2">
           <Label htmlFor="impersonation-category-filter">Category</Label>
@@ -227,6 +241,12 @@ export default function AdminImpersonationActivitySection({
             <div className="mt-3 flex flex-wrap gap-2">
               <Input
                 className="h-8 max-w-xs text-xs"
+                placeholder="Customer email…"
+                value={userEmailInput}
+                onChange={(e) => setUserEmailInput(e.target.value)}
+              />
+              <Input
+                className="h-8 max-w-xs text-xs"
                 placeholder="Admin email…"
                 value={adminEmailInput}
                 onChange={(e) => setAdminEmailInput(e.target.value)}
@@ -254,7 +274,14 @@ export default function AdminImpersonationActivitySection({
                 >
                   <div className="min-w-0 flex-1 space-y-1">
                     <p className="text-sm font-medium leading-snug">
-                      {formatImpersonationDisplaySummary(row)}
+                      {formatImpersonationDisplaySummary({
+                        summary: row.summary,
+                        path: row.path,
+                        type: row.type,
+                        method: row.method,
+                        metadata: row.metadata,
+                        requestBody: row.requestBody,
+                      })}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {row.adminName ? `${row.adminName} · ` : ''}

@@ -18,6 +18,10 @@ type AuditLogFiltersProps = {
   adminEmail?: string;
   onAdminEmailChange?: (value: string) => void;
   showAdminEmail?: boolean;
+  userEmail?: string;
+  onUserEmailChange?: (value: string) => void;
+  showUserEmail?: boolean;
+  userEmailLabel?: string;
   dateFrom: string;
   dateTo: string;
   onDateFromChange: (value: string) => void;
@@ -35,6 +39,10 @@ export default function AuditLogFilters({
   adminEmail = '',
   onAdminEmailChange,
   showAdminEmail = true,
+  userEmail = '',
+  onUserEmailChange,
+  showUserEmail = false,
+  userEmailLabel = 'Customer email',
   dateFrom,
   dateTo,
   onDateFromChange,
@@ -77,6 +85,17 @@ export default function AuditLogFilters({
               placeholder="Filter by admin email…"
               value={adminEmail}
               onChange={(e) => onAdminEmailChange(e.target.value)}
+            />
+          </div>
+        ) : null}
+        {showUserEmail && onUserEmailChange ? (
+          <div className="space-y-2">
+            <Label htmlFor="audit-user-email">{userEmailLabel}</Label>
+            <Input
+              id="audit-user-email"
+              placeholder="Filter by customer email…"
+              value={userEmail}
+              onChange={(e) => onUserEmailChange(e.target.value)}
             />
           </div>
         ) : null}

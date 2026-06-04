@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -36,9 +37,8 @@ import {
   CheckCircle2,
   Circle,
   MapPin,
-  ShieldAlert,
+  ScrollText,
 } from "lucide-react";
-import AdminImpersonationActivitySection from "@/components/AdminImpersonationActivitySection";
 import {
   Dialog,
   DialogContent,
@@ -58,7 +58,6 @@ export default function UsersPage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [impersonateUserId, setImpersonateUserId] = useState<string | null>(null);
   const [tourModalUser, setTourModalUser] = useState<any>(null);
-  const [activityModalUser, setActivityModalUser] = useState<any>(null);
   const companyDropdownRef = useRef<HTMLDivElement | null>(null);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -484,10 +483,16 @@ export default function UsersPage() {
                           variant="ghost"
                           size="sm"
                           className="gap-1 text-neutral-600"
-                          onClick={() => setActivityModalUser(user)}
+                          asChild
                         >
-                          <ShieldAlert className="h-4 w-4" />
-                          Session log
+                          <Link
+                            href={`/dashboard/impersonation-activity?userEmail=${encodeURIComponent(
+                              user.emailAddress || ""
+                            )}&userId=${encodeURIComponent(user._id || "")}`}
+                          >
+                            <ScrollText className="h-4 w-4" />
+                            View activity
+                          </Link>
                         </Button>
                       </div>
                     </TableCell>
@@ -582,27 +587,6 @@ export default function UsersPage() {
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={!!activityModalUser}
-        onOpenChange={(open) => !open && setActivityModalUser(null)}
-      >
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ShieldAlert className="h-4 w-4 text-amber-600" />
-              Login as user activity — {activityModalUser?.emailAddress}
-            </DialogTitle>
-          </DialogHeader>
-          {activityModalUser?._id ? (
-            <AdminImpersonationActivitySection
-              userId={activityModalUser._id}
-              compact
-              defaultLimit={10}
-            />
-          ) : null}
         </DialogContent>
       </Dialog>
     </div>

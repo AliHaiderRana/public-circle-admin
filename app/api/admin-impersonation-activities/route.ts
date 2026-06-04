@@ -26,6 +26,7 @@ export async function GET(request: Request) {
     const userId = (searchParams.get('userId') || '').trim();
     const sessionId = (searchParams.get('sessionId') || '').trim();
     const adminEmail = (searchParams.get('adminEmail') || '').trim();
+    const userEmail = (searchParams.get('userEmail') || '').trim();
     const dateFrom = (searchParams.get('dateFrom') || '').trim();
     const dateTo = (searchParams.get('dateTo') || '').trim();
     const sort = parseAuditSortOrder(searchParams.get('sort'));
@@ -49,6 +50,12 @@ export async function GET(request: Request) {
         $options: 'i',
       };
     }
+    if (userEmail) {
+      filter.impersonatedUserEmail = {
+        $regex: escapeRegexEmail(userEmail),
+        $options: 'i',
+      };
+    }
     const createdAtRange = buildAuditDateFilter(dateFrom, dateTo);
     if (createdAtRange) {
       filter.createdAt = createdAtRange;
@@ -59,9 +66,9 @@ export async function GET(request: Request) {
     if (hideNoise) {
       filter.$nor = [
         { path: { $regex: /^WEBSOCKET_/i } },
-        { path: { $regex: /get-dashboard-data/i } },
-        { summary: { $regex: /WEBSOCKET/i } },
-        { summary: { $regex: /get-dashboard-data/i } },
+        { path: { $regex: /get-dashboard-data|get-paginated-contacts|get-segment-count|get-filter-count|\/segments\/all|\/filters\/all|\/filters\/get-data-type|duplicates\/recompute/i } },
+        { summary: { $regex: /recomputed duplicate contacts/i } },
+        { summary: { $regex: /WEBSOCKET|get-paginated-contacts|get-dashboard-data/i } },
       ];
     }
 
@@ -100,6 +107,10 @@ export async function GET(request: Request) {
       statusCode: row.statusCode,
       projectId: row.projectId,
       metadata: row.metadata,
+      requestBody:
+        row.requestBody && typeof row.requestBody === 'object' && !Array.isArray(row.requestBody)
+          ? (row.requestBody as Record<string, unknown>)
+          : null,
       createdAt: row.createdAt,
     }));
 
