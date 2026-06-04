@@ -21,6 +21,7 @@ import {
   formatImpersonationDisplaySummary,
   IMPERSONATION_ACTIVITY_CATEGORY_LABELS,
   IMPERSONATION_ACTIVITY_TYPE_LABELS,
+  isNoiseImpersonationRow,
 } from '@/lib/impersonation-activity-labels';
 import { RefreshCw, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -114,7 +115,15 @@ export default function AdminImpersonationActivitySection({
       const res = await fetch(`/api/admin-impersonation-activities?${params}&_=${refreshKey}`);
       if (!res.ok) throw new Error('Failed to load');
       const data = await res.json();
-      setRows(data.activities ?? []);
+      const list = ((data.activities ?? []) as ImpersonationActivityRow[]).filter(
+        (row) =>
+          !isNoiseImpersonationRow({
+            path: row.path,
+            type: row.type,
+            summary: row.summary,
+          })
+      );
+      setRows(list);
       setTotalPages(data.pagination?.totalPages ?? 1);
       setTotal(data.pagination?.total ?? 0);
     } catch {

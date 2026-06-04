@@ -49,12 +49,15 @@ export function isNoiseImpersonationRow(row: {
   type: string;
   summary: string | null;
 }): boolean {
-  const path = row.path || '';
-  const summary = row.summary || '';
+  const path = (row.path || '').trim();
+  const summary = (row.summary || '').trim();
   if (NOISE_PATH_PATTERNS.some((re) => re.test(path) || re.test(summary))) {
     return true;
   }
   if (row.type === 'CLIENT_ACTION' && /^WEBSOCKET_/i.test(path)) {
+    return true;
+  }
+  if (/^WEBSOCKET/i.test(summary) || /^WEBSOCKET/i.test(path)) {
     return true;
   }
   return false;
