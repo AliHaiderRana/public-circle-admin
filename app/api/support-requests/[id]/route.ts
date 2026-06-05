@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import dbConnect from '@/lib/db';
+import Company from '@/lib/models/Company';
 import {
   SUPPORT_REQUEST_STATUS,
   SUPPORT_REQUEST_CATEGORY_LABELS,
@@ -60,6 +62,14 @@ export async function PATCH(
     const previousStatus =
       typeof body.previousStatus === 'string' ? body.previousStatus : undefined;
 
+    let companyName = '';
+    const companyId = String(supportRequest?.companyId ?? '');
+    if (companyId) {
+      await dbConnect();
+      const company = await Company.findById(companyId).select('name').lean();
+      companyName = company?.name ?? '';
+    }
+
     const auditSession = toAdminAuditSession(session);
     if (auditSession) {
       await logAdminActivity(auditSession, {
@@ -70,7 +80,8 @@ export async function PATCH(
         details: {
           previousStatus: previousStatus ?? null,
           status: supportRequest?.status ?? status ?? null,
-          companyId: String(supportRequest?.companyId ?? ''),
+          companyId,
+          companyName,
           category: supportRequest?.category,
           categoryLabel:
             SUPPORT_REQUEST_CATEGORY_LABELS[supportRequest?.category] ||

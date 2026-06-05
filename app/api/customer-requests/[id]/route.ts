@@ -207,6 +207,10 @@ export async function PATCH(
       }
     }
 
+    const companyForAudit = await Company.findById(custRequest.companyId)
+      .select('name')
+      .lean();
+
     const auditSession = toAdminAuditSession(session);
     if (auditSession) {
       await logAdminActivity(auditSession, {
@@ -219,6 +223,11 @@ export async function PATCH(
           status,
           type: custRequest.type,
           companyId: String(custRequest.companyId ?? ''),
+          companyName: companyForAudit?.name ?? '',
+          projectId:
+            typeof custRequest.metadata?.projectId === 'string'
+              ? custRequest.metadata.projectId
+              : null,
         },
       });
     }
