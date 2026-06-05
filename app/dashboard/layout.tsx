@@ -27,6 +27,7 @@ import {
   Info,
   ScrollText,
   ShieldAlert,
+  Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -49,6 +50,7 @@ const sidebarItems = [
   { name: 'Admin panel activity', href: '/dashboard/admin-activity', icon: ScrollText, superAdminOnly: true },
   { name: 'Login as user activity', href: '/dashboard/impersonation-activity', icon: ShieldAlert, superAdminOnly: true },
   { name: 'Admin Users', href: '/dashboard/admins', icon: Shield, superAdminOnly: true },
+  { name: 'Changelog', href: '/dashboard/changelog', icon: Sparkles },
   { name: 'Profile', href: '/dashboard/profile', icon: UserCircle },
   { name: 'System Configuration', href: '/dashboard/config', icon: Settings, superAdminOnly: true },
 ];
