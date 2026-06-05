@@ -70,11 +70,18 @@ export function buildAuditSummary(
   };
 
   const formatStatus = (status: unknown) => {
-    const s = String(status ?? 'unknown').toLowerCase();
-    if (s === 'completed') return 'completed';
-    if (s === 'rejected') return 'rejected';
-    if (s === 'pending') return 'pending';
-    return s;
+    const key = String(status ?? 'unknown').toUpperCase();
+    const labels: Record<string, string> = {
+      OPEN: 'open',
+      IN_PROGRESS: 'in progress',
+      RESOLVED: 'resolved',
+      CLOSED: 'closed',
+      PENDING: 'pending',
+      COMPLETED: 'completed',
+      REJECTED: 'rejected',
+    };
+    if (labels[key]) return labels[key];
+    return String(status ?? 'unknown').toLowerCase().replace(/_/g, ' ');
   };
 
   switch (action) {
@@ -86,8 +93,31 @@ export function buildAuditSummary(
         : `Customer request marked as ${statusLabel}`;
     }
     case ADMIN_AUDIT_ACTION.SUPPORT_REQUEST_UPDATE: {
-      const statusLabel = formatStatus(d.status);
-      return `Support request marked as ${statusLabel}`;
+      const subject = typeof d.subject === 'string' ? d.subject.trim() : '';
+      const categoryLabel =
+        typeof d.categoryLabel === 'string' ? d.categoryLabel.trim() : '';
+      const sq = subject ? ` “${subject}”` : '';
+      const categorySuffix = categoryLabel ? ` (${categoryLabel})` : '';
+
+      if (d.adminNotesUpdated && !d.status) {
+        return `Updated admin notes on support request${sq}${categorySuffix}`;
+      }
+
+      const previousStatus = d.previousStatus;
+      const nextStatus = d.status;
+      if (
+        previousStatus &&
+        nextStatus &&
+        String(previousStatus) !== String(nextStatus)
+      ) {
+        return `Support request${sq} marked ${formatStatus(previousStatus)} → ${formatStatus(nextStatus)}${categorySuffix}`;
+      }
+
+      if (d.adminNotesUpdated) {
+        return `Updated support request${sq}${categorySuffix}`;
+      }
+
+      return `Support request${sq} marked as ${formatStatus(nextStatus)}${categorySuffix}`;
     }
     case ADMIN_AUDIT_ACTION.COMPANY_BLOCK:
       return `Blocked company${d.companyName ? ` “${d.companyName}”` : ''}`;

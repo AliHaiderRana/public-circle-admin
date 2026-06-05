@@ -1,13 +1,21 @@
 import { NextResponse } from 'next/server';
-import dbConnect from '@/lib/db';
-import SupportRequest from '@/lib/models/SupportRequest';
-import { SUPPORT_REQUEST_STATUS } from '@/lib/constants';
+import {
+  SUPPORT_REQUEST_STATUS,
+  SUPPORT_REQUEST_CATEGORY_LABELS,
+} from '@/lib/constants';
 import { getServerSession, toAdminAuditSession } from '@/lib/auth';
 import {
   logAdminActivity,
   ADMIN_AUDIT_ACTION,
   ADMIN_AUDIT_CATEGORY,
 } from '@/lib/admin-audit';
+
+const SERVER_API_URL =
+  process.env.SERVER_API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://localhost:3001';
+const INTERNAL_API_KEY =
+  process.env.INTERNAL_API_KEY || 'internal_admin_cron_key_2024';
 
 export async function PATCH(
   request: Request,
@@ -26,24 +34,31 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
   }
 
-  await dbConnect();
-
   try {
-    const supportRequest = await SupportRequest.findById(id);
-    if (!supportRequest) {
-      return NextResponse.json({ error: 'Request not found' }, { status: 404 });
+    const response = await fetch(`${SERVER_API_URL}/internal/support-requests/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Internal-API-Key': INTERNAL_API_KEY,
+      },
+      body: JSON.stringify({
+        ...(status ? { status } : {}),
+        ...(typeof adminNotes === 'string' ? { adminNotes } : {}),
+      }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: payload?.message || payload?.error || 'Failed to update support request' },
+        { status: response.status }
+      );
     }
 
-    const previousStatus = supportRequest.status;
-
-    if (status) {
-      supportRequest.status = status;
-    }
-    if (typeof adminNotes === 'string') {
-      supportRequest.adminNotes = adminNotes;
-    }
-
-    await supportRequest.save();
+    const supportRequest = payload?.data ?? payload;
+    const previousStatus =
+      typeof body.previousStatus === 'string' ? body.previousStatus : undefined;
 
     const auditSession = toAdminAuditSession(session);
     if (auditSession) {
@@ -53,10 +68,15 @@ export async function PATCH(
         resourceType: 'support_request',
         resourceId: id,
         details: {
-          previousStatus,
-          status: supportRequest.status,
-          companyId: String(supportRequest.companyId ?? ''),
-          category: supportRequest.category,
+          previousStatus: previousStatus ?? null,
+          status: supportRequest?.status ?? status ?? null,
+          companyId: String(supportRequest?.companyId ?? ''),
+          category: supportRequest?.category,
+          categoryLabel:
+            SUPPORT_REQUEST_CATEGORY_LABELS[supportRequest?.category] ||
+            supportRequest?.category,
+          subject: supportRequest?.subject,
+          adminNotesUpdated: typeof adminNotes === 'string',
         },
       });
     }

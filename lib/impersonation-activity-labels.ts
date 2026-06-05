@@ -50,6 +50,7 @@ function pickEntityNameFromRequestBody(body: unknown): string {
     'emailAddress',
     'email',
     'segmentName',
+    'subject',
   ];
   for (const key of keys) {
     const val = b[key];
@@ -110,6 +111,7 @@ function enrichSummaryWithEntityName(summary: string, entityName: string): strin
   const text = summary.trim();
   const name = entityName.trim();
   if (!text || !name) return text || summary;
+  if (text.includes(name)) return text;
   if (text.includes(`“${name}”`) || text.includes(`"${name}"`)) return text;
   return `${text}${quote(name)}`;
 }
@@ -194,11 +196,38 @@ function legacySummaryFromPathPattern(
   if (pathPattern === '/access-tokens/:id' && m === 'PATCH') return `Updated webhook${q}`;
   if (pathPattern === '/access-tokens/:id' && m === 'DELETE') return `Revoked webhook${q}`;
 
+  if (pathPattern === '/auth/send-invitation-email' && m === 'POST') {
+    return email ? `Resent invitation to “${email}”` : 'Resent team member invitation';
+  }
   if (pathPattern === '/users' && m === 'POST') return `Invited team member${q}`;
   if (pathPattern === '/users/:id' && m === 'DELETE') return `Removed team member${q}`;
+  if (pathPattern === '/users/:id/status' && m === 'PATCH') {
+    return `Updated team member status${q}`;
+  }
+  if (pathPattern === '/users/me/default-project' && m === 'PATCH') {
+    return entityName ? `Set default project to “${entityName}”` : 'Set default project';
+  }
+  if (pathPattern === '/users/activate-company' && m === 'POST') {
+    return 'Reactivated company account';
+  }
+  if (pathPattern === '/users/company-status' && m === 'POST') {
+    const status =
+      typeof metadata?.status === 'string'
+        ? metadata.status
+        : typeof (metadata as { requestBody?: { status?: string } })?.requestBody
+              ?.status === 'string'
+          ? (metadata as { requestBody?: { status?: string } }).requestBody?.status
+          : '';
+    if (status === 'DEACTIVATED') return 'Deactivated company account';
+    if (status === 'ARCHIVED') return 'Deleted company account';
+    return 'Changed company account status';
+  }
   if (pathPattern === '/users/:id') return `Updated team member${q}`;
   if (pathPattern === '/users' && (m === 'PATCH' || m === 'PUT')) {
-    return 'Updated organization or profile settings';
+    return 'Updated profile or organization settings';
+  }
+  if (pathPattern === 'SWITCH_PROJECT') {
+    return 'Switched project';
   }
 
   if (pathPattern.startsWith('/configuration/email') || pathPattern === '/configuration') {
@@ -208,27 +237,27 @@ function legacySummaryFromPathPattern(
       extractEmailFromPath(typeof metadata?.path === 'string' ? metadata.path : '');
     const eq = quote(emailAddr || '');
     if (pathPattern === '/configuration/email/address' && m === 'POST') {
-      return `Added sending email address${eq}`;
+      return `Added email configuration for send emails${eq}`;
     }
     if (pathPattern === '/configuration/email/address/verify' && m === 'POST') {
       return `Verified sending email address${eq}`;
     }
     if (pathPattern === '/configuration/email/address/:email' && m === 'DELETE') {
-      return `Removed sending email address${eq}`;
+      return `Removed email from configuration${eq}`;
     }
     if (pathPattern === '/configuration/email/domain' && m === 'POST') {
       return `Started email domain verification${eq}`;
     }
     if (pathPattern === '/configuration/email/domain/:domain' && m === 'DELETE') {
-      return `Removed email domain${eq}`;
+      return `Removed email from domain${eq}`;
     }
     if (pathPattern === '/configuration/email/domain/email-address' && m === 'POST') {
-      return `Added email on verified domain${eq}`;
+      return `Added email to verified domain${eq}`;
     }
     if (pathPattern === '/configuration' && m === 'POST') {
-      return 'Updated email sending configuration';
+      return 'Added email configuration for send emails';
     }
-    return `Updated email configuration${eq}`;
+    return `Added email configuration for send emails${eq}`;
   }
 
   if (pathPattern === '/emails/verify-apple-relay' && m === 'POST') {
@@ -236,6 +265,10 @@ function legacySummaryFromPathPattern(
   }
   if (pathPattern === '/emails/disable-private-relay' && m === 'POST') {
     return `Disabled Apple Private Relay${quote(email || entityName)}`;
+  }
+
+  if (pathPattern === '/support/requests' && m === 'POST') {
+    return `Submitted support request${quote(entityName)}`;
   }
 
   if (pathPattern === '/company-contacts/unsubscribe-key') {
@@ -333,12 +366,42 @@ function legacySummaryFromPathPattern(
       if (m === 'PATCH') return `Updated contact primary key${q}`;
       if (m === 'DELETE') return 'Removed contact primary key';
     }
+    if (pathPattern === '/company-contacts/dedicated-ip-request' && m === 'POST') {
+      const requested = metadata?.requested ?? (metadata as { requestBody?: { requested?: boolean } })?.requestBody?.requested;
+      if (requested === false) return 'Requested dedicated IP removal';
+      return 'Requested dedicated IP enable';
+    }
     return `${crudVerb(m)} contact${q}`;
   }
 
   if (pathPattern.startsWith('/stripe')) {
-    if (pathPattern.includes('cancel')) return 'Cancelled subscription';
-    if (pathPattern.includes('top-up')) return 'Purchased top-up';
+    if (pathPattern === '/stripe/cancel-subscription' && m === 'POST') {
+      return 'Cancelled subscription';
+    }
+    if (pathPattern === '/stripe/resume-subscription' && m === 'POST') {
+      return 'Resumed subscription';
+    }
+    if (pathPattern === '/stripe/subscriptions' && m === 'POST') {
+      return 'Started subscription plan';
+    }
+    if (pathPattern === '/stripe/subscription' && (m === 'PATCH' || m === 'PUT')) {
+      return 'Updated subscription';
+    }
+    if (pathPattern === '/stripe/project-add-on' && m === 'PATCH') {
+      return 'Updated project slot add-on';
+    }
+    if (pathPattern === '/stripe/top-up' && m === 'POST') {
+      return 'Purchased account top-up';
+    }
+    if (pathPattern === '/stripe/attach-payment-method' && m === 'POST') {
+      return 'Attached payment method';
+    }
+    if (pathPattern === '/stripe/add-payment-method' && (m === 'PATCH' || m === 'POST')) {
+      return 'Added payment method';
+    }
+    if (pathPattern === '/stripe/payment-method/:id' && m === 'DELETE') {
+      return 'Removed payment method';
+    }
     if (m === 'DELETE') return 'Removed billing item';
     return 'Updated billing';
   }
@@ -482,6 +545,7 @@ export const IMPERSONATION_ACTIVITY_CATEGORY_LABELS: Record<string, string> = {
   project: 'Project',
   integration: 'Integration',
   billing: 'Billing',
-  email: 'Email configuration',
+  email: 'Email configuration for send emails',
+  support: 'Support request',
   other: 'Other',
 };

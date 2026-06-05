@@ -65,6 +65,8 @@ function formatDetailLines(details: Record<string, unknown> | null): string[] {
   };
   push('Previous status', details.previousStatus);
   push('New status', details.status);
+  push('Subject', details.subject);
+  push('Category', details.categoryLabel || details.category);
   push('Request type', details.type);
   push('Company', details.companyName);
   push('Plan', details.planName);

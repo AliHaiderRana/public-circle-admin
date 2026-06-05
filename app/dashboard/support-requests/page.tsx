@@ -109,11 +109,14 @@ export default function SupportRequestsPage() {
 
   const handleUpdateStatus = async (id: string, status: string) => {
     setUpdatingId(id);
+    const previousStatus =
+      requests.find((r) => r._id === id)?.status ??
+      (selectedRequest?._id === id ? selectedRequest.status : undefined);
     try {
       const res = await fetch(`/api/support-requests/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, previousStatus }),
       });
       if (res.ok) {
         setRequests((prev) =>
