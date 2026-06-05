@@ -27,6 +27,7 @@ import {
   Info,
   ScrollText,
   ShieldAlert,
+  MessageSquare,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -35,6 +36,7 @@ import { useState } from 'react';
 const sidebarItems = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Customer Requests', href: '/dashboard/customer-requests', icon: ClipboardList },
+  { name: 'Support Requests', href: '/dashboard/support-requests', icon: MessageSquare },
   { name: 'Companies', href: '/dashboard/companies', icon: Building2 },
   { name: 'Users', href: '/dashboard/users', icon: Users },
   { name: 'Campaigns', href: '/dashboard/campaigns', icon: TrendingUp },

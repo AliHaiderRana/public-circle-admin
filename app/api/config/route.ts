@@ -20,6 +20,8 @@ export async function GET() {
       appleRelayEmail: config.appleRelayEmail,
       deleteCompanyContactsAfterDays: config.deleteCompanyContactsAfterDays,
       isSignupAllowed: config.isSignupAllowed,
+      supportAlertEmails: config.supportAlertEmails ?? [],
+      supportDetailEmails: config.supportDetailEmails ?? [],
     });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch config' }, { status: 500 });
@@ -44,7 +46,23 @@ export async function PATCH(request: Request) {
       isSignupAllowed,
       appleRelayEmail,
       deleteCompanyContactsAfterDays,
+      supportAlertEmails,
+      supportDetailEmails,
     } = await request.json();
+
+    const normalizeEmails = (value: unknown): string[] | undefined => {
+      if (!Array.isArray(value)) return undefined;
+      return [
+        ...new Set(
+          value
+            .map((e) => String(e).trim().toLowerCase())
+            .filter((e) => e.length > 0 && e.includes('@'))
+        ),
+      ];
+    };
+
+    const parsedAlertEmails = normalizeEmails(supportAlertEmails);
+    const parsedDetailEmails = normalizeEmails(supportDetailEmails);
 
     let config = await AppConfig.findOne();
     if (!config) {
@@ -56,6 +74,8 @@ export async function PATCH(request: Request) {
         ...(typeof deleteCompanyContactsAfterDays === 'number'
           ? { deleteCompanyContactsAfterDays }
           : {}),
+        ...(parsedAlertEmails !== undefined ? { supportAlertEmails: parsedAlertEmails } : {}),
+        ...(parsedDetailEmails !== undefined ? { supportDetailEmails: parsedDetailEmails } : {}),
       });
     } else {
       if (typeof isSignupAllowed === 'boolean') {
@@ -66,6 +86,12 @@ export async function PATCH(request: Request) {
       }
       if (typeof deleteCompanyContactsAfterDays === 'number') {
         config.deleteCompanyContactsAfterDays = deleteCompanyContactsAfterDays;
+      }
+      if (parsedAlertEmails !== undefined) {
+        config.supportAlertEmails = parsedAlertEmails;
+      }
+      if (parsedDetailEmails !== undefined) {
+        config.supportDetailEmails = parsedDetailEmails;
       }
       await config.save();
     }
@@ -80,6 +106,8 @@ export async function PATCH(request: Request) {
           isSignupAllowed: config.isSignupAllowed,
           appleRelayEmail: config.appleRelayEmail,
           deleteCompanyContactsAfterDays: config.deleteCompanyContactsAfterDays,
+          supportAlertEmails: config.supportAlertEmails,
+          supportDetailEmails: config.supportDetailEmails,
         },
       });
     }
@@ -89,6 +117,8 @@ export async function PATCH(request: Request) {
       appleRelayEmail: config.appleRelayEmail,
       deleteCompanyContactsAfterDays: config.deleteCompanyContactsAfterDays,
       isSignupAllowed: config.isSignupAllowed,
+      supportAlertEmails: config.supportAlertEmails ?? [],
+      supportDetailEmails: config.supportDetailEmails ?? [],
     });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to update config' }, { status: 500 });

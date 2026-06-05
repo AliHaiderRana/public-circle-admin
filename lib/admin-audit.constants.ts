@@ -12,6 +12,7 @@ export const ADMIN_AUDIT_CATEGORY = {
   ADMIN_USER: 'admin_user',
   SYSTEM_CONFIG: 'system_config',
   IMPERSONATION: 'impersonation',
+  SUPPORT_REQUEST: 'support_request',
 } as const;
 
 export type AdminAuditCategory =
@@ -45,6 +46,7 @@ export const ADMIN_AUDIT_ACTION = {
   ADMIN_USER_DELETE: 'admin_user.delete',
   SYSTEM_CONFIG_UPDATE: 'system_config.update',
   IMPERSONATE_START: 'impersonation.start',
+  SUPPORT_REQUEST_UPDATE: 'support_request.update',
 } as const;
 
 export type AdminAuditAction =
@@ -69,4 +71,5 @@ export const ADMIN_AUDIT_CATEGORY_LABELS: Record<string, string> = {
   [ADMIN_AUDIT_CATEGORY.ADMIN_USER]: 'Admin user',
   [ADMIN_AUDIT_CATEGORY.SYSTEM_CONFIG]: 'System config',
   [ADMIN_AUDIT_CATEGORY.IMPERSONATION]: 'Impersonation',
+  [ADMIN_AUDIT_CATEGORY.SUPPORT_REQUEST]: 'Support request',
 };

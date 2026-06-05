@@ -85,6 +85,10 @@ export function buildAuditSummary(
         ? `${typeLabel} request marked as ${statusLabel}`
         : `Customer request marked as ${statusLabel}`;
     }
+    case ADMIN_AUDIT_ACTION.SUPPORT_REQUEST_UPDATE: {
+      const statusLabel = formatStatus(d.status);
+      return `Support request marked as ${statusLabel}`;
+    }
     case ADMIN_AUDIT_ACTION.COMPANY_BLOCK:
       return `Blocked company${d.companyName ? ` “${d.companyName}”` : ''}`;
     case ADMIN_AUDIT_ACTION.COMPANY_UNBLOCK:

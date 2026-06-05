@@ -3,6 +3,7 @@ import { MODELS } from '../constants';
 
 export const ADMIN_NOTIFICATION_TYPES = {
   CUSTOMER_REQUEST_CREATED: "CUSTOMER_REQUEST_CREATED",
+  SUPPORT_REQUEST_CREATED: "SUPPORT_REQUEST_CREATED",
 };
 
 const schema = new mongoose.Schema(
