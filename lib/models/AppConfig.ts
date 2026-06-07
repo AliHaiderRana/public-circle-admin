@@ -18,6 +18,14 @@ const schema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    supportAlertEmails: {
+      type: [String],
+      default: [],
+    },
+    supportDetailEmails: {
+      type: [String],
+      default: [],
+    },
   },
   { timestamps: true }
 );

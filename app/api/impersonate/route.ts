@@ -93,6 +93,12 @@ export async function POST(request: Request) {
     const impersonatedBy = payload?.data?.impersonatedBy as
       | { email?: string; name?: string }
       | undefined;
+    const impersonatedUser = payload?.data?.impersonatedUser as
+      | { id?: string; email?: string; name?: string }
+      | undefined;
+    const company = payload?.data?.company as
+      | { id?: string; name?: string }
+      | undefined;
 
     if (!token) {
       return NextResponse.json(
@@ -117,7 +123,14 @@ export async function POST(request: Request) {
         category: ADMIN_AUDIT_CATEGORY.IMPERSONATION,
         resourceType: 'user',
         resourceId: userId,
-        details: { userId, companyId },
+        details: {
+          userId,
+          companyId,
+          impersonatedUserEmail: impersonatedUser?.email ?? '',
+          impersonatedUserName: impersonatedUser?.name ?? '',
+          companyName: company?.name ?? '',
+          sessionId: sessionId ?? '',
+        },
       });
     }
 

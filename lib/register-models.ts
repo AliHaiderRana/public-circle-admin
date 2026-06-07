@@ -12,6 +12,7 @@ import TemplateCategory from './models/TemplateCategory';
 import EditorAsset from './models/EditorAsset';
 import Plan from './models/Plan';
 import AdminActivity from './models/AdminActivity';
+import SupportRequest from './models/SupportRequest';
 
 export function registerModels() {
   // Accessing the models ensures they are registered with Mongoose
@@ -30,5 +31,6 @@ export function registerModels() {
     EditorAsset,
     Plan,
     AdminActivity,
+    SupportRequest,
   };
 }

@@ -39,9 +39,16 @@ export async function getServerSession() {
 export function toAdminAuditSession(
   session: Awaited<ReturnType<typeof getServerSession>>
 ): AdminAuditSession | null {
-  if (!session?.userId || !session?.email) return null;
+  if (!session?.email) return null;
+  const userId =
+    session.userId != null
+      ? String(session.userId)
+      : session.id != null
+        ? String(session.id)
+        : '';
+  if (!userId || userId === '[object Object]') return null;
   return {
-    userId: session.userId,
+    userId,
     email: session.email,
     name: session.name,
     isSuperAdmin: session.isSuperAdmin,

@@ -17,6 +17,7 @@ interface AdminNotification {
   readAt: string | null;
   metadata: {
     customerRequestId?: string;
+    supportRequestId?: string;
     companyId?: string;
     companyName?: string;
     requestType?: string;
@@ -214,6 +215,12 @@ export default function NotificationDropdown() {
       if (customerRequestId) {
         setIsOpen(false);
         router.push(`/dashboard/customer-requests?highlight=${customerRequestId}`);
+      }
+    } else if (notification.type === ADMIN_NOTIFICATION_TYPES.SUPPORT_REQUEST_CREATED) {
+      const supportRequestId = notification.metadata?.supportRequestId;
+      if (supportRequestId) {
+        setIsOpen(false);
+        router.push(`/dashboard/support-requests?highlight=${supportRequestId}`);
       }
     }
   };

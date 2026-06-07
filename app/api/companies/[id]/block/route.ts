@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
+import dbConnect from '@/lib/db';
 import Company from '@/lib/models/Company';
 import User from '@/lib/models/User';
 import Campaign from '@/lib/models/Campaign';
@@ -9,6 +10,7 @@ import {
   ADMIN_AUDIT_ACTION,
   ADMIN_AUDIT_CATEGORY,
 } from '@/lib/admin-audit';
+import { runWithOptionalTransaction } from '@/lib/run-with-optional-transaction';
 import { USER_STATUS, CAMPAIGN_STATUS } from '@/lib/constants';
 
 /**
@@ -37,10 +39,7 @@ export async function POST(
       );
     }
 
-    // Connect to database if not already connected
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/circles');
-    }
+    await dbConnect();
 
     const company = await Company.findById(id);
     if (!company) {
@@ -57,69 +56,68 @@ export async function POST(
       );
     }
 
-    // Start a session for transaction
-    const dbSession = await mongoose.startSession();
-    dbSession.startTransaction();
+    const companyObjectId = new mongoose.Types.ObjectId(id);
 
-    try {
-      // 1. Block the company
-      await Company.findByIdAndUpdate(
-        id,
-        { status: USER_STATUS.BLOCKED },
-        { session: dbSession }
-      );
+    const { usersBlocked, campaignsPaused } = await runWithOptionalTransaction(
+      async (dbSession) => {
+        const sessionOpts = dbSession ? { session: dbSession } : {};
 
-      // 2. Block all users of this company (except deleted ones)
-      const usersUpdateResult = await User.updateMany(
-        { 
-          company: new mongoose.Types.ObjectId(id),
-          status: { $ne: USER_STATUS.DELETED }
-        },
-        { status: USER_STATUS.BLOCKED },
-        { session: dbSession }
-      );
+        await Company.findByIdAndUpdate(
+          id,
+          { status: USER_STATUS.BLOCKED },
+          sessionOpts
+        );
 
-      // 3. Pause all active campaigns of this company
-      const campaignsUpdateResult = await Campaign.updateMany(
-        { 
-          company: new mongoose.Types.ObjectId(id),
-          status: CAMPAIGN_STATUS.ACTIVE 
-        },
-        { status: CAMPAIGN_STATUS.PAUSED },
-        { session: dbSession }
-      );
-
-      await dbSession.commitTransaction();
-
-      const auditSession = toAdminAuditSession(session);
-      if (auditSession) {
-        await logAdminActivity(auditSession, {
-          action: ADMIN_AUDIT_ACTION.COMPANY_BLOCK,
-          category: ADMIN_AUDIT_CATEGORY.COMPANY,
-          resourceType: 'company',
-          resourceId: id,
-          details: {
-            companyName: company.name,
-            usersBlocked: usersUpdateResult.modifiedCount,
-            campaignsPaused: campaignsUpdateResult.modifiedCount,
+        const usersUpdateResult = await User.updateMany(
+          {
+            company: companyObjectId,
+            status: { $ne: USER_STATUS.DELETED },
           },
-        });
-      }
+          { status: USER_STATUS.BLOCKED },
+          sessionOpts
+        );
 
-      return NextResponse.json({
-        message: 'Company blocked successfully',
-        data: {
-          companyId: id,
+        const campaignsUpdateResult = await Campaign.updateMany(
+          {
+            company: companyObjectId,
+            status: CAMPAIGN_STATUS.ACTIVE,
+          },
+          { status: CAMPAIGN_STATUS.PAUSED },
+          sessionOpts
+        );
+
+        return {
           usersBlocked: usersUpdateResult.modifiedCount,
           campaignsPaused: campaignsUpdateResult.modifiedCount,
+        };
+      }
+    );
+
+    const auditSession = toAdminAuditSession(session);
+    if (!auditSession) {
+      console.warn('[admin-audit] Skipped company block audit — missing admin session identity');
+    } else {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.COMPANY_BLOCK,
+        category: ADMIN_AUDIT_CATEGORY.COMPANY,
+        resourceType: 'company',
+        resourceId: id,
+        details: {
+          companyName: company.name,
+          usersBlocked,
+          campaignsPaused,
         },
       });
-    } catch (error) {
-      await dbSession.abortTransaction();
-      throw error;
-    } finally {
-      dbSession.endSession();
     }
+
+    return NextResponse.json({
+      message: 'Company blocked successfully',
+      data: {
+        companyId: id,
+        usersBlocked,
+        campaignsPaused,
+      },
+    });
   } catch (error) {
     console.error('Error blocking company:', error);
     return NextResponse.json(

@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Loader2, UserPlus } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Loader2, UserPlus, Mail } from 'lucide-react';
 
 export default function ConfigPage() {
   const { user, loading: authLoading } = useAuth();
@@ -16,8 +17,19 @@ export default function ConfigPage() {
   const [appleRelayEmail, setAppleRelayEmail] = useState<string>('');
   const [deleteCompanyContactsAfterDays, setDeleteCompanyContactsAfterDays] = useState<number>(7);
   const [dlqLastProcessedAt, setDlqLastProcessedAt] = useState<string>('');
+  const [supportAlertEmails, setSupportAlertEmails] = useState<string>('');
+  const [supportDetailEmails, setSupportDetailEmails] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+
+  const emailsToText = (emails: string[] | undefined) =>
+    (emails ?? []).join('\n');
+
+  const textToEmails = (text: string) =>
+    text
+      .split(/[\n,;]+/)
+      .map((e) => e.trim())
+      .filter(Boolean);
 
   // Redirect non-super-admins
   useEffect(() => {
@@ -49,6 +61,8 @@ export default function ConfigPage() {
       setAppleRelayEmail(data.appleRelayEmail ?? '');
       setDeleteCompanyContactsAfterDays(data.deleteCompanyContactsAfterDays ?? 7);
       setDlqLastProcessedAt(data.DlqLastProcessedAt ? new Date(data.DlqLastProcessedAt).toLocaleString() : '');
+      setSupportAlertEmails(emailsToText(data.supportAlertEmails));
+      setSupportDetailEmails(emailsToText(data.supportDetailEmails));
     } catch (err) {
       console.error('Failed to load config');
     } finally {
@@ -65,6 +79,8 @@ export default function ConfigPage() {
         body: JSON.stringify({
           appleRelayEmail: appleRelayEmail.trim() === '' ? null : appleRelayEmail.trim(),
           deleteCompanyContactsAfterDays,
+          supportAlertEmails: textToEmails(supportAlertEmails),
+          supportDetailEmails: textToEmails(supportDetailEmails),
         }),
       });
 
@@ -73,6 +89,8 @@ export default function ConfigPage() {
         setAppleRelayEmail(data.appleRelayEmail ?? '');
         setDeleteCompanyContactsAfterDays(data.deleteCompanyContactsAfterDays ?? 7);
         setDlqLastProcessedAt(data.DlqLastProcessedAt ? new Date(data.DlqLastProcessedAt).toLocaleString() : '');
+        setSupportAlertEmails(emailsToText(data.supportAlertEmails));
+        setSupportDetailEmails(emailsToText(data.supportDetailEmails));
       }
     } catch (err) {
       console.error('Failed to update config');
@@ -161,6 +179,64 @@ export default function ConfigPage() {
                   </Button>
                 </div>
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-primary" />
+              <CardTitle>Support notification emails</CardTitle>
+            </div>
+            <CardDescription>
+              Configure where alert and detail emails are sent when customers use Talk to Support.
+              One email per line. If empty, the server falls back to SUPPORT_EMAIL from environment.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {loading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="supportAlertEmails">Alert emails (short notification)</Label>
+                  <Textarea
+                    id="supportAlertEmails"
+                    value={supportAlertEmails}
+                    onChange={(e) => setSupportAlertEmails(e.target.value)}
+                    placeholder={'ops@example.com\noncall@example.com'}
+                    rows={4}
+                    disabled={updating}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="supportDetailEmails">Detail emails (full request content)</Label>
+                  <Textarea
+                    id="supportDetailEmails"
+                    value={supportDetailEmails}
+                    onChange={(e) => setSupportDetailEmails(e.target.value)}
+                    placeholder="support@example.com"
+                    rows={4}
+                    disabled={updating}
+                  />
+                </div>
+                <div className="flex items-center justify-end">
+                  <Button onClick={handleSaveSystemSettings} disabled={updating}>
+                    {updating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Saving
+                      </>
+                    ) : (
+                      'Save Settings'
+                    )}
+                  </Button>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

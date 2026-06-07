@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import ProtectedRoute from '@/components/ProtectedRoute';
-import NotificationDropdown from '@/components/NotificationDropdown';
-import { useAuth } from '@/context/AuthContext';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import ProtectedRoute from "@/components/ProtectedRoute";
+import NotificationDropdown from "@/components/NotificationDropdown";
+import { useAuth } from "@/context/AuthContext";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   Building2,
@@ -28,34 +28,72 @@ import {
   ScrollText,
   ShieldAlert,
   Sparkles,
-} from 'lucide-react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+  MessageSquare,
+} from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
 
 const sidebarItems = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Customer Requests', href: '/dashboard/customer-requests', icon: ClipboardList },
-  { name: 'Companies', href: '/dashboard/companies', icon: Building2 },
-  { name: 'Users', href: '/dashboard/users', icon: Users },
-  { name: 'Campaigns', href: '/dashboard/campaigns', icon: TrendingUp },
-  { name: 'Campaign Runs', href: '/dashboard/campaign-runs', icon: Play },
-  { name: 'Sample Templates', href: '/dashboard/templates', icon: FileText },
-  { name: 'Template Categories', href: '/dashboard/template-categories', icon: FolderTree },
-  { name: 'Stripe Dashboard', href: '/dashboard/stripe', icon: CreditCard },
-  { name: 'Plan Quotas', href: '/dashboard/plans', icon: Layers },
-  { name: 'Cron Jobs', href: '/dashboard/crons', icon: Clock },
-  { name: 'Translations', href: '/dashboard/translations', icon: Languages },
-  { name: 'Context help', href: '/dashboard/ui-hints', icon: Info },
-  { name: 'Admin panel activity', href: '/dashboard/admin-activity', icon: ScrollText, superAdminOnly: true },
-  { name: 'Login as user activity', href: '/dashboard/impersonation-activity', icon: ShieldAlert, superAdminOnly: true },
-  { name: 'Admin Users', href: '/dashboard/admins', icon: Shield, superAdminOnly: true },
-  { name: 'Changelog', href: '/dashboard/changelog', icon: Sparkles },
-  { name: 'Profile', href: '/dashboard/profile', icon: UserCircle },
-  { name: 'System Configuration', href: '/dashboard/config', icon: Settings, superAdminOnly: true },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  {
+    name: "Customer Requests",
+    href: "/dashboard/customer-requests",
+    icon: ClipboardList,
+  },
+  {
+    name: "Support Requests",
+    href: "/dashboard/support-requests",
+    icon: MessageSquare,
+  },
+  { name: "Companies", href: "/dashboard/companies", icon: Building2 },
+  { name: "Users", href: "/dashboard/users", icon: Users },
+  { name: "Campaigns", href: "/dashboard/campaigns", icon: TrendingUp },
+  { name: "Campaign Runs", href: "/dashboard/campaign-runs", icon: Play },
+  { name: "Sample Templates", href: "/dashboard/templates", icon: FileText },
+  {
+    name: "Template Categories",
+    href: "/dashboard/template-categories",
+    icon: FolderTree,
+  },
+  { name: "Stripe Dashboard", href: "/dashboard/stripe", icon: CreditCard },
+  { name: "Plan Quotas", href: "/dashboard/plans", icon: Layers },
+  { name: "Cron Jobs", href: "/dashboard/crons", icon: Clock },
+  { name: "Translations", href: "/dashboard/translations", icon: Languages },
+  { name: "Context help", href: "/dashboard/ui-hints", icon: Info },
+  {
+    name: "Admin panel activity",
+    href: "/dashboard/admin-activity",
+    icon: ScrollText,
+    superAdminOnly: true,
+  },
+  {
+    name: "Login as user activity",
+    href: "/dashboard/impersonation-activity",
+    icon: ShieldAlert,
+    superAdminOnly: true,
+  },
+  {
+    name: "Admin Users",
+    href: "/dashboard/admins",
+    icon: Shield,
+    superAdminOnly: true,
+  },
+  { name: "Changelog", href: "/dashboard/changelog", icon: Sparkles },
+  { name: "Profile", href: "/dashboard/profile", icon: UserCircle },
+  {
+    name: "System Configuration",
+    href: "/dashboard/config",
+    icon: Settings,
+    superAdminOnly: true,
+  },
 ];
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { user, logout } = useAuth();
   const pathname = usePathname();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -65,8 +103,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex h-screen bg-background text-foreground">
         <aside
           className={cn(
-            'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 lg:shrink-0',
-            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            "fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 lg:shrink-0",
+            isSidebarOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
           <div className="hidden border-b border-sidebar-border p-6 lg:block">
@@ -105,10 +143,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                       isActive
-                        ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                        : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                        ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                     )}
                     onClick={() => setIsSidebarOpen(false)}
                   >
@@ -127,7 +165,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{user?.email}</p>
                 <p className="text-xs text-muted-foreground">
-                  {user?.isSuperAdmin ? 'Super Admin' : 'Admin'}
+                  {user?.isSuperAdmin ? "Super Admin" : "Admin"}
                 </p>
               </div>
             </div>
@@ -160,7 +198,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   className="lg:hidden"
                   onClick={() => setIsSidebarOpen(!isSidebarOpen)}
                 >
-                  {isSidebarOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+                  {isSidebarOpen ? (
+                    <X className="size-5" />
+                  ) : (
+                    <Menu className="size-5" />
+                  )}
                   <span className="sr-only">Toggle menu</span>
                 </Button>
                 <div className="flex items-center gap-2 lg:hidden">
@@ -169,7 +211,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     alt="Public Circle Admin"
                     className="size-6 rounded-lg object-cover"
                   />
-                  <span className="text-sm font-semibold">Public Circle Admin</span>
+                  <span className="text-sm font-semibold">
+                    Public Circle Admin
+                  </span>
                 </div>
               </div>
               <NotificationDropdown />

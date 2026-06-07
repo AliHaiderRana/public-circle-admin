@@ -65,19 +65,34 @@ function formatDetailLines(details: Record<string, unknown> | null): string[] {
   };
   push('Previous status', details.previousStatus);
   push('New status', details.status);
+  push('Subject', details.subject);
+  push('Category', details.categoryLabel || details.category);
   push('Request type', details.type);
   push('Company', details.companyName);
+  push('Impersonated user', details.impersonatedUserEmail);
+  push('User name', details.impersonatedUserName);
+  push('Session', details.sessionId);
   push('Plan', details.planName);
   push('Cron', details.cronName);
   push('Translation key', details.key);
-  push('Language', details.code);
+  push('Locale', details.locale);
+  push('Language', details.code || details.label);
   push('Template', details.name);
+  push('Project', details.projectId);
+  push('Recipients', Array.isArray(details.recipients) ? details.recipients.join(', ') : details.recipients);
+  push('Email subject', details.emailSubject);
   if (details.fieldsChanged && Array.isArray(details.fieldsChanged)) {
     push('Fields changed', details.fieldsChanged.join(', '));
+  }
+  if (details.previousQuota && typeof details.previousQuota === 'object') {
+    push('Previous quota', JSON.stringify(details.previousQuota));
   }
   if (details.quota && typeof details.quota === 'object') {
     push('New quota', JSON.stringify(details.quota));
   }
+  if (typeof details.usersBlocked === 'number') push('Users blocked', details.usersBlocked);
+  if (typeof details.usersUnblocked === 'number') push('Users unblocked', details.usersUnblocked);
+  if (typeof details.campaignsPaused === 'number') push('Campaigns paused', details.campaignsPaused);
   const known = new Set([
     'previousStatus',
     'status',
@@ -99,6 +114,23 @@ function formatDetailLines(details: Record<string, unknown> | null): string[] {
     'label',
     'changes',
     'impersonatedUserEmail',
+    'impersonatedUserName',
+    'sessionId',
+    'subject',
+    'category',
+    'categoryLabel',
+    'adminNotesUpdated',
+    'locale',
+    'projectId',
+    'recipients',
+    'emailSubject',
+    'sent',
+    'usersBlocked',
+    'usersUnblocked',
+    'campaignsPaused',
+    'field',
+    'previousEmail',
+    'previousName',
   ]);
   for (const [key, value] of Object.entries(details)) {
     if (known.has(key) || value === null || value === undefined) continue;

@@ -17,7 +17,12 @@ export async function POST(request: Request) {
     }
 
     const token = jwt.sign(
-      { userId: user._id, email: user.email, name: user.name || '', isSuperAdmin: user.isSuperAdmin || false },
+      {
+        userId: user._id.toString(),
+        email: user.email,
+        name: user.name || '',
+        isSuperAdmin: user.isSuperAdmin || false,
+      },
       JWT_SECRET,
       { expiresIn: '1d' }
     );

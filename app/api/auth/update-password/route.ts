@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import AdminUser from '@/lib/models/AdminUser';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 
 export async function POST(request: Request) {
   const session = await getServerSession();
@@ -20,6 +25,17 @@ export async function POST(request: Request) {
 
     user.password = newPassword;
     await user.save();
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.ADMIN_PROFILE_UPDATE,
+        category: ADMIN_AUDIT_CATEGORY.ADMIN_USER,
+        resourceType: 'admin_user',
+        resourceId: String(user._id),
+        details: { field: 'password' },
+      });
+    }
 
     return NextResponse.json({ message: 'Password updated successfully' });
   } catch (error) {

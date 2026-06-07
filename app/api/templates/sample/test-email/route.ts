@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -116,6 +121,20 @@ export async function POST(request: Request) {
         },
         { status: sent > 0 ? 207 : 502 }
       );
+    }
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.SAMPLE_TEMPLATE_TEST_EMAIL,
+        category: ADMIN_AUDIT_CATEGORY.TEMPLATE,
+        resourceType: 'sample_template_test_email',
+        details: {
+          recipients,
+          emailSubject: parsed.data.emailSubject,
+          sent,
+        },
+      });
     }
 
     return NextResponse.json({
