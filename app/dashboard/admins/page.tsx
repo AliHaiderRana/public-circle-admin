@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import AdminActivityLogPanel from '@/components/AdminActivityLogPanel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,12 +10,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { UserPlus, User, Mail, Calendar, Eye, EyeOff, ScrollText } from 'lucide-react';
 import {
   AlertDialog,
@@ -49,7 +43,6 @@ export default function AdminsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmingAdminId, setConfirmingAdminId] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [activityModalAdmin, setActivityModalAdmin] = useState<Admin | null>(null);
 
   useEffect(() => {
     fetchAdmins();
@@ -121,6 +114,12 @@ export default function AdminsPage() {
     }
   };
 
+  const activityHref = (admin: Admin) => {
+    const params = new URLSearchParams({ adminEmail: admin.email });
+    if (admin.name?.trim()) params.set('adminName', admin.name.trim());
+    return `/dashboard/admins/activity?${params.toString()}`;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -128,8 +127,8 @@ export default function AdminsPage() {
           <h2 className="text-3xl font-bold tracking-tight">Admin Users</h2>
           <p className="text-neutral-500">
             Create and remove administrator accounts. Use{' '}
-            <strong>Admin panel activity</strong> in the sidebar for all panel changes, or{' '}
-            <strong>View activity</strong> on a row for one person.
+            <strong>View activity</strong> on a row to see everything that admin did in the
+            admin panel and in Public Circle.
           </p>
         </div>
         {user?.isSuperAdmin && (
@@ -281,14 +280,11 @@ export default function AdminsPage() {
                     {user?.isSuperAdmin && (
                       <TableCell className="text-right pr-6">
                         <div className="flex justify-end gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setActivityModalAdmin(admin)}
-                          >
-                            <ScrollText className="h-3.5 w-3.5 mr-1" />
-                            View activity
+                          <Button variant="outline" size="sm" asChild>
+                            <Link href={activityHref(admin)}>
+                              <ScrollText className="h-3.5 w-3.5 mr-1" />
+                              View activity
+                            </Link>
                           </Button>
                           {admin._id !== user?.id && (
                             <AlertDialog
@@ -341,36 +337,6 @@ export default function AdminsPage() {
           </Table>
         </CardContent>
       </Card>
-
-      <Dialog
-        open={!!activityModalAdmin}
-        onOpenChange={(open) => !open && setActivityModalAdmin(null)}
-      >
-        <DialogContent className="max-w-2xl max-h-[min(85vh,720px)] flex flex-col p-0 gap-0 overflow-hidden">
-          <DialogHeader className="px-6 pt-6 pb-3 shrink-0 border-b">
-            <DialogTitle className="flex items-center gap-2 pr-8">
-              <ScrollText className="h-5 w-5 text-amber-600 shrink-0" />
-              <span className="truncate">
-                Activity — {activityModalAdmin?.name || activityModalAdmin?.email}
-              </span>
-            </DialogTitle>
-            <p className="text-sm text-muted-foreground font-normal">
-              {activityModalAdmin?.email}
-            </p>
-          </DialogHeader>
-          {activityModalAdmin && (
-            <div className="flex flex-1 min-h-0 flex-col px-6 pb-4 pt-2">
-              <AdminActivityLogPanel
-                hideHeader
-                compact
-                adminEmailFilter={activityModalAdmin.email}
-                showFilters={false}
-                defaultLimit={10}
-              />
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

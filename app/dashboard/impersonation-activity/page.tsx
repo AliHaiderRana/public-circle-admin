@@ -1,50 +1,28 @@
 'use client';
 
-import { Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import AdminImpersonationActivitySection from '@/components/AdminImpersonationActivitySection';
+import { Suspense, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
-function ImpersonationActivityContent() {
+function ImpersonationActivityRedirect() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const userEmail = (searchParams.get('userEmail') || '').trim();
-  const userId = (searchParams.get('userId') || '').trim();
 
-  const title = userEmail
-    ? `Login as user activity — ${userEmail}`
-    : 'All sessions';
+  useEffect(() => {
+    const params = new URLSearchParams();
+    const userEmail = searchParams.get('userEmail');
+    const userId = searchParams.get('userId');
+    if (userEmail) params.set('userEmail', userEmail);
+    if (userId) params.set('userId', userId);
+    router.replace(`/dashboard/customer-activity?${params.toString()}`);
+  }, [router, searchParams]);
 
-  const description = userEmail
-    ? 'Activity while any admin used Login as user for this customer. Clear the customer email filter to see all users.'
-    : 'Filter by customer email, admin email, date, and category. Newest first by default.';
-
-  return (
-    <AdminImpersonationActivitySection
-      title={title}
-      description={description}
-      defaultLimit={25}
-      userId={userId || undefined}
-      initialUserEmail={userEmail}
-    />
-  );
+  return null;
 }
 
-export default function ImpersonationActivityPage() {
+export default function ImpersonationActivityRedirectPage() {
   return (
-    <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Login as user activity</h1>
-        <p className="text-muted-foreground">
-          Human-readable log of what admins did in Public Circle after using Login as user.
-          Admin app changes are under Admin panel activity.
-        </p>
-      </div>
-      <Suspense
-        fallback={
-          <p className="text-sm text-muted-foreground">Loading activity filters…</p>
-        }
-      >
-        <ImpersonationActivityContent />
-      </Suspense>
-    </div>
+    <Suspense fallback={null}>
+      <ImpersonationActivityRedirect />
+    </Suspense>
   );
 }

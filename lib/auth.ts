@@ -4,17 +4,25 @@ import jwt from 'jsonwebtoken';
 import dbConnect from '@/lib/db';
 import AdminUser from '@/lib/models/AdminUser';
 import type { AdminAuditSession } from '@/lib/admin-audit.constants';
+import { ADMIN_JWT_SECRET } from '@/lib/admin-jwt';
 
-const JWT_SECRET = process.env.JWT_SECRET || process.env.ACCESS_TOKEN_SECRET || 'fallback_secret';
+function readBearerToken(request?: Request): string | null {
+  if (!request) return null;
+  const auth = request.headers.get('authorization');
+  if (!auth?.startsWith('Bearer ')) return null;
+  const token = auth.slice('Bearer '.length).trim();
+  return token || null;
+}
 
-export async function getServerSession() {
+export async function getServerSession(request?: Request) {
   try {
     const cookieStore = await cookies();
-    const token = cookieStore.get('admin_token')?.value;
+    const token =
+      cookieStore.get('admin_token')?.value || readBearerToken(request);
 
     if (!token) return null;
 
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const decoded = jwt.verify(token, ADMIN_JWT_SECRET) as any;
     
     // Verify user still exists in database (prevents deleted users from accessing)
     await dbConnect();

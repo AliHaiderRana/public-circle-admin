@@ -25,8 +25,6 @@ import {
   Layers,
   Languages,
   Info,
-  ScrollText,
-  ShieldAlert,
   Sparkles,
   MessageSquare,
 } from "lucide-react";
@@ -61,18 +59,6 @@ const sidebarItems = [
   { name: "Cron Jobs", href: "/dashboard/crons", icon: Clock },
   { name: "Translations", href: "/dashboard/translations", icon: Languages },
   { name: "Context help", href: "/dashboard/ui-hints", icon: Info },
-  {
-    name: "Admin panel activity",
-    href: "/dashboard/admin-activity",
-    icon: ScrollText,
-    superAdminOnly: true,
-  },
-  {
-    name: "Login as user activity",
-    href: "/dashboard/impersonation-activity",
-    icon: ShieldAlert,
-    superAdminOnly: true,
-  },
   {
     name: "Admin Users",
     href: "/dashboard/admins",

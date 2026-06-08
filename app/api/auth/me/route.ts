@@ -3,8 +3,7 @@ import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import dbConnect from '@/lib/db';
 import AdminUser from '@/lib/models/AdminUser';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
+import { ADMIN_JWT_SECRET } from '@/lib/admin-jwt';
 
 export async function GET() {
   const cookieStore = await cookies();
@@ -15,7 +14,7 @@ export async function GET() {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const decoded = jwt.verify(token, ADMIN_JWT_SECRET) as any;
     
     // Fetch fresh user data from database to get latest name and isSuperAdmin
     await dbConnect();
