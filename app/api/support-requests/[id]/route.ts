@@ -1,16 +1,19 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Company from '@/lib/models/Company';
+import User from '@/lib/models/User';
+import SupportRequest from '@/lib/models/SupportRequest';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
 import {
   SUPPORT_REQUEST_STATUS,
   SUPPORT_REQUEST_CATEGORY_LABELS,
 } from '@/lib/constants';
-import { getServerSession, toAdminAuditSession } from '@/lib/auth';
 import {
   logAdminActivity,
   ADMIN_AUDIT_ACTION,
   ADMIN_AUDIT_CATEGORY,
 } from '@/lib/admin-audit';
+import { formatSupportReferenceId } from '@/lib/support-admin.util';
 
 const SERVER_API_URL =
   process.env.SERVER_API_URL ||
@@ -19,9 +22,45 @@ const SERVER_API_URL =
 const INTERNAL_API_KEY =
   process.env.INTERNAL_API_KEY || 'internal_admin_cron_key_2024';
 
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await getServerSession();
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { id } = await params;
+
+  try {
+    await dbConnect();
+    const request = await SupportRequest.findById(id)
+      .populate({ path: 'companyId', model: Company, select: '_id name' })
+      .populate({
+        path: 'userId',
+        model: User,
+        select: 'firstName lastName emailAddress',
+      })
+      .lean();
+
+    if (!request) {
+      return NextResponse.json({ error: 'Support request not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      ...request,
+      referenceId: formatSupportReferenceId(String(request._id)),
+    });
+  } catch (error) {
+    console.error('Error fetching support request:', error);
+    return NextResponse.json({ error: 'Failed to fetch support request' }, { status: 500 });
+  }
+}
+
 export async function PATCH(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getServerSession();
   if (!session) {
@@ -30,7 +69,7 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await request.json();
-  const { status, adminNotes } = body;
+  const { status, adminNotes, assignedAdminId, assignedAdminName } = body;
 
   if (status && !Object.values(SUPPORT_REQUEST_STATUS).includes(status)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
@@ -46,6 +85,14 @@ export async function PATCH(
       body: JSON.stringify({
         ...(status ? { status } : {}),
         ...(typeof adminNotes === 'string' ? { adminNotes } : {}),
+        ...(assignedAdminId !== undefined
+          ? {
+              assignedAdminId: assignedAdminId || null,
+              assignedAdminName: assignedAdminName || '',
+              assignedByAdminId: session.userId,
+              assignedByName: session.name || session.email || '',
+            }
+          : {}),
       }),
     });
 
@@ -54,7 +101,7 @@ export async function PATCH(
     if (!response.ok) {
       return NextResponse.json(
         { error: payload?.message || payload?.error || 'Failed to update support request' },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
@@ -62,10 +109,28 @@ export async function PATCH(
     const previousStatus =
       typeof body.previousStatus === 'string' ? body.previousStatus : undefined;
 
+    await dbConnect();
+    const localUpdate: Record<string, unknown> = {};
+    if (typeof adminNotes === 'string') localUpdate.adminNotes = adminNotes;
+    if (supportRequest?.status) localUpdate.status = supportRequest.status;
+    if (assignedAdminId !== undefined) {
+      localUpdate.assignedAdminId = assignedAdminId || null;
+      localUpdate.assignedAdminName = assignedAdminName || '';
+    }
+    if (supportRequest?.pendingResolutionAt !== undefined) {
+      localUpdate.pendingResolutionAt = supportRequest.pendingResolutionAt;
+    }
+    if (supportRequest?.autoResolveAt !== undefined) {
+      localUpdate.autoResolveAt = supportRequest.autoResolveAt;
+    }
+
+    if (Object.keys(localUpdate).length > 0) {
+      await SupportRequest.findByIdAndUpdate(id, localUpdate);
+    }
+
     let companyName = '';
     const companyId = String(supportRequest?.companyId ?? '');
     if (companyId) {
-      await dbConnect();
       const company = await Company.findById(companyId).select('name').lean();
       companyName = company?.name ?? '';
     }
@@ -92,7 +157,19 @@ export async function PATCH(
       });
     }
 
-    return NextResponse.json(supportRequest);
+    const refreshed = await SupportRequest.findById(id)
+      .populate({ path: 'companyId', model: Company, select: '_id name' })
+      .populate({
+        path: 'userId',
+        model: User,
+        select: 'firstName lastName emailAddress',
+      })
+      .lean();
+
+    return NextResponse.json({
+      ...(refreshed ?? supportRequest),
+      referenceId: formatSupportReferenceId(id),
+    });
   } catch (error) {
     console.error('Error updating support request:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

@@ -26,13 +26,26 @@ import {
   Languages,
   Info,
   Sparkles,
-  MessageSquare,
+  Inbox,
+  Bell,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
+import { SupportCountBadge } from "@/components/SupportCountBadge";
+import { useSupportStats } from "@/hooks/use-support-stats";
+import { formatAdminDisplayName } from "@/lib/support-admin.util";
 
-const sidebarItems = [
+type SidebarItem = {
+  name: string;
+  href: string;
+  icon: ComponentType<{ className?: string }>;
+  superAdminOnly?: boolean;
+  countKey?: "unreadChatMessages" | "openSupportRequests";
+  secondaryCountKey?: "unreadChatMessages" | "openSupportRequests";
+};
+
+const sidebarItems: SidebarItem[] = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   {
     name: "Customer Requests",
@@ -42,7 +55,15 @@ const sidebarItems = [
   {
     name: "Support Requests",
     href: "/dashboard/support-requests",
-    icon: MessageSquare,
+    icon: Inbox,
+    countKey: "unreadChatMessages",
+    secondaryCountKey: "openSupportRequests",
+  },
+  {
+    name: "System Notifications",
+    href: "/dashboard/system-notifications",
+    icon: Bell,
+    superAdminOnly: true,
   },
   { name: "Companies", href: "/dashboard/companies", icon: Building2 },
   { name: "Users", href: "/dashboard/users", icon: Users },
@@ -75,6 +96,22 @@ const sidebarItems = [
   },
 ];
 
+function isSidebarItemActive(pathname: string, href: string) {
+  if (href === "/dashboard") {
+    return pathname === "/dashboard";
+  }
+
+  if (href === "/dashboard/support-requests") {
+    return (
+      pathname === href ||
+      pathname.startsWith(`${href}/`) ||
+      pathname.startsWith("/dashboard/support-chat")
+    );
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export default function DashboardLayout({
   children,
 }: {
@@ -83,6 +120,7 @@ export default function DashboardLayout({
   const { user, logout } = useAuth();
   const pathname = usePathname();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { stats } = useSupportStats();
 
   return (
     <ProtectedRoute>
@@ -123,7 +161,11 @@ export default function DashboardLayout({
                 return true;
               })
               .map((item) => {
-                const isActive = pathname === item.href;
+                const isActive = isSidebarItemActive(pathname, item.href);
+                const primaryCount = item.countKey ? stats[item.countKey] : 0;
+                const secondaryCount = item.secondaryCountKey
+                  ? stats[item.secondaryCountKey]
+                  : 0;
                 return (
                   <Link
                     key={item.href}
@@ -137,7 +179,13 @@ export default function DashboardLayout({
                     onClick={() => setIsSidebarOpen(false)}
                   >
                     <item.icon className="size-5 shrink-0" />
-                    <span>{item.name}</span>
+                    <span className="flex-1 truncate">{item.name}</span>
+                    <div className="flex items-center gap-1">
+                      <SupportCountBadge count={primaryCount} />
+                      {secondaryCount > 0 && (
+                        <SupportCountBadge count={secondaryCount} variant="secondary" />
+                      )}
+                    </div>
                   </Link>
                 );
               })}
@@ -149,7 +197,10 @@ export default function DashboardLayout({
                 <Users className="size-4" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{user?.email}</p>
+                <p className="truncate text-sm font-medium">
+                  {formatAdminDisplayName(user?.name, user?.email) || user?.email}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
                 <p className="text-xs text-muted-foreground">
                   {user?.isSuperAdmin ? "Super Admin" : "Admin"}
                 </p>

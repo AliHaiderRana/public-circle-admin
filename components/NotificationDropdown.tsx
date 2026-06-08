@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Bell, Check, Trash2, CheckCheck, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { getAdminNotificationDisplay } from '@/lib/support-notifications';
 import { ADMIN_NOTIFICATION_TYPES, SOCKET_CHANNELS } from '@/lib/constants';
 import { io, Socket } from 'socket.io-client';
 
@@ -222,6 +223,14 @@ export default function NotificationDropdown() {
         setIsOpen(false);
         router.push(`/dashboard/support-requests?highlight=${supportRequestId}`);
       }
+    } else if (notification.type === ADMIN_NOTIFICATION_TYPES.SUPPORT_CHAT_CUSTOMER_MESSAGE) {
+      const supportRequestId = notification.metadata?.supportRequestId;
+      setIsOpen(false);
+      if (supportRequestId) {
+        router.push(`/dashboard/support-requests?ticket=${supportRequestId}`);
+      } else {
+        router.push('/dashboard/support-requests');
+      }
     }
   };
 
@@ -300,7 +309,9 @@ export default function NotificationDropdown() {
                 <p className="text-sm">No notifications yet</p>
               </div>
             ) : (
-              notifications.map((notification) => (
+              notifications.map((notification) => {
+                const display = getAdminNotificationDisplay(notification);
+                return (
                 <div
                   key={notification._id}
                   className={`px-4 py-3 border-b border-neutral-100 dark:border-neutral-700 last:border-0 cursor-pointer transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-700/50 ${
@@ -314,11 +325,13 @@ export default function NotificationDropdown() {
                     }`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
-                        {notification.title}
+                        {display.title}
                       </p>
-                      <p className="text-sm text-neutral-600 dark:text-neutral-400 line-clamp-2">
-                        {notification.description}
-                      </p>
+                      {display.description ? (
+                        <p className="text-sm text-neutral-600 dark:text-neutral-400 line-clamp-2">
+                          {display.description}
+                        </p>
+                      ) : null}
                       {notification.metadata?.requestTypeLabel && (
                         <Badge variant="outline" className="mt-1 text-xs">
                           {notification.metadata.requestTypeLabel}
@@ -346,7 +359,8 @@ export default function NotificationDropdown() {
                     )}
                   </div>
                 </div>
-              ))
+                );
+              })
             )}
           </div>
 

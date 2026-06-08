@@ -18,6 +18,34 @@ const schema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    supportRequestsEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    supportNotificationEmail: {
+      type: String,
+      default: null,
+    },
+    supportSendAlertEmail: {
+      type: Boolean,
+      default: true,
+    },
+    supportSendDetailEmail: {
+      type: Boolean,
+      default: true,
+    },
+    supportSendCustomerConfirmation: {
+      type: Boolean,
+      default: true,
+    },
+    supportNotifySuperAdmins: {
+      type: Boolean,
+      default: true,
+    },
+    supportNotifyAdmins: {
+      type: Boolean,
+      default: true,
+    },
     supportAlertEmails: {
       type: [String],
       default: [],

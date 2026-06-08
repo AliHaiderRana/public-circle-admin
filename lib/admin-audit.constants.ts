@@ -13,6 +13,8 @@ export const ADMIN_AUDIT_CATEGORY = {
   SYSTEM_CONFIG: 'system_config',
   IMPERSONATION: 'impersonation',
   SUPPORT_REQUEST: 'support_request',
+  SUPPORT_SETTINGS: 'support_settings',
+  SYSTEM_NOTIFICATIONS: 'system_notifications',
 } as const;
 
 export type AdminAuditCategory =
@@ -48,6 +50,8 @@ export const ADMIN_AUDIT_ACTION = {
   SYSTEM_CONFIG_UPDATE: 'system_config.update',
   IMPERSONATE_START: 'impersonation.start',
   SUPPORT_REQUEST_UPDATE: 'support_request.update',
+  SUPPORT_SETTINGS_UPDATE: 'support_settings.update',
+  SYSTEM_NOTIFICATIONS_UPDATE: 'system_notifications.update',
   SAMPLE_TEMPLATE_TEST_EMAIL: 'sample_template.test_email',
   EDITOR_ASSET_UPLOAD: 'editor_asset.upload',
   EDITOR_ASSET_ACTIVATE: 'editor_asset.activate',
@@ -77,4 +81,6 @@ export const ADMIN_AUDIT_CATEGORY_LABELS: Record<string, string> = {
   [ADMIN_AUDIT_CATEGORY.SYSTEM_CONFIG]: 'System config',
   [ADMIN_AUDIT_CATEGORY.IMPERSONATION]: 'Impersonation',
   [ADMIN_AUDIT_CATEGORY.SUPPORT_REQUEST]: 'Support request',
+  [ADMIN_AUDIT_CATEGORY.SUPPORT_SETTINGS]: 'Support request settings',
+  [ADMIN_AUDIT_CATEGORY.SYSTEM_NOTIFICATIONS]: 'System notifications',
 };

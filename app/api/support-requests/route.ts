@@ -4,6 +4,11 @@ import SupportRequest from '@/lib/models/SupportRequest';
 import Company from '@/lib/models/Company';
 import User from '@/lib/models/User';
 import { getServerSession } from '@/lib/auth';
+import { SUPPORT_REQUEST_STATUS } from '@/lib/constants';
+import {
+  formatSupportReferenceId,
+  parseTicketIdSearchSuffix,
+} from '@/lib/support-admin.util';
 
 export async function GET(request: Request) {
   const session = await getServerSession();
@@ -19,15 +24,32 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
+    const activeOnly = searchParams.get('activeOnly') === 'true';
+    const unassignedOnly = searchParams.get('unassignedOnly') === 'true';
     const category = searchParams.get('category') || '';
 
     const query: Record<string, unknown> = {};
 
-    if (status) {
+    if (activeOnly) {
+      query.status = {
+        $in: [
+          SUPPORT_REQUEST_STATUS.OPEN,
+          SUPPORT_REQUEST_STATUS.IN_PROGRESS,
+          SUPPORT_REQUEST_STATUS.PENDING_RESOLUTION,
+        ],
+      };
+    } else if (status) {
       query.status = status;
     }
     if (category) {
       query.category = category;
+    }
+
+    if (unassignedOnly) {
+      query.$and = [
+        ...(Array.isArray(query.$and) ? query.$and : []),
+        { $or: [{ assignedAdminId: null }, { assignedAdminId: { $exists: false } }] },
+      ];
     }
 
     if (search) {
@@ -36,10 +58,28 @@ export async function GET(request: Request) {
       }).select('_id');
       const companyIds = matchingCompanies.map((c) => c._id);
 
-      query.$or = [
+      const searchOr: Record<string, unknown>[] = [
         { companyId: { $in: companyIds } },
         { subject: { $regex: search, $options: 'i' } },
         { message: { $regex: search, $options: 'i' } },
+      ];
+
+      const ticketSuffix = parseTicketIdSearchSuffix(search);
+      if (ticketSuffix) {
+        searchOr.push({
+          $expr: {
+            $regexMatch: {
+              input: { $toString: '$_id' },
+              regex: `${ticketSuffix}$`,
+              options: 'i',
+            },
+          },
+        });
+      }
+
+      query.$and = [
+        ...(Array.isArray(query.$and) ? query.$and : []),
+        { $or: searchOr },
       ];
     }
 
@@ -47,7 +87,7 @@ export async function GET(request: Request) {
 
     const [requests, totalCount] = await Promise.all([
       SupportRequest.find(query)
-        .populate({ path: 'companyId', model: Company, select: 'name' })
+        .populate({ path: 'companyId', model: Company, select: '_id name' })
         .populate({
           path: 'userId',
           model: User,
@@ -60,8 +100,13 @@ export async function GET(request: Request) {
       SupportRequest.countDocuments(query),
     ]);
 
+    const requestsWithReference = requests.map((request) => ({
+      ...request,
+      referenceId: formatSupportReferenceId(String(request._id)),
+    }));
+
     return NextResponse.json({
-      requests,
+      requests: requestsWithReference,
       pagination: {
         page,
         limit,
