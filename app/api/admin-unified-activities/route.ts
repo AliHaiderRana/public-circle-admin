@@ -5,7 +5,9 @@ import AdminImpersonationActivity from '@/lib/models/AdminImpersonationActivity'
 import { requireSuperAdminSession } from '@/lib/auth';
 import { parseAuditSortOrder } from '@/lib/audit-query';
 import {
+  fetchGroupedAdminTimeline,
   fetchImpersonatedCustomersForAdmin,
+  fetchSessionActivities,
   fetchUnifiedAdminActivities,
 } from '@/lib/unified-admin-activity.server';
 
@@ -18,6 +20,8 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const customersOnly = searchParams.get('customers') === '1';
+    const grouped = searchParams.get('grouped') === '1';
+    const sessionId = (searchParams.get('sessionId') || '').trim();
     const adminEmail = (searchParams.get('adminEmail') || '').trim();
     const dateFrom = (searchParams.get('dateFrom') || '').trim();
     const dateTo = (searchParams.get('dateTo') || '').trim();
@@ -28,6 +32,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'adminEmail is required' }, { status: 400 });
       }
       const customers = await fetchImpersonatedCustomersForAdmin({
+        AdminActivity,
         AdminImpersonationActivity,
         adminEmail,
         dateFrom,
@@ -45,6 +50,48 @@ export async function GET(request: Request) {
     const companyId = (searchParams.get('companyId') || '').trim();
     const category = (searchParams.get('category') || 'all').trim();
     const sort = parseAuditSortOrder(searchParams.get('sort'));
+
+    if (sessionId) {
+      if (!adminEmail) {
+        return NextResponse.json({ error: 'adminEmail is required' }, { status: 400 });
+      }
+      const pcCategory = category.startsWith('pc:') ? category.slice('pc:'.length) : undefined;
+      const activities = await fetchSessionActivities({
+        AdminImpersonationActivity,
+        sessionId,
+        adminEmail,
+        userEmail,
+        dateFrom,
+        dateTo,
+        pcCategory,
+        hideNoise,
+        sort,
+      });
+      return NextResponse.json({ activities });
+    }
+
+    if (grouped) {
+      if (!adminEmail) {
+        return NextResponse.json({ error: 'adminEmail is required' }, { status: 400 });
+      }
+      const result = await fetchGroupedAdminTimeline({
+        AdminActivity,
+        AdminImpersonationActivity,
+        page,
+        limit,
+        sort,
+        source,
+        adminEmail,
+        userEmail,
+        userId,
+        companyId,
+        dateFrom,
+        dateTo,
+        category,
+        hideNoise,
+      });
+      return NextResponse.json(result);
+    }
 
     const result = await fetchUnifiedAdminActivities({
       AdminActivity,

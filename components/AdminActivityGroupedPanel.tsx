@@ -1,12 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import {
   Select,
   SelectContent,
@@ -21,22 +28,80 @@ import AuditLogFilters from '@/components/AuditLogFilters';
 import type { AuditSortOrder } from '@/lib/audit-query';
 import {
   buildUnifiedCategoryOptions,
+  UNIFIED_SOURCE_LABELS,
+  UNIFIED_SOURCE_OPTIONS,
+  type GroupedTimelineEntry,
   type UnifiedActivityRow,
 } from '@/lib/unified-admin-activity';
-import { LayoutDashboard, Shield, ShieldAlert } from 'lucide-react';
+import {
+  Building2,
+  ChevronDown,
+  ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  LayoutDashboard,
+  LogIn,
+  ScrollText,
+  ShieldAlert,
+  X,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-type CustomerSummary = {
-  email: string;
-  activityCount: number;
-  lastActivityAt: string;
-};
+function getCustomerDisplayLabel(opts: {
+  name?: string;
+  companyName?: string;
+}): string {
+  if (opts.name?.trim()) return opts.name.trim();
+  if (opts.companyName?.trim()) return opts.companyName.trim();
+  return '—';
+}
 
-type TrackPagination = {
-  page: number;
-  totalPages: number;
-  total: number;
-};
+function sanitizeSummaryForDisplay(summary: string): string {
+  return summary
+    .replace(/\s*\([^)]*@[^)]+\)/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function formatWhen(iso: string): { primary: string; full: string } {
+  const date = new Date(iso);
+  const full = date.toLocaleString();
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfYesterday = new Date(startOfToday);
+  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+  const time = date.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+  if (startOfDate.getTime() === startOfToday.getTime()) {
+    return { primary: `Today ${time}`, full };
+  }
+  if (startOfDate.getTime() === startOfYesterday.getTime()) {
+    return { primary: `Yesterday ${time}`, full };
+  }
+
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays < 7) {
+    return {
+      primary: date.toLocaleDateString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }),
+      full,
+    };
+  }
+
+  return {
+    primary: date.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+    }),
+    full: `${full}`,
+  };
+}
 
 function formatDetailLines(row: UnifiedActivityRow): string[] {
   const details = row.details;
@@ -47,7 +112,6 @@ function formatDetailLines(row: UnifiedActivityRow): string[] {
   };
 
   if (row.source === 'public_circle') {
-    push('Customer', row.impersonatedUserEmail);
     push('Session', row.sessionId);
     push('Method', row.method);
     push('Path', row.path);
@@ -62,243 +126,123 @@ function formatDetailLines(row: UnifiedActivityRow): string[] {
   push('Previous status', details.previousStatus);
   push('New status', details.status);
   push('Subject', details.subject);
-  push('Category', details.categoryLabel || details.category);
-  push('Request type', details.type);
   push('Company', details.companyName);
-  push('Impersonated user', details.impersonatedUserEmail);
-  push('Plan', details.planName);
-  push('Cron', details.cronName);
-  push('Translation key', details.key);
-  push('Language', details.code || details.locale);
-  push('Template', details.name);
-  if (details.fieldsChanged && Array.isArray(details.fieldsChanged)) {
-    push('Fields changed', details.fieldsChanged.join(', '));
+  if (typeof details.impersonatedUserName === 'string') {
+    push('Customer', details.impersonatedUserName);
   }
-  if (typeof details.usersBlocked === 'number') push('Users blocked', details.usersBlocked);
-  if (typeof details.usersUnblocked === 'number') push('Users unblocked', details.usersUnblocked);
-  if (typeof details.campaignsPaused === 'number') push('Campaigns paused', details.campaignsPaused);
+  push('Plan', details.planName);
   return lines;
 }
 
-function ActivityRow({ row, showAdmin }: { row: UnifiedActivityRow; showAdmin?: boolean }) {
-  const detailLines = formatDetailLines(row);
+function WhenCell({ iso, nested }: { iso: string; nested?: boolean }) {
+  const when = formatWhen(iso);
   return (
-    <div className="rounded-lg border bg-card space-y-2 p-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="font-medium text-sm leading-snug pr-2">{row.summary}</p>
-        <time
-          dateTime={row.createdAt}
-          className="text-xs text-muted-foreground whitespace-nowrap shrink-0"
-        >
-          {new Date(row.createdAt).toLocaleString()}
-        </time>
-      </div>
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <Badge variant="outline" className="text-[10px]">
-          {row.categoryLabel}
-        </Badge>
-        {row.actorWasSuperAdmin && showAdmin && (
-          <Badge className="gap-1 text-[10px]">
-            <Shield className="h-3 w-3" />
-            Super admin
-          </Badge>
-        )}
-        {row.source === 'public_circle' && row.impersonatedUserEmail && (
-          <span className="text-muted-foreground truncate max-w-[180px]">
-            as {row.impersonatedUserEmail}
-          </span>
-        )}
-      </div>
-      {detailLines.length > 0 && (
-        <details className="text-xs">
-          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-            More detail
-          </summary>
-          <ul className="mt-2 space-y-1 text-muted-foreground list-disc pl-4">
-            {detailLines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        </details>
+    <div className={cn('flex items-start gap-2', nested && 'pl-4')}>
+      {nested && (
+        <span className="mt-1.5 h-full w-px min-h-[28px] bg-border shrink-0" aria-hidden />
       )}
+      <time dateTime={iso} title={when.full} className="text-xs text-muted-foreground leading-5">
+        {when.primary}
+      </time>
     </div>
   );
 }
 
-function CategorySelect({
-  id,
-  value,
-  onChange,
-  options,
-  groupedOptions,
-}: {
-  id: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: ReturnType<typeof buildUnifiedCategoryOptions>;
-  groupedOptions: (
-    opts: ReturnType<typeof buildUnifiedCategoryOptions>
-  ) => Map<string, { value: string; label: string }[]>;
-}) {
+function ActivityDetailCell({ row }: { row: UnifiedActivityRow }) {
+  const detailLines = formatDetailLines(row);
+  if (detailLines.length === 0) return null;
   return (
-    <div className="space-y-1.5 w-full sm:w-[200px]">
-      <Label htmlFor={id} className="text-xs">
-        Category
-      </Label>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger id={id} className="h-8 text-xs">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {Array.from(groupedOptions(options).entries()).map(([group, opts]) => (
-            <SelectGroup key={group}>
-              <SelectLabel>{group}</SelectLabel>
-              {opts.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <details className="text-xs mt-1.5 group/details">
+      <summary className="cursor-pointer text-muted-foreground hover:text-foreground list-none inline-flex items-center gap-1">
+        <ChevronRight className="h-3 w-3 transition-transform group-open/details:rotate-90" />
+        More detail
+      </summary>
+      <ul className="mt-1.5 space-y-0.5 text-muted-foreground rounded-md bg-muted/40 px-3 py-2">
+        {detailLines.map((line) => (
+          <li key={line} className="leading-relaxed">
+            {line}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
-function TrackSection({
-  title,
-  description,
-  icon,
-  rows,
-  loading,
-  emptyMessage,
-  pagination,
-  limit,
-  onPageChange,
-  onLimitChange,
-  headerExtra,
-  beforeList,
-  className,
-  compactPagination = true,
+function SessionRecordsBadge({
+  count,
+  expanded,
+  loadedCount,
 }: {
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-  rows: UnifiedActivityRow[];
-  loading: boolean;
-  emptyMessage: string;
-  pagination: TrackPagination;
-  limit: number;
-  onPageChange: (page: number) => void;
-  onLimitChange: (limit: number) => void;
-  headerExtra?: React.ReactNode;
-  beforeList?: React.ReactNode;
-  className?: string;
-  compactPagination?: boolean;
+  count: number;
+  expanded?: boolean;
+  loadedCount?: number;
 }) {
-  return (
-    <Card className={cn('flex flex-col h-full', className)}>
-      <CardHeader className="pb-3 space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-start gap-2 min-w-0">
-            {icon}
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <CardTitle className="text-base">{title}</CardTitle>
-                {!loading && (
-                  <Badge variant="secondary" className="text-[10px] font-normal">
-                    {pagination.total}
-                  </Badge>
-                )}
-              </div>
-              <CardDescription className="text-xs mt-0.5">{description}</CardDescription>
-            </div>
-          </div>
-          {headerExtra}
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-col flex-1 gap-3 pt-0">
-        {beforeList}
-        <div className="flex-1 min-h-0 space-y-2 max-h-[min(70vh,720px)] overflow-y-auto pr-1">
-          {loading ? (
-            <div className="space-y-2">
-              {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-14 w-full" />
-              ))}
-            </div>
-          ) : rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">{emptyMessage}</p>
-          ) : (
-            rows.map((row) => <ActivityRow key={row.id} row={row} />)
-          )}
-        </div>
-        <AdminActivityPagination
-          page={pagination.page}
-          totalPages={pagination.totalPages}
-          total={pagination.total}
-          limit={limit}
-          loading={loading}
-          compact={compactPagination}
-          onPageChange={onPageChange}
-          onLimitChange={onLimitChange}
-        />
-      </CardContent>
-    </Card>
-  );
-}
+  const displayCount =
+    expanded && loadedCount !== undefined ? loadedCount : count;
 
-function CustomerChips({
-  customers,
-  loading,
-  selectedCustomer,
-  onSelect,
-}: {
-  customers: CustomerSummary[];
-  loading: boolean;
-  selectedCustomer: string;
-  onSelect: (email: string) => void;
-}) {
-  if (loading) {
-    return <Skeleton className="h-8 w-full max-w-lg" />;
-  }
-  if (customers.length === 0) {
+  if (displayCount <= 0) {
     return (
-      <p className="text-xs text-muted-foreground">
-        No Public Circle sessions recorded for this admin yet.
-      </p>
+      <Badge
+        variant="outline"
+        className="text-[10px] font-normal text-muted-foreground border-dashed"
+      >
+        No actions
+      </Badge>
     );
   }
 
   return (
-    <div className="flex flex-wrap gap-1.5">
-      <Button
-        type="button"
-        size="sm"
-        variant={selectedCustomer === '' ? 'default' : 'outline'}
-        className="h-7 text-xs"
-        onClick={() => onSelect('')}
-      >
-        All customers
-      </Button>
-      {customers.map((customer) => (
-        <Button
-          key={customer.email}
-          type="button"
-          size="sm"
-          variant={selectedCustomer === customer.email ? 'default' : 'outline'}
-          className="h-7 text-xs font-normal max-w-[220px]"
-          onClick={() =>
-            onSelect(selectedCustomer === customer.email ? '' : customer.email)
-          }
-        >
-          <span className="truncate">{customer.email}</span>
-          <Badge variant="secondary" className="ml-1.5 px-1 py-0 text-[10px] shrink-0">
-            {customer.activityCount}
-          </Badge>
-        </Button>
-      ))}
-    </div>
+    <Badge className="text-[10px] font-normal gap-1 bg-sky-600 text-white hover:bg-sky-600 tabular-nums">
+      {displayCount} record{displayCount === 1 ? '' : 's'}
+    </Badge>
+  );
+}
+
+function SourceBadge({ source }: { source: UnifiedActivityRow['source'] }) {
+  const isPanel = source === 'admin_panel';
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        'text-[10px] font-normal gap-1',
+        isPanel
+          ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100'
+          : 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100'
+      )}
+    >
+      {isPanel ? <LayoutDashboard className="h-3 w-3" /> : <ShieldAlert className="h-3 w-3" />}
+      {UNIFIED_SOURCE_LABELS[source]}
+    </Badge>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  loading,
+  icon,
+  accent,
+}: {
+  label: string;
+  value: number;
+  loading: boolean;
+  icon: React.ReactNode;
+  accent: string;
+}) {
+  return (
+    <Card className={cn('border-l-4', accent)}>
+      <CardContent className="pt-4 pb-4">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-xs text-muted-foreground">{label}</p>
+            <p className="text-2xl font-semibold tabular-nums mt-0.5">
+              {loading ? '—' : value.toLocaleString()}
+            </p>
+          </div>
+          <div className="rounded-full bg-muted p-2 text-muted-foreground">{icon}</div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -309,253 +253,274 @@ type AdminActivityGroupedPanelProps = {
 
 export default function AdminActivityGroupedPanel({
   adminEmail,
-  adminName,
 }: AdminActivityGroupedPanelProps) {
-  const displayName = adminName?.trim() || adminEmail;
+  const [timeline, setTimeline] = useState<GroupedTimelineEntry[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [panelRows, setPanelRows] = useState<UnifiedActivityRow[]>([]);
-  const [pcRows, setPcRows] = useState<UnifiedActivityRow[]>([]);
-  const [customers, setCustomers] = useState<CustomerSummary[]>([]);
-  const [loadingPanel, setLoadingPanel] = useState(true);
-  const [loadingPc, setLoadingPc] = useState(true);
-  const [loadingCustomers, setLoadingCustomers] = useState(true);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [panelTotal, setPanelTotal] = useState(0);
+  const [sessionTotal, setSessionTotal] = useState(0);
+  const [pcActionTotal, setPcActionTotal] = useState(0);
 
-  const [panelPage, setPanelPage] = useState(1);
-  const [pcPage, setPcPage] = useState(1);
-  const [limit, setLimit] = useState(15);
-  const [panelPagination, setPanelPagination] = useState<TrackPagination>({
-    page: 1,
-    totalPages: 1,
-    total: 0,
-  });
-  const [pcPagination, setPcPagination] = useState<TrackPagination>({
-    page: 1,
-    totalPages: 1,
-    total: 0,
-  });
-
-  const [panelCategory, setPanelCategory] = useState('all');
-  const [pcCategory, setPcCategory] = useState('all');
-  const [selectedCustomer, setSelectedCustomer] = useState('');
+  const [source, setSource] = useState('all');
+  const [category, setCategory] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [sort, setSort] = useState<AuditSortOrder>('desc');
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const panelCategoryOptions = useMemo(
-    () => buildUnifiedCategoryOptions('admin_panel'),
-    []
-  );
-  const pcCategoryOptions = useMemo(
-    () => buildUnifiedCategoryOptions('public_circle'),
-    []
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
+  const [sessionActions, setSessionActions] = useState<Record<string, UnifiedActivityRow[]>>({});
+  const [loadingSessions, setLoadingSessions] = useState<Set<string>>(new Set());
+
+  const categoryOptions = useMemo(() => buildUnifiedCategoryOptions(source), [source]);
+
+  const sourceLabel = useMemo(
+    () => UNIFIED_SOURCE_OPTIONS.find((opt) => opt.value === source)?.label,
+    [source]
   );
 
-  const groupedOptions = (options: ReturnType<typeof buildUnifiedCategoryOptions>) => {
+  const groupedCategoryOptions = useMemo(() => {
     const groups = new Map<string, { value: string; label: string }[]>();
-    for (const opt of options) {
+    for (const opt of categoryOptions) {
       if (!groups.has(opt.group)) groups.set(opt.group, []);
       groups.get(opt.group)!.push({ value: opt.value, label: opt.label });
     }
     return groups;
-  };
+  }, [categoryOptions]);
+
+  const categoryLabel = useMemo(
+    () => categoryOptions.find((opt) => opt.value === category)?.label,
+    [categoryOptions, category]
+  );
+
+  const sessionIdsOnPage = useMemo(
+    () =>
+      timeline
+        .filter((entry): entry is Extract<GroupedTimelineEntry, { kind: 'session' }> => entry.kind === 'session')
+        .map((entry) => entry.sessionId),
+    [timeline]
+  );
+
+  const hasActiveFilters =
+    Boolean(dateFrom) ||
+    Boolean(dateTo) ||
+    source !== 'all' ||
+    category !== 'all' ||
+    sort !== 'desc';
 
   const buildBaseParams = useCallback(() => {
     const params = new URLSearchParams({
       adminEmail,
       sort,
       hideNoise: 'true',
+      grouped: '1',
+      source,
     });
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
+    if (category !== 'all') params.set('category', category);
     return params;
-  }, [adminEmail, sort, dateFrom, dateTo]);
+  }, [adminEmail, sort, source, dateFrom, dateTo, category]);
 
-  const fetchPanel = useCallback(async () => {
-    setLoadingPanel(true);
+  const fetchTimeline = useCallback(async () => {
+    setLoading(true);
     try {
       const params = buildBaseParams();
-      params.set('source', 'admin_panel');
-      params.set('page', String(panelPage));
+      params.set('page', String(page));
       params.set('limit', String(limit));
-      if (panelCategory !== 'all') params.set('category', panelCategory);
 
       const res = await fetch(`/api/admin-unified-activities?${params}&_=${refreshKey}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error);
 
-      setPanelRows(json.activities ?? []);
-      setPanelPagination({
-        page: json.pagination?.page ?? panelPage,
-        totalPages: json.pagination?.totalPages ?? 1,
-        total: json.pagination?.panelTotal ?? json.pagination?.total ?? 0,
+      setTimeline(json.timeline ?? []);
+      setTotalPages(json.pagination?.totalPages ?? 1);
+      setTotal(json.pagination?.total ?? 0);
+      setPanelTotal(json.pagination?.panelTotal ?? 0);
+      setSessionTotal(json.pagination?.sessionTotal ?? 0);
+      setPcActionTotal(json.pagination?.publicCircleTotal ?? 0);
+    } catch {
+      setTimeline([]);
+      setTotal(0);
+      setTotalPages(1);
+      setPanelTotal(0);
+      setSessionTotal(0);
+      setPcActionTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [buildBaseParams, page, limit, refreshKey]);
+
+  useEffect(() => {
+    setPage(1);
+    setExpandedSessions(new Set());
+    setSessionActions({});
+  }, [adminEmail, dateFrom, dateTo, sort, source, category, limit]);
+
+  useEffect(() => {
+    if (category === 'all') return;
+    const stillValid = categoryOptions.some((opt) => opt.value === category);
+    if (!stillValid) setCategory('all');
+  }, [category, categoryOptions]);
+
+  useEffect(() => {
+    void fetchTimeline();
+  }, [fetchTimeline]);
+
+  const loadSessionActions = useCallback(
+    async (sessionId: string) => {
+      setLoadingSessions((prev) => {
+        if (prev.has(sessionId)) return prev;
+        return new Set(prev).add(sessionId);
       });
-    } catch {
-      setPanelRows([]);
-      setPanelPagination({ page: 1, totalPages: 1, total: 0 });
-    } finally {
-      setLoadingPanel(false);
-    }
-  }, [buildBaseParams, panelPage, limit, panelCategory, refreshKey]);
 
-  const fetchPc = useCallback(async () => {
-    setLoadingPc(true);
-    try {
-      const params = buildBaseParams();
-      params.set('source', 'public_circle');
-      params.set('page', String(pcPage));
-      params.set('limit', String(limit));
-      if (pcCategory !== 'all') params.set('category', pcCategory);
-      if (selectedCustomer) params.set('userEmail', selectedCustomer);
-
-      const res = await fetch(`/api/admin-unified-activities?${params}&_=${refreshKey}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error);
-
-      setPcRows(json.activities ?? []);
-      setPcPagination({
-        page: json.pagination?.page ?? pcPage,
-        totalPages: json.pagination?.totalPages ?? 1,
-        total: json.pagination?.publicCircleTotal ?? json.pagination?.total ?? 0,
-      });
-    } catch {
-      setPcRows([]);
-      setPcPagination({ page: 1, totalPages: 1, total: 0 });
-    } finally {
-      setLoadingPc(false);
-    }
-  }, [buildBaseParams, pcPage, limit, pcCategory, selectedCustomer, refreshKey]);
-
-  const fetchCustomers = useCallback(async () => {
-    setLoadingCustomers(true);
-    try {
-      const params = buildBaseParams();
-      params.set('customers', '1');
-      const res = await fetch(`/api/admin-unified-activities?${params}&_=${refreshKey}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error);
-      setCustomers(json.customers ?? []);
-    } catch {
-      setCustomers([]);
-    } finally {
-      setLoadingCustomers(false);
-    }
-  }, [buildBaseParams, refreshKey]);
-
-  useEffect(() => {
-    setPanelPage(1);
-    setPcPage(1);
-  }, [adminEmail, dateFrom, dateTo, sort, panelCategory, pcCategory, selectedCustomer, limit]);
-
-  useEffect(() => {
-    void fetchPanel();
-  }, [fetchPanel]);
-
-  useEffect(() => {
-    void fetchPc();
-  }, [fetchPc]);
-
-  useEffect(() => {
-    void fetchCustomers();
-  }, [fetchCustomers]);
-
-  const handleRefresh = () => setRefreshKey((k) => k + 1);
-
-  const totalCount = panelPagination.total + pcPagination.total;
-  const countsLoading = loadingPanel || loadingPc;
-
-  const panelTrack = (
-    <TrackSection
-      title="Admin panel"
-      description="Support, companies, templates, config, impersonation starts."
-      icon={<LayoutDashboard className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />}
-      rows={panelRows}
-      loading={loadingPanel}
-      emptyMessage="No admin panel activity recorded."
-      pagination={panelPagination}
-      limit={limit}
-      onPageChange={setPanelPage}
-      onLimitChange={setLimit}
-      headerExtra={
-        <CategorySelect
-          id="panel-category-filter"
-          value={panelCategory}
-          onChange={setPanelCategory}
-          options={panelCategoryOptions}
-          groupedOptions={groupedOptions}
-        />
+      try {
+        const params = buildBaseParams();
+        params.delete('grouped');
+        params.set('sessionId', sessionId);
+        const res = await fetch(`/api/admin-unified-activities?${params}`);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error);
+        setSessionActions((prev) => {
+          if (prev[sessionId]) return prev;
+          return { ...prev, [sessionId]: json.activities ?? [] };
+        });
+      } catch {
+        setSessionActions((prev) => ({ ...prev, [sessionId]: [] }));
+      } finally {
+        setLoadingSessions((prev) => {
+          const next = new Set(prev);
+          next.delete(sessionId);
+          return next;
+        });
       }
-    />
+    },
+    [buildBaseParams]
   );
 
-  const pcEmptyMessage = selectedCustomer
-    ? `No Public Circle activity for ${selectedCustomer}.`
-    : 'No Public Circle activity recorded.';
-
-  const pcTrack = (
-    <TrackSection
-      title="Public Circle"
-      description="Actions after Login as user — campaigns, contacts, billing."
-      icon={<ShieldAlert className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />}
-      rows={pcRows}
-      loading={loadingPc}
-      emptyMessage={pcEmptyMessage}
-      pagination={pcPagination}
-      limit={limit}
-      onPageChange={setPcPage}
-      onLimitChange={setLimit}
-      headerExtra={
-        <CategorySelect
-          id="pc-category-filter"
-          value={pcCategory}
-          onChange={setPcCategory}
-          options={pcCategoryOptions}
-          groupedOptions={groupedOptions}
-        />
+  const toggleSession = useCallback(
+    (sessionId: string) => {
+      let shouldLoad = false;
+      setExpandedSessions((prev) => {
+        const next = new Set(prev);
+        if (next.has(sessionId)) {
+          next.delete(sessionId);
+        } else {
+          next.add(sessionId);
+          shouldLoad = true;
+        }
+        return next;
+      });
+      if (shouldLoad && !sessionActions[sessionId]) {
+        void loadSessionActions(sessionId);
       }
-    />
+    },
+    [loadSessionActions, sessionActions]
   );
+
+  const expandAllSessions = useCallback(() => {
+    setExpandedSessions(new Set(sessionIdsOnPage));
+    for (const sessionId of sessionIdsOnPage) {
+      if (!sessionActions[sessionId]) {
+        void loadSessionActions(sessionId);
+      }
+    }
+  }, [sessionIdsOnPage, sessionActions, loadSessionActions]);
+
+  const collapseAllSessions = useCallback(() => {
+    setExpandedSessions(new Set());
+  }, []);
+
+  const clearFilters = () => {
+    setDateFrom('');
+    setDateTo('');
+    setSource('all');
+    setCategory('all');
+    setSort('desc');
+  };
+
+  const handleRefresh = () => {
+    setExpandedSessions(new Set());
+    setSessionActions({});
+    setRefreshKey((k) => k + 1);
+  };
+
+  const renderActivityRow = (row: UnifiedActivityRow, nested = false) => (
+    <TableRow
+      key={row.id}
+      className={cn(
+        'group transition-colors',
+        nested && 'bg-muted/20 hover:bg-muted/35 border-l-2 border-l-sky-300/70 dark:border-l-sky-700/70'
+      )}
+    >
+      <TableCell className="align-top py-3">
+        <WhenCell iso={row.createdAt} nested={nested} />
+      </TableCell>
+      <TableCell className="align-top whitespace-normal min-w-[280px] py-3">
+        <p className="text-sm leading-snug text-foreground">
+          {sanitizeSummaryForDisplay(row.summary)}
+        </p>
+        <ActivityDetailCell row={row} />
+      </TableCell>
+      <TableCell className="align-top py-3">
+        <SourceBadge source={row.source} />
+      </TableCell>
+      <TableCell className="align-top whitespace-normal py-3">
+        <span className="text-xs text-foreground/80 truncate block max-w-[200px]">
+          {getCustomerDisplayLabel({
+            name:
+              typeof row.details?.impersonatedUserName === 'string'
+                ? row.details.impersonatedUserName
+                : undefined,
+            companyName:
+              typeof row.metadata?.companyName === 'string'
+                ? row.metadata.companyName
+                : typeof row.details?.companyName === 'string'
+                  ? row.details.companyName
+                  : undefined,
+          })}
+        </span>
+      </TableCell>
+      <TableCell className="align-top py-3">
+        <Badge variant="outline" className="text-[10px] font-normal">
+          {row.categoryLabel}
+        </Badge>
+      </TableCell>
+    </TableRow>
+  );
+
+  const allSessionsExpanded =
+    sessionIdsOnPage.length > 0 && sessionIdsOnPage.every((id) => expandedSessions.has(id));
 
   return (
     <div className="space-y-5">
-      <div>
-        <h3 className="text-xl font-semibold tracking-tight">Activity — {displayName}</h3>
-        <p className="text-sm text-muted-foreground mt-1">
-          Two parallel tracks: admin app changes and customer-app actions.
-        </p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <StatCard
+          label="Admin panel actions"
+          value={panelTotal}
+          loading={loading}
+          icon={<LayoutDashboard className="h-4 w-4" />}
+          accent="border-l-amber-500"
+        />
+        <StatCard
+          label="Login sessions"
+          value={sessionTotal}
+          loading={loading}
+          icon={<LogIn className="h-4 w-4" />}
+          accent="border-l-violet-500"
+        />
+        <StatCard
+          label="Public Circle actions"
+          value={pcActionTotal}
+          loading={loading}
+          icon={<ShieldAlert className="h-4 w-4" />}
+          accent="border-l-sky-500"
+        />
       </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:gap-4">
-        <Card className="border-l-4 border-l-amber-500">
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <LayoutDashboard className="h-3.5 w-3.5" />
-              Admin panel
-            </div>
-            <p className="text-2xl font-semibold mt-1 tabular-nums">
-              {countsLoading ? '—' : panelPagination.total}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-sky-500">
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <ShieldAlert className="h-3.5 w-3.5" />
-              Public Circle
-            </div>
-            <p className="text-2xl font-semibold mt-1 tabular-nums">
-              {countsLoading ? '—' : pcPagination.total}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {!countsLoading && totalCount > 0 && (
-        <p className="text-xs text-muted-foreground -mt-2">
-          {totalCount} total events
-          {selectedCustomer ? ` · Public Circle filtered to ${selectedCustomer}` : ''}
-        </p>
-      )}
 
       <AuditLogFilters
         showAdminEmail={false}
@@ -566,67 +531,329 @@ export default function AdminActivityGroupedPanel({
         sort={sort}
         onSortChange={setSort}
         onRefresh={handleRefresh}
-        refreshing={loadingPanel || loadingPc || loadingCustomers}
+        refreshing={loading}
         title="Filters"
-        description="Date range and sort apply to both tracks."
-      />
+        description="Narrow the timeline by source, date, and category."
+      >
+        <div className="space-y-2">
+          <Label htmlFor="timeline-source-filter">Source</Label>
+          <Select value={source} onValueChange={setSource}>
+            <SelectTrigger id="timeline-source-filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {UNIFIED_SOURCE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="timeline-category-filter">Category</Label>
+          <Select value={category} onValueChange={setCategory}>
+            <SelectTrigger id="timeline-category-filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Array.from(groupedCategoryOptions.entries()).map(([group, opts]) => (
+                <SelectGroup key={group}>
+                  <SelectLabel>{group}</SelectLabel>
+                  {opts.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </AuditLogFilters>
 
-      {(loadingCustomers || customers.length > 0) && (
-        <Card>
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="text-sm font-medium">Customers acted as</CardTitle>
-            <CardDescription className="text-xs">
-              Select a customer email to filter the Public Circle track.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 pt-0">
-            <CustomerChips
-              customers={customers}
-              loading={loadingCustomers}
-              selectedCustomer={selectedCustomer}
-              onSelect={setSelectedCustomer}
-            />
-          </CardContent>
-        </Card>
+      {hasActiveFilters && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">Active filters:</span>
+          {dateFrom && (
+            <Badge variant="secondary" className="gap-1 font-normal">
+              From {dateFrom}
+              <button type="button" onClick={() => setDateFrom('')} aria-label="Clear from date">
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          {dateTo && (
+            <Badge variant="secondary" className="gap-1 font-normal">
+              To {dateTo}
+              <button type="button" onClick={() => setDateTo('')} aria-label="Clear to date">
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          {source !== 'all' && sourceLabel && (
+            <Badge variant="secondary" className="gap-1 font-normal">
+              Source: {sourceLabel}
+              <button type="button" onClick={() => setSource('all')} aria-label="Clear source">
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          {category !== 'all' && categoryLabel && (
+            <Badge variant="secondary" className="gap-1 font-normal">
+              {categoryLabel}
+              <button type="button" onClick={() => setCategory('all')} aria-label="Clear category">
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          {sort !== 'desc' && (
+            <Badge variant="secondary" className="gap-1 font-normal">
+              Oldest first
+              <button type="button" onClick={() => setSort('desc')} aria-label="Reset sort">
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={clearFilters}>
+            Clear all
+          </Button>
+        </div>
       )}
 
-      {/* Side-by-side on xl+ */}
-      <div className="hidden xl:grid xl:grid-cols-2 xl:gap-5 xl:items-stretch">
-        {panelTrack}
-        {pcTrack}
-      </div>
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b bg-muted/20 py-3 px-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Activity timeline</CardTitle>
+              <CardDescription className="text-xs">
+                {loading
+                  ? 'Loading activity…'
+                  : `${total.toLocaleString()} entries on this timeline`}
+              </CardDescription>
+            </div>
+            {source !== 'admin_panel' && sessionIdsOnPage.length > 0 && !loading && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                onClick={allSessionsExpanded ? collapseAllSessions : expandAllSessions}
+              >
+                {allSessionsExpanded ? (
+                  <>
+                    <ChevronsDownUp className="h-3.5 w-3.5" />
+                    Collapse sessions
+                  </>
+                ) : (
+                  <>
+                    <ChevronsUpDown className="h-3.5 w-3.5" />
+                    Expand all sessions
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="max-h-[min(72vh,800px)] overflow-auto">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-[150px]">When</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead className="w-[130px]">Source</TableHead>
+                  <TableHead className="w-[200px]">Customer</TableHead>
+                  <TableHead className="w-[140px]">Category</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  Array.from({ length: 8 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell colSpan={5} className="py-3">
+                        <Skeleton className="h-12 w-full" />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : timeline.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-16">
+                      <div className="flex flex-col items-center justify-center text-center gap-2">
+                        <ScrollText className="h-10 w-10 text-muted-foreground/50" />
+                        <p className="text-sm font-medium">No activity found</p>
+                        <p className="text-xs text-muted-foreground max-w-sm">
+                          {hasActiveFilters
+                            ? 'Try clearing filters or widening the date range.'
+                            : 'This admin has not recorded any actions yet.'}
+                        </p>
+                        {hasActiveFilters && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-2 h-8"
+                            onClick={clearFilters}
+                          >
+                            Clear filters
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  timeline.map((entry) => {
+                    if (entry.kind === 'activity') {
+                      return renderActivityRow(entry.row);
+                    }
 
-      {/* Tabs on smaller screens */}
-      <div className="xl:hidden">
-        <Tabs defaultValue="panel" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 h-10">
-            <TabsTrigger value="panel" className="gap-2 text-xs sm:text-sm">
-              <LayoutDashboard className="h-3.5 w-3.5 shrink-0" />
-              Admin panel
-              {!loadingPanel && (
-                <Badge variant="secondary" className="text-[10px] px-1.5">
-                  {panelPagination.total}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="pc" className="gap-2 text-xs sm:text-sm">
-              <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
-              Public Circle
-              {!loadingPc && (
-                <Badge variant="secondary" className="text-[10px] px-1.5">
-                  {pcPagination.total}
-                </Badge>
-              )}
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="panel" className="mt-4">
-            {panelTrack}
-          </TabsContent>
-          <TabsContent value="pc" className="mt-4">
-            {pcTrack}
-          </TabsContent>
-        </Tabs>
-      </div>
+                    const expanded = expandedSessions.has(entry.sessionId);
+                    const actions = sessionActions[entry.sessionId];
+                    const isLoadingSession = loadingSessions.has(entry.sessionId);
+                    const loadedCount = actions?.length;
+                    const recordCount =
+                      expanded && loadedCount !== undefined ? loadedCount : entry.actionCount;
+                    const hasRecords = recordCount > 0;
+                    const customerLabel = getCustomerDisplayLabel({
+                      name: entry.customerName,
+                      companyName: entry.companyName,
+                    });
+
+                    return (
+                      <Fragment key={entry.id}>
+                        <TableRow
+                          className={cn(
+                            'border-l-4 cursor-pointer',
+                            hasRecords
+                              ? 'border-l-sky-500 bg-sky-50/50 hover:bg-sky-50/80 dark:bg-sky-950/20 dark:hover:bg-sky-950/35 dark:border-l-sky-500'
+                              : 'border-l-amber-400/80 bg-amber-50/60 hover:bg-amber-50 dark:bg-amber-950/25 dark:hover:bg-amber-950/40 dark:border-l-amber-600'
+                          )}
+                          onClick={() => toggleSession(entry.sessionId)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              toggleSession(entry.sessionId);
+                            }
+                          }}
+                          tabIndex={0}
+                          role="button"
+                          aria-expanded={expanded}
+                        >
+                          <TableCell className="align-top py-3">
+                            <WhenCell iso={entry.createdAt} />
+                          </TableCell>
+                          <TableCell className="align-top whitespace-normal min-w-[280px] py-3">
+                            <div className="flex items-start gap-2">
+                              <span className="mt-0.5 text-amber-700 dark:text-amber-300">
+                                {expanded ? (
+                                  <ChevronDown className="h-4 w-4" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4" />
+                                )}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <div className="flex items-center gap-1.5 text-sm font-medium leading-snug min-w-0">
+                                    <LogIn
+                                      className={cn(
+                                        'h-3.5 w-3.5 shrink-0',
+                                        hasRecords ? 'text-sky-600' : 'text-amber-600'
+                                      )}
+                                    />
+                                    <span>{sanitizeSummaryForDisplay(entry.loginSummary)}</span>
+                                  </div>
+                                  <SessionRecordsBadge
+                                    count={entry.actionCount}
+                                    expanded={expanded}
+                                    loadedCount={loadedCount}
+                                  />
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {hasRecords
+                                    ? expanded
+                                      ? `Click to hide ${recordCount} nested record${recordCount === 1 ? '' : 's'}`
+                                      : `Click to view ${recordCount} nested record${recordCount === 1 ? '' : 's'}`
+                                    : 'No Public Circle actions in this session'}
+                                  {entry.companyName && (
+                                    <>
+                                      {' '}
+                                      · <Building2 className="inline h-3 w-3 -mt-px" />{' '}
+                                      {entry.companyName}
+                                    </>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="align-top py-3">
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] font-normal border-amber-300 bg-amber-100/80 text-amber-900 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100"
+                            >
+                              Login session
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="align-top py-3">
+                            <span className="text-xs text-foreground/80 truncate block max-w-[200px]">
+                              {customerLabel || '—'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="align-top py-3">
+                            <div className="flex flex-col gap-1.5 items-start">
+                              <Badge variant="outline" className="text-[10px] font-normal">
+                                Impersonation
+                              </Badge>
+                              {hasRecords && !expanded && (
+                                <span className="text-[10px] text-sky-700 dark:text-sky-300 font-medium">
+                                  Expand to view →
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+
+                        {expanded && isLoadingSession && (
+                          <TableRow className="bg-muted/15">
+                            <TableCell colSpan={5} className="py-4 pl-12">
+                              <div className="space-y-2 max-w-xl">
+                                <Skeleton className="h-10 w-full" />
+                                <Skeleton className="h-10 w-full" />
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+
+                        {expanded && !isLoadingSession && actions && actions.length === 0 && (
+                          <TableRow className="bg-muted/15">
+                            <TableCell colSpan={5} className="py-3 pl-12 text-xs text-muted-foreground">
+                              No Public Circle actions recorded for this session.
+                            </TableCell>
+                          </TableRow>
+                        )}
+
+                        {expanded && actions?.map((row) => renderActivityRow(row, true))}
+                      </Fragment>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="border-t px-4 py-3 bg-muted/10">
+            <AdminActivityPagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              limit={limit}
+              loading={loading}
+              compact={false}
+              onPageChange={setPage}
+              onLimitChange={setLimit}
+            />
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -13,7 +13,10 @@ import {
   IMPERSONATION_ACTIVITY_CATEGORY_LABELS,
   isNoiseImpersonationRow,
 } from '@/lib/impersonation-activity-labels';
-import type { UnifiedActivityRow } from '@/lib/unified-admin-activity';
+import type {
+  GroupedTimelineEntry,
+  UnifiedActivityRow,
+} from '@/lib/unified-admin-activity';
 
 function parseCategoryFilter(
   raw: string,
@@ -299,11 +302,14 @@ export async function fetchUnifiedAdminActivities({
 
 export type ImpersonatedCustomerSummary = {
   email: string;
+  name?: string;
+  companyName?: string;
   activityCount: number;
   lastActivityAt: string;
 };
 
 export async function fetchImpersonatedCustomersForAdmin({
+  AdminActivity,
   AdminImpersonationActivity,
   adminEmail,
   dateFrom,
@@ -311,6 +317,7 @@ export async function fetchImpersonatedCustomersForAdmin({
   hideNoise,
   limit = 30,
 }: {
+  AdminActivity: mongoose.Model<unknown>;
   AdminImpersonationActivity: mongoose.Model<unknown>;
   adminEmail: string;
   dateFrom: string;
@@ -342,9 +349,340 @@ export async function fetchImpersonatedCustomersForAdmin({
     { $limit: limit },
   ]);
 
-  return rows.map((row) => ({
-    email: String(row._id),
-    activityCount: Number(row.activityCount ?? 0),
-    lastActivityAt: new Date(row.lastActivityAt as Date).toISOString(),
-  })) satisfies ImpersonatedCustomerSummary[];
+  const panelLoginMatch = {
+    ...buildPanelMatch({ adminEmail, dateFrom, dateTo, panelCategory: undefined }),
+    category: ADMIN_AUDIT_CATEGORY.IMPERSONATION,
+  };
+  const panelLogins = (await AdminActivity.find(panelLoginMatch).lean()) as Record<
+    string,
+    unknown
+  >[];
+
+  const profileByEmail = new Map<string, { name?: string; companyName?: string }>();
+  for (const login of panelLogins) {
+    const details =
+      login.details && typeof login.details === 'object' && !Array.isArray(login.details)
+        ? (login.details as Record<string, unknown>)
+        : null;
+    const email =
+      typeof details?.impersonatedUserEmail === 'string'
+        ? details.impersonatedUserEmail.trim().toLowerCase()
+        : '';
+    if (!email) continue;
+    profileByEmail.set(email, {
+      name:
+        typeof details?.impersonatedUserName === 'string'
+          ? details.impersonatedUserName.trim()
+          : undefined,
+      companyName:
+        typeof details?.companyName === 'string' ? details.companyName.trim() : undefined,
+    });
+  }
+
+  return rows.map((row) => {
+    const email = String(row._id);
+    const profile = profileByEmail.get(email.trim().toLowerCase());
+    return {
+      email,
+      name: profile?.name,
+      companyName: profile?.companyName,
+      activityCount: Number(row.activityCount ?? 0),
+      lastActivityAt: new Date(row.lastActivityAt as Date).toISOString(),
+    };
+  }) satisfies ImpersonatedCustomerSummary[];
+}
+
+function sortTimelineEntries(
+  entries: GroupedTimelineEntry[],
+  sort: AuditSortOrder
+): GroupedTimelineEntry[] {
+  return [...entries].sort((a, b) => {
+    const at = new Date(a.createdAt).getTime();
+    const bt = new Date(b.createdAt).getTime();
+    return sort === 'asc' ? at - bt : bt - at;
+  });
+}
+
+export async function fetchGroupedAdminTimeline({
+  AdminActivity,
+  AdminImpersonationActivity,
+  page,
+  limit,
+  sort,
+  source,
+  adminEmail,
+  userEmail,
+  userId,
+  companyId,
+  dateFrom,
+  dateTo,
+  category,
+  hideNoise,
+}: {
+  AdminActivity: mongoose.Model<unknown>;
+  AdminImpersonationActivity: mongoose.Model<unknown>;
+  page: number;
+  limit: number;
+  sort: AuditSortOrder;
+  source: string;
+  adminEmail: string;
+  userEmail: string;
+  userId: string;
+  companyId: string;
+  dateFrom: string;
+  dateTo: string;
+  category: string;
+  hideNoise: boolean;
+}) {
+  const effectiveSource = source === 'admin_panel' || source === 'public_circle' ? source : 'all';
+  const { panelCategory, pcCategory } = parseCategoryFilter(category, effectiveSource);
+  const skip = (page - 1) * limit;
+  const sortDir = sort === 'asc' ? 1 : -1;
+
+  const panelBaseMatch = buildPanelMatch({
+    adminEmail,
+    dateFrom,
+    dateTo,
+    panelCategory: undefined,
+  });
+  const pcMatch = buildPcMatch({
+    adminEmail,
+    userEmail,
+    userId,
+    companyId,
+    dateFrom,
+    dateTo,
+    pcCategory,
+    hideNoise,
+  });
+
+  const sourceIsAll = effectiveSource === 'all';
+  const sourceIsPanel = effectiveSource === 'admin_panel';
+  const sourceIsPc = effectiveSource === 'public_circle';
+
+  let includePanelActivities =
+    !sourceIsPc &&
+    !pcCategory &&
+    (!panelCategory || panelCategory !== ADMIN_AUDIT_CATEGORY.IMPERSONATION);
+  let includeSessions =
+    !sourceIsPanel &&
+    (!panelCategory ||
+      panelCategory === ADMIN_AUDIT_CATEGORY.IMPERSONATION ||
+      Boolean(pcCategory));
+
+  if (sourceIsPanel) {
+    includePanelActivities = true;
+    includeSessions = false;
+  } else if (sourceIsPc) {
+    includePanelActivities = false;
+    includeSessions = true;
+  }
+
+  const sessionAgg = includeSessions
+    ? await AdminImpersonationActivity.aggregate([
+        { $match: pcMatch },
+        {
+          $group: {
+            _id: '$sessionId',
+            customerEmail: { $first: '$impersonatedUserEmail' },
+            sessionStartAt: { $min: '$createdAt' },
+            actionCount: {
+              $sum: {
+                $cond: [{ $ne: ['$type', 'SESSION_START'] }, 1, 0],
+              },
+            },
+          },
+        },
+        { $match: { _id: { $nin: [null, ''] } } },
+      ])
+    : [];
+
+  const sessionAggById = new Map(
+    sessionAgg.map((row) => [
+      String(row._id),
+      {
+        customerEmail: String(row.customerEmail ?? ''),
+        sessionStartAt: row.sessionStartAt as Date,
+        actionCount: Number(row.actionCount ?? 0),
+      },
+    ])
+  );
+
+  const panelLoginMatch = {
+    ...panelBaseMatch,
+    category: ADMIN_AUDIT_CATEGORY.IMPERSONATION,
+  };
+  const panelLogins = includeSessions
+    ? ((await AdminActivity.find(panelLoginMatch).sort({ createdAt: sortDir }).lean()) as Record<
+        string,
+        unknown
+      >[])
+    : [];
+
+  const sessionsMap = new Map<string, GroupedTimelineEntry & { kind: 'session' }>();
+
+  for (const login of panelLogins) {
+    const details =
+      login.details && typeof login.details === 'object' && !Array.isArray(login.details)
+        ? (login.details as Record<string, unknown>)
+        : null;
+    const sessionId = details?.sessionId != null ? String(details.sessionId) : '';
+    if (!sessionId) continue;
+
+    const agg = sessionAggById.get(sessionId);
+    if (pcCategory && !agg) continue;
+
+    const mapped = mapPanelRow(login);
+    sessionsMap.set(sessionId, {
+      kind: 'session',
+      id: `session:${sessionId}`,
+      sessionId,
+      createdAt: mapped.createdAt,
+      loginSummary: mapped.summary,
+      customerEmail:
+        typeof details?.impersonatedUserEmail === 'string'
+          ? details.impersonatedUserEmail
+          : agg?.customerEmail ?? '',
+      customerName:
+        typeof details?.impersonatedUserName === 'string'
+          ? details.impersonatedUserName
+          : undefined,
+      companyName: typeof details?.companyName === 'string' ? details.companyName : undefined,
+      actionCount: agg?.actionCount ?? 0,
+    });
+  }
+
+  if (includeSessions) {
+    for (const [sessionId, agg] of sessionAggById) {
+      if (sessionsMap.has(sessionId)) continue;
+
+      const startRow = (await AdminImpersonationActivity.findOne({
+        sessionId,
+        type: 'SESSION_START',
+      }).lean()) as Record<string, unknown> | null;
+
+      const mappedStart = startRow ? mapPcRow(startRow) : null;
+      sessionsMap.set(sessionId, {
+        kind: 'session',
+        id: `session:${sessionId}`,
+        sessionId,
+        createdAt: mappedStart
+          ? mappedStart.createdAt
+          : new Date(agg.sessionStartAt).toISOString(),
+        loginSummary:
+          mappedStart?.summary ?? `Started Login as user (${agg.customerEmail})`,
+        customerEmail: agg.customerEmail,
+        actionCount: agg.actionCount,
+      });
+    }
+  }
+
+  const entries: GroupedTimelineEntry[] = [];
+
+  if (includePanelActivities) {
+    const activityMatch: Record<string, unknown> = { ...panelBaseMatch };
+    if (panelCategory) {
+      activityMatch.category = panelCategory;
+    } else {
+      activityMatch.category = { $ne: ADMIN_AUDIT_CATEGORY.IMPERSONATION };
+    }
+
+    const panelActivities = (await AdminActivity.find(activityMatch)
+      .sort({ createdAt: sortDir })
+      .lean()) as Record<string, unknown>[];
+
+    for (const row of panelActivities) {
+      const mapped = mapPanelRow(row);
+      entries.push({
+        kind: 'activity',
+        id: mapped.id,
+        createdAt: mapped.createdAt,
+        row: mapped,
+      });
+    }
+  }
+
+  if (includeSessions) {
+    for (const sessionEntry of sessionsMap.values()) {
+      if (pcCategory && sessionEntry.actionCount === 0) continue;
+      entries.push(sessionEntry);
+    }
+  }
+
+  const sorted = sortTimelineEntries(entries, sort);
+  const total = sorted.length;
+  const timeline = sorted.slice(skip, skip + limit);
+
+  const panelActivityTotal = includePanelActivities
+    ? await AdminActivity.countDocuments({
+        ...panelBaseMatch,
+        ...(panelCategory
+          ? { category: panelCategory }
+          : { category: { $ne: ADMIN_AUDIT_CATEGORY.IMPERSONATION } }),
+      })
+    : 0;
+
+  const sessionTotal = includeSessions
+    ? Array.from(sessionsMap.values()).filter((s) => !pcCategory || s.actionCount > 0).length
+    : 0;
+
+  const pcActionTotal = includeSessions
+    ? sessionAgg.reduce((sum, row) => sum + Number(row.actionCount ?? 0), 0)
+    : 0;
+
+  return {
+    timeline,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit) || 1,
+      panelTotal: panelActivityTotal,
+      sessionTotal,
+      publicCircleTotal: pcActionTotal,
+    },
+  };
+}
+
+export async function fetchSessionActivities({
+  AdminImpersonationActivity,
+  sessionId,
+  adminEmail,
+  userEmail,
+  dateFrom,
+  dateTo,
+  pcCategory,
+  hideNoise,
+  sort,
+}: {
+  AdminImpersonationActivity: mongoose.Model<unknown>;
+  sessionId: string;
+  adminEmail: string;
+  userEmail: string;
+  dateFrom: string;
+  dateTo: string;
+  pcCategory?: string;
+  hideNoise: boolean;
+  sort: AuditSortOrder;
+}) {
+  const sortDir = sort === 'asc' ? 1 : -1;
+  const match = buildPcMatch({
+    adminEmail,
+    userEmail,
+    userId: '',
+    companyId: '',
+    dateFrom,
+    dateTo,
+    pcCategory,
+    hideNoise,
+  });
+  match.sessionId = sessionId;
+
+  const rows = (await AdminImpersonationActivity.find(match)
+    .sort({ createdAt: sortDir })
+    .lean()) as Record<string, unknown>[];
+
+  return rows
+    .map(mapPcRow)
+    .filter((row): row is UnifiedActivityRow => row != null && row.activityType !== 'SESSION_START');
 }

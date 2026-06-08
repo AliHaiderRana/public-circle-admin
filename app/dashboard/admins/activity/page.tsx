@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 import AdminActivityGroupedPanel from '@/components/AdminActivityGroupedPanel';
-import { ArrowLeft, ScrollText } from 'lucide-react';
+import { ArrowLeft, Mail, ScrollText, User } from 'lucide-react';
 
 function AdminActivityDetailPageContent() {
   const { user, loading: authLoading } = useAuth();
@@ -15,6 +17,7 @@ function AdminActivityDetailPageContent() {
   const searchParams = useSearchParams();
   const adminEmail = (searchParams.get('adminEmail') || '').trim();
   const adminName = (searchParams.get('adminName') || '').trim();
+  const displayName = adminName || adminEmail;
 
   useEffect(() => {
     if (!authLoading && user && !user.isSuperAdmin) {
@@ -39,20 +42,39 @@ function AdminActivityDetailPageContent() {
 
   return (
     <div className="space-y-6 max-w-[1600px]">
-      <Button variant="ghost" size="sm" className="gap-2 -ml-2" asChild>
+      <Button variant="ghost" size="sm" className="gap-2 -ml-2 text-muted-foreground" asChild>
         <Link href="/dashboard/admins">
           <ArrowLeft className="h-4 w-4" />
           Back to Admin Users
         </Link>
       </Button>
 
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-          <ScrollText className="h-8 w-8 text-amber-600" />
-          Admin activity
-        </h2>
-        <p className="text-neutral-500 mt-1">{adminEmail}</p>
-      </div>
+      <Card className="border-amber-200/60 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 via-background to-background dark:from-amber-950/20">
+        <CardContent className="pt-6 pb-5">
+          <div className="flex flex-wrap items-start gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+              <User className="h-7 w-7" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-bold tracking-tight">{displayName}</h1>
+                <Badge variant="secondary" className="font-normal gap-1">
+                  <ScrollText className="h-3 w-3" />
+                  Activity audit
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
+                <Mail className="h-3.5 w-3.5 shrink-0" />
+                {adminEmail}
+              </p>
+              <p className="text-xs text-muted-foreground mt-2 max-w-2xl">
+                Full audit trail for this admin — panel changes and every Login as user session
+                with actions grouped underneath.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <AdminActivityGroupedPanel adminEmail={adminEmail} adminName={adminName} />
     </div>

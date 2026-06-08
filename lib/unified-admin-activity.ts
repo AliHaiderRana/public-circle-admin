@@ -45,6 +45,29 @@ export const UNIFIED_SOURCE_OPTIONS = [
   { value: 'public_circle', label: UNIFIED_SOURCE_LABELS.public_circle },
 ];
 
+export type GroupedTimelineActivityEntry = {
+  kind: 'activity';
+  id: string;
+  createdAt: string;
+  row: UnifiedActivityRow;
+};
+
+export type GroupedTimelineSessionEntry = {
+  kind: 'session';
+  id: string;
+  sessionId: string;
+  createdAt: string;
+  loginSummary: string;
+  customerEmail: string;
+  customerName?: string;
+  companyName?: string;
+  actionCount: number;
+};
+
+export type GroupedTimelineEntry =
+  | GroupedTimelineActivityEntry
+  | GroupedTimelineSessionEntry;
+
 export function buildUnifiedCategoryOptions(source: string) {
   const options: { value: string; label: string; group: string }[] = [
     { value: 'all', label: 'All categories', group: 'General' },
