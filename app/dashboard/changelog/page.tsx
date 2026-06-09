@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import {
   Plus, Trash2, Pencil, Loader2, GitCommit, User, GitBranch,
-  Globe, Zap, Wrench, ArrowUpCircle, ExternalLink,
+  Globe, Zap, Wrench, ArrowUpCircle, ExternalLink, Clock,
 } from 'lucide-react';
 
 interface ChangelogItem {
@@ -164,7 +164,9 @@ export default function ChangelogPage() {
                     <Badge variant={entry.isPublished ? 'default' : 'secondary'}>
                       {entry.isPublished ? 'Published' : 'Draft'}
                     </Badge>
-                    <span className="text-xs text-muted-foreground">{entry.date}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {entry.createdAt ? new Date(entry.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : entry.date}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Switch checked={entry.isPublished} onCheckedChange={() => togglePublish(entry)} />
@@ -344,7 +346,7 @@ export default function ChangelogPage() {
                     value={detailItem.commitAuthorEmail ? `${detailItem.commitAuthor} <${detailItem.commitAuthorEmail}>` : detailItem.commitAuthor}
                   />
                 )}
-                {detailItem.commitDate && <MetaItem icon={<GitBranch className="h-3.5 w-3.5" />} label="Date" value={detailItem.commitDate} />}
+                {detailItem.commitDate && <MetaItem icon={<Clock className="h-3.5 w-3.5" />} label="Committed at" value={new Date(detailItem.commitDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })} />}
               </div>
             </div>
           )}
