@@ -25,6 +25,8 @@ import {
   LogIn,
 } from 'lucide-react';
 import AdminImpersonationActivitySection from '@/components/AdminImpersonationActivitySection';
+import { useAuth } from '@/context/AuthContext';
+import { startImpersonation } from '@/lib/impersonate-client';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -87,6 +89,7 @@ interface CompanyDetails {
 export default function CompanyDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { token: adminToken } = useAuth();
   const [companyDetails, setCompanyDetails] = useState<CompanyDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -165,24 +168,12 @@ export default function CompanyDetailPage() {
     if (!companyDetails) return;
     setImpersonateUserId(userId);
     try {
-      const response = await fetch('/api/impersonate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          companyId: companyDetails.company.id,
-        }),
+      const redirectUrl = await startImpersonation({
+        userId,
+        companyId: companyDetails.company.id,
+        adminToken,
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(
-          typeof data?.error === 'string' ? data.error : 'Failed to start impersonation'
-        );
-      }
-      if (typeof data.redirectUrl !== 'string' || !data.redirectUrl) {
-        throw new Error('Invalid redirect URL from server');
-      }
-      window.open(data.redirectUrl, '_blank', 'noopener,noreferrer');
+      window.open(redirectUrl, '_blank', 'noopener,noreferrer');
     } catch (error) {
       console.error('Impersonation error:', error);
       alert(

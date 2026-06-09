@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -37,7 +36,6 @@ import {
   CheckCircle2,
   Circle,
   MapPin,
-  ScrollText,
 } from "lucide-react";
 import {
   Dialog,
@@ -45,8 +43,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useAuth } from "@/context/AuthContext";
+import { startImpersonation } from "@/lib/impersonate-client";
 
 export default function UsersPage() {
+  const { token: adminToken } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [companies, setCompanies] = useState<Array<{ _id: string; name: string; logo?: string }>>([]);
   const [loading, setLoading] = useState(true);
@@ -180,24 +181,12 @@ export default function UsersPage() {
 
     setImpersonateUserId(user._id);
     try {
-      const response = await fetch('/api/impersonate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user._id,
-          companyId,
-        }),
+      const redirectUrl = await startImpersonation({
+        userId: user._id,
+        companyId,
+        adminToken,
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(
-          typeof data?.error === 'string' ? data.error : 'Failed to start impersonation'
-        );
-      }
-      if (typeof data.redirectUrl !== 'string' || !data.redirectUrl) {
-        throw new Error('Invalid redirect URL from server');
-      }
-      window.open(data.redirectUrl, '_blank', 'noopener,noreferrer');
+      window.open(redirectUrl, '_blank', 'noopener,noreferrer');
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to login as user');
     } finally {
@@ -478,21 +467,6 @@ export default function UsersPage() {
                             <LogIn className="h-4 w-4" />
                           )}
                           Login as this user
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="gap-1 text-neutral-600"
-                          asChild
-                        >
-                          <Link
-                            href={`/dashboard/impersonation-activity?userEmail=${encodeURIComponent(
-                              user.emailAddress || ""
-                            )}&userId=${encodeURIComponent(user._id || "")}`}
-                          >
-                            <ScrollText className="h-4 w-4" />
-                            View activity
-                          </Link>
                         </Button>
                       </div>
                     </TableCell>

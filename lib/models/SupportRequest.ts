@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { MODELS } from '../constants';
 
 const SUPPORT_REQUEST_CATEGORY = {
+  GENERAL: 'GENERAL',
   BILLING_AND_SUBSCRIPTION: 'BILLING_AND_SUBSCRIPTION',
   CAMPAIGNS_AND_SENDING: 'CAMPAIGNS_AND_SENDING',
   CONTACTS_AND_AUDIENCE: 'CONTACTS_AND_AUDIENCE',
@@ -15,9 +16,21 @@ const SUPPORT_REQUEST_CATEGORY = {
 const SUPPORT_REQUEST_STATUS = {
   OPEN: 'OPEN',
   IN_PROGRESS: 'IN_PROGRESS',
+  PENDING_RESOLUTION: 'PENDING_RESOLUTION',
   RESOLVED: 'RESOLVED',
   CLOSED: 'CLOSED',
 } as const;
+
+const assignmentHistorySchema = new mongoose.Schema(
+  {
+    adminId: { type: mongoose.Schema.Types.ObjectId, required: true },
+    adminName: { type: String, default: '' },
+    assignedByAdminId: { type: mongoose.Schema.Types.ObjectId, required: true },
+    assignedByName: { type: String, default: '' },
+    assignedAt: { type: Date, default: Date.now },
+  },
+  { _id: true },
+);
 
 const schema = new mongoose.Schema(
   {
@@ -58,12 +71,67 @@ const schema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    assignedAdminId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+      index: true,
+    },
+    assignedAdminName: {
+      type: String,
+      default: '',
+    },
+    assignmentHistory: {
+      type: [assignmentHistorySchema],
+      default: [],
+    },
+    unreadByAdmin: {
+      type: Number,
+      default: 0,
+    },
+    unreadByCompany: {
+      type: Number,
+      default: 0,
+    },
+    lastMessageAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+    lastMessagePreview: {
+      type: String,
+      default: '',
+    },
+    messageCount: {
+      type: Number,
+      default: 0,
+    },
+    lastAdminReplyName: {
+      type: String,
+      default: '',
+    },
+    lastAdminReplyAt: {
+      type: Date,
+      default: null,
+    },
+    pendingResolutionAt: {
+      type: Date,
+      default: null,
+    },
+    autoResolveAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+    lastReopenReason: {
+      type: String,
+      default: '',
+    },
     metadata: {
       type: Object,
       default: {},
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const SupportRequest =

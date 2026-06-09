@@ -5,6 +5,85 @@ import Campaign from '@/lib/models/Campaign';
 import CompanyContact from '@/lib/models/CompanyContact';
 import { getServerSession } from '@/lib/auth';
 
+type CompanyDoc = {
+  _id: { toString(): string };
+  name?: string;
+  city?: string;
+  country?: string;
+  companySize?: string;
+  status?: string;
+  logo?: string;
+  createdAt?: Date | string;
+  [key: string]: unknown;
+};
+
+async function attachCounts(companies: CompanyDoc[]) {
+  if (!companies.length) return [];
+
+  const companyIds = companies.map((company) => company._id);
+
+  const [campaignCounts, contactCounts] = await Promise.all([
+    Campaign.aggregate([
+      { $match: { company: { $in: companyIds } } },
+      { $group: { _id: '$company', count: { $sum: 1 } } },
+    ]),
+    CompanyContact.aggregate([
+      { $match: { public_circles_company: { $in: companyIds } } },
+      { $group: { _id: '$public_circles_company', count: { $sum: 1 } } },
+    ]),
+  ]);
+
+  const campaignCountMap = new Map<string, number>();
+  const contactCountMap = new Map<string, number>();
+
+  campaignCounts.forEach((item) => {
+    campaignCountMap.set(String(item._id), item.count);
+  });
+
+  contactCounts.forEach((item) => {
+    contactCountMap.set(String(item._id), item.count);
+  });
+
+  return companies.map((company) => {
+    const companyId = company._id.toString();
+    return {
+      ...company,
+      _id: companyId,
+      campaignCount: campaignCountMap.get(companyId) || 0,
+      contactCount: contactCountMap.get(companyId) || 0,
+    };
+  });
+}
+
+function sortCompanies(
+  companies: Array<CompanyDoc & { campaignCount?: number; contactCount?: number }>,
+  sortBy: string,
+  sortOrder: 1 | -1,
+) {
+  return [...companies].sort((a, b) => {
+    if (sortBy === 'campaignCount' || sortBy === 'contactCount') {
+      const aValue = Number(a[sortBy as 'campaignCount' | 'contactCount'] || 0);
+      const bValue = Number(b[sortBy as 'campaignCount' | 'contactCount'] || 0);
+      return sortOrder === 1 ? aValue - bValue : bValue - aValue;
+    }
+
+    const aValue = a[sortBy] ?? '';
+    const bValue = b[sortBy] ?? '';
+
+    if (sortBy === 'createdAt') {
+      const aDate = new Date(String(aValue)).getTime();
+      const bDate = new Date(String(bValue)).getTime();
+      return sortOrder === 1 ? aDate - bDate : bDate - aDate;
+    }
+
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      return sortOrder === 1 ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+    }
+
+    return sortOrder === 1 ? (aValue > bValue ? 1 : -1) : aValue < bValue ? 1 : -1;
+  });
+}
+
 export async function GET(request: Request) {
   const session = await getServerSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -12,8 +91,8 @@ export async function GET(request: Request) {
   await dbConnect();
   try {
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const page = Math.max(parseInt(searchParams.get('page') || '1', 10), 1);
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '10', 10), 1), 100);
     const search = searchParams.get('search') || '';
     const companySize = searchParams.get('companySize') || '';
     const country = searchParams.get('country') || '';
@@ -22,9 +101,8 @@ export async function GET(request: Request) {
     const sort = searchParams.get('sort') || 'desc';
     const sortBy = searchParams.get('sortBy') || 'createdAt';
 
-    // Build search query
-    let query: any = {};
-    
+    const query: Record<string, unknown> = {};
+
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -32,125 +110,63 @@ export async function GET(request: Request) {
         { country: { $regex: search, $options: 'i' } },
         { address: { $regex: search, $options: 'i' } },
         { postalCode: { $regex: search, $options: 'i' } },
-        { companySize: { $regex: search, $options: 'i' } }
+        { companySize: { $regex: search, $options: 'i' } },
       ];
     }
-    
-    if (companySize) {
-      query.companySize = companySize;
-    }
-    
-    if (country) {
-      query.country = country;
-    }
-    
-    if (city) {
-      query.city = city;
-    }
-    
-    if (status) {
-      query.status = status;
-    }
-    
+
+    if (companySize) query.companySize = companySize;
+    if (country) query.country = country;
+    if (city) query.city = city;
+    if (status) query.status = status;
+
     const skip = (page - 1) * limit;
-    const sortOrder = sort === 'asc' ? 1 : -1;
-    
-    // First, get all companies matching the query (without pagination) to calculate counts
-    const [allCompanies, totalCount, distinctCountries, distinctSizes, distinctCities] = await Promise.all([
-      Company.find(query).lean(),
+    const sortOrder: 1 | -1 = sort === 'asc' ? 1 : -1;
+
+    const [totalCount, distinctCountries, distinctSizes, distinctCities] = await Promise.all([
       Company.countDocuments(query),
       Company.distinct('country'),
       Company.distinct('companySize'),
-      Company.distinct('city')
+      Company.distinct('city'),
     ]);
 
-    // Get company IDs to fetch counts
-    const companyIds = allCompanies.map(c => c._id);
-    
-    // Fetch campaign counts for all companies
-    const campaignCounts = await Campaign.aggregate([
-      { $match: { company: { $in: companyIds } } },
-      { $group: { _id: '$company', count: { $sum: 1 } } }
-    ]);
-    
-    // Fetch contact counts for all companies
-    const contactCounts = await CompanyContact.aggregate([
-      { $match: { public_circles_company: { $in: companyIds } } },
-      { $group: { _id: '$public_circles_company', count: { $sum: 1 } } }
-    ]);
-    
-    // Create maps for easy lookup
-    const campaignCountMap = new Map();
-    const contactCountMap = new Map();
-    
-    campaignCounts.forEach(item => {
-      campaignCountMap.set(item._id.toString(), item.count);
-    });
-    
-    contactCounts.forEach(item => {
-      contactCountMap.set(item._id.toString(), item.count);
-    });
+    let companies;
 
-    // Convert ObjectId to string for consistent comparison and add counts
-    const formattedCompanies = allCompanies.map(company => {
-      const companyId = company._id.toString();
-      return {
-        ...company,
-        _id: companyId,
-        campaignCount: campaignCountMap.get(companyId) || 0,
-        contactCount: contactCountMap.get(companyId) || 0
-      };
-    });
-
-    // Sort by the requested field
-    let sortedCompanies = formattedCompanies;
     if (sortBy === 'campaignCount' || sortBy === 'contactCount') {
-      sortedCompanies = formattedCompanies.sort((a, b) => {
-        const aValue = a[sortBy] || 0;
-        const bValue = b[sortBy] || 0;
-        return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
-      });
+      const allCompanies = await Company.find(query).lean();
+      const withCounts = await attachCounts(allCompanies as CompanyDoc[]);
+      companies = sortCompanies(withCounts, sortBy, sortOrder).slice(skip, skip + limit);
     } else {
-      // For other fields, use MongoDB sort
-      sortedCompanies = formattedCompanies.sort((a, b) => {
-        const aValue = a[sortBy] || '';
-        const bValue = b[sortBy] || '';
-        if (sortBy === 'createdAt') {
-          const aDate = new Date(aValue).getTime();
-          const bDate = new Date(bValue).getTime();
-          return sortOrder === 'asc' ? aDate - bDate : bDate - aDate;
-        }
-        if (typeof aValue === 'string' && typeof bValue === 'string') {
-          return sortOrder === 'asc' 
-            ? aValue.localeCompare(bValue)
-            : bValue.localeCompare(aValue);
-        }
-        return sortOrder === 'asc' ? (aValue > bValue ? 1 : -1) : (aValue < bValue ? 1 : -1);
-      });
+      const mongoSort = { [sortBy]: sortOrder } as Record<string, 1 | -1>;
+      const pageCompanies = await Company.find(query)
+        .sort(mongoSort)
+        .skip(skip)
+        .limit(limit)
+        .lean();
+      companies = await attachCounts(pageCompanies as CompanyDoc[]);
     }
 
-    // Apply pagination after sorting
-    const companies = sortedCompanies.slice(skip, skip + limit);
-
     return NextResponse.json({
-      companies: formattedCompanies,
+      companies,
       pagination: {
         page,
         limit,
         total: totalCount,
-        pages: Math.ceil(totalCount / limit)
+        pages: Math.ceil(totalCount / limit),
       },
       filters: {
         countries: distinctCountries.filter(Boolean).sort(),
         sizes: distinctSizes.filter(Boolean).sort(),
-        cities: distinctCities.filter(Boolean).sort()
-      }
+        cities: distinctCities.filter(Boolean).sort(),
+      },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching companies:', error);
-    return NextResponse.json({ 
-      error: 'Failed to fetch companies',
-      details: error.message 
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: 'Failed to fetch companies',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      },
+      { status: 500 },
+    );
   }
 }

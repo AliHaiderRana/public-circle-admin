@@ -66,8 +66,13 @@ const humanizeFieldName = (field: unknown) => {
     isSignupAllowed: 'signup allowed',
     appleRelayEmail: 'Apple relay email',
     deleteCompanyContactsAfterDays: 'contact deletion retention',
-    supportAlertEmails: 'support alert emails',
-    supportDetailEmails: 'support detail emails',
+    supportRequestsEnabled: 'Talk to Support enabled',
+    supportNotificationEmail: 'support email',
+    supportSendAlertEmail: 'support alert emails',
+    supportSendDetailEmail: 'support detail emails',
+    supportSendCustomerConfirmation: 'support customer confirmation',
+    supportNotifySuperAdmins: 'support super-admin notifications',
+    supportNotifyAdmins: 'support admin notifications',
   };
   return labels[key] ?? key.replace(/_/g, ' ');
 };
@@ -188,6 +193,10 @@ export function buildAuditSummary(
         ? `${typeLabel} request marked as ${statusLabel}${companySuffix}`
         : `Customer request marked as ${statusLabel}${companySuffix}`;
     }
+    case ADMIN_AUDIT_ACTION.SUPPORT_SETTINGS_UPDATE:
+      return 'Updated support request settings';
+    case ADMIN_AUDIT_ACTION.SYSTEM_NOTIFICATIONS_UPDATE:
+      return 'Updated system notifications';
     case ADMIN_AUDIT_ACTION.SUPPORT_REQUEST_UPDATE: {
       const subject = typeof d.subject === 'string' ? d.subject.trim() : '';
       const categoryLabel =
