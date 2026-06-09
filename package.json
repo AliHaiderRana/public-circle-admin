@@ -34,6 +34,7 @@
     "mongoose": "^9.1.2",
     "next": "16.1.1",
     "puppeteer-core": "^24.42.0",
+    "radix-ui": "^1.5.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-hook-form": "^7.70.0",

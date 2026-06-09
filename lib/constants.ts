@@ -83,6 +83,10 @@ export const SOCKET_CHANNELS = {
   CONNECTION: "connection",
   DISCONNECT: "disconnect",
   ADMIN_NOTIFICATION_CREATED: "admin-notification-created",
+  SUPPORT_CHAT_JOIN: "support-chat-join",
+  SUPPORT_CHAT_LEAVE: "support-chat-leave",
+  SUPPORT_CHAT_SEND: "support-chat-send",
+  SUPPORT_CHAT_MESSAGE: "support-chat-message",
 };
 
 export const ADMIN_NOTIFICATION_TYPES = {

@@ -32,6 +32,7 @@ export type UnifiedActivityRow = {
   statusCode?: number | null;
   metadata?: Record<string, unknown> | null;
   requestBody?: Record<string, unknown> | null;
+  query?: Record<string, unknown> | null;
 };
 
 export const UNIFIED_SOURCE_LABELS: Record<UnifiedActivitySource, string> = {

@@ -36,7 +36,7 @@ const schema = new mongoose.Schema(
     },
     supportSendCustomerConfirmation: {
       type: Boolean,
-      default: true,
+      default: false,
     },
     supportNotifySuperAdmins: {
       type: Boolean,

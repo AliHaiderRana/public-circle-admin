@@ -19,6 +19,24 @@ const schema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    notificationPreferences: {
+      supportEmail: {
+        type: Boolean,
+        default: true,
+      },
+      supportAlertEmail: {
+        type: Boolean,
+        default: true,
+      },
+      supportDetailEmail: {
+        type: Boolean,
+        default: true,
+      },
+      supportInApp: {
+        type: Boolean,
+        default: true,
+      },
+    },
   },
   { timestamps: true }
 );

@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import AdminActivityGroupedPanel from '@/components/AdminActivityGroupedPanel';
-import { ArrowLeft, Mail, ScrollText, User } from 'lucide-react';
+import { ArrowLeft, Mail, User } from 'lucide-react';
 
 function AdminActivityDetailPageContent() {
   const { user, loading: authLoading } = useAuth();
@@ -33,48 +34,47 @@ function AdminActivityDetailPageContent() {
 
   if (authLoading || !user?.isSuperAdmin || !adminEmail) {
     return (
-      <div className="p-6 space-y-4 max-w-[1600px]">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-40 w-full" />
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-96 w-full" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-[1600px]">
-      <Button variant="ghost" size="sm" className="gap-2 -ml-2 text-muted-foreground" asChild>
-        <Link href="/dashboard/admins">
-          <ArrowLeft className="h-4 w-4" />
-          Back to Admin Users
-        </Link>
-      </Button>
+    <div className="space-y-6">
+      <div className="flex items-start gap-4">
+        <Button variant="ghost" size="sm" className="p-2 shrink-0" asChild>
+          <Link href="/dashboard/admins" aria-label="Back to Admin Users">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+        </Button>
+        <div className="min-w-0">
+          <h2 className="text-3xl font-bold tracking-tight">View activity</h2>
+          <p className="text-neutral-500 mt-1">
+            Everything this admin did in the admin panel and in Public Circle after Login as user.
+          </p>
+        </div>
+      </div>
 
-      <Card className="border-amber-200/60 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/50 via-background to-background dark:from-amber-950/20">
-        <CardContent className="pt-6 pb-5">
-          <div className="flex flex-wrap items-start gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-              <User className="h-7 w-7" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight">{displayName}</h1>
-                <Badge variant="secondary" className="font-normal gap-1">
-                  <ScrollText className="h-3 w-3" />
-                  Activity audit
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
-                <Mail className="h-3.5 w-3.5 shrink-0" />
-                {adminEmail}
-              </p>
-              <p className="text-xs text-muted-foreground mt-2 max-w-2xl">
-                Full audit trail for this admin — panel changes and every Login as user session
-                with actions grouped underneath.
-              </p>
-            </div>
+      <Card>
+        <CardContent className="flex flex-wrap items-center gap-4 py-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <User className="h-5 w-5" />
           </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-medium leading-tight">{displayName}</p>
+            <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
+              <Mail className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{adminEmail}</span>
+            </p>
+          </div>
+          <Badge variant="secondary">Admin user</Badge>
         </CardContent>
       </Card>
+
+      <Separator />
 
       <AdminActivityGroupedPanel adminEmail={adminEmail} adminName={adminName} />
     </div>
@@ -85,9 +85,10 @@ export default function AdminActivityDetailPage() {
   return (
     <Suspense
       fallback={
-        <div className="p-6 space-y-4 max-w-[1600px]">
-          <Skeleton className="h-8 w-64" />
-          <Skeleton className="h-40 w-full" />
+        <div className="space-y-6">
+          <Skeleton className="h-10 w-48" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-96 w-full" />
         </div>
       }
     >

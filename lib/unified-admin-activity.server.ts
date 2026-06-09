@@ -147,6 +147,10 @@ function mapPcRow(row: Record<string, unknown>): UnifiedActivityRow | null {
     !Array.isArray(row.requestBody)
       ? (row.requestBody as Record<string, unknown>)
       : null;
+  const query =
+    row.query && typeof row.query === 'object' && !Array.isArray(row.query)
+      ? (row.query as Record<string, unknown>)
+      : null;
 
   if (
     isNoiseImpersonationRow({
@@ -193,6 +197,7 @@ function mapPcRow(row: Record<string, unknown>): UnifiedActivityRow | null {
     statusCode: typeof row.statusCode === 'number' ? row.statusCode : null,
     metadata,
     requestBody,
+    query,
   };
 }
 

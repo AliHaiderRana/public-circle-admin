@@ -41,6 +41,14 @@
       {
         "name": "list_directory",
         "description": "List contents of a project directory"
+      },
+      {
+        "name": "get_system_notifications",
+        "description": "Read support email notification settings and per-admin email preferences"
+      },
+      {
+        "name": "update_system_notifications",
+        "description": "Update support email notification settings and per-admin email preferences"
       }
     ]
   },

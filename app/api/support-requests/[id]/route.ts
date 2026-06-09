@@ -14,6 +14,7 @@ import {
   ADMIN_AUDIT_CATEGORY,
 } from '@/lib/admin-audit';
 import { formatSupportReferenceId } from '@/lib/support-admin.util';
+import { buildStatusTimelineForAdmin } from '@/lib/support-status-timeline.util';
 
 const SERVER_API_URL =
   process.env.SERVER_API_URL ||
@@ -51,6 +52,10 @@ export async function GET(
     return NextResponse.json({
       ...request,
       referenceId: formatSupportReferenceId(String(request._id)),
+      statusTimeline: buildStatusTimelineForAdmin({
+        statusHistory: request.statusHistory as Parameters<typeof buildStatusTimelineForAdmin>[0]['statusHistory'],
+        createdAt: request.createdAt,
+      }),
     });
   } catch (error) {
     console.error('Error fetching support request:', error);
@@ -75,6 +80,37 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
   }
 
+  if (assignedAdminId !== undefined && !session.isSuperAdmin) {
+    const selfAssign =
+      assignedAdminId && String(assignedAdminId) === String(session.userId);
+
+    if (!selfAssign) {
+      return NextResponse.json(
+        { error: 'Only super admins can change ticket assignment' },
+        { status: 403 },
+      );
+    }
+
+    await dbConnect();
+    const existing = await SupportRequest.findById(id).select('assignedAdminId').lean();
+    if (
+      existing?.assignedAdminId &&
+      String(existing.assignedAdminId) !== String(session.userId)
+    ) {
+      return NextResponse.json(
+        { error: 'This ticket is already assigned to another admin' },
+        { status: 403 },
+      );
+    }
+  }
+
+  if (typeof adminNotes === 'string' && !session.isSuperAdmin) {
+    return NextResponse.json(
+      { error: 'Only super admins can update private team notes' },
+      { status: 403 },
+    );
+  }
+
   try {
     const response = await fetch(`${SERVER_API_URL}/internal/support-requests/${id}`, {
       method: 'PATCH',
@@ -91,6 +127,12 @@ export async function PATCH(
               assignedAdminName: assignedAdminName || '',
               assignedByAdminId: session.userId,
               assignedByName: session.name || session.email || '',
+            }
+          : {}),
+        ...(status
+          ? {
+              actingAdminId: session.userId,
+              actingAdminName: session.name || session.email || '',
             }
           : {}),
       }),

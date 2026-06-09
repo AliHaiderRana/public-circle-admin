@@ -279,14 +279,8 @@ export default function AdminsPage() {
                     </TableCell>
                     {user?.isSuperAdmin && (
                       <TableCell className="text-right pr-6">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm" asChild>
-                            <Link href={activityHref(admin)}>
-                              <ScrollText className="h-3.5 w-3.5 mr-1" />
-                              View activity
-                            </Link>
-                          </Button>
-                          {admin._id !== user?.id && (
+                        <div className="flex justify-end items-center gap-2">
+                          {admin._id !== user?.id ? (
                             <AlertDialog
                               open={confirmingAdminId === admin._id}
                               onOpenChange={(open) => {
@@ -297,7 +291,7 @@ export default function AdminsPage() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="text-red-500 border-red-200 hover:bg-red-50"
+                                  className="h-8 min-w-[72px] shrink-0 text-red-500 border-red-200 hover:bg-red-50"
                                   onClick={() => setConfirmingAdminId(admin._id)}
                                   disabled={deletingId === admin._id}
                                 >
@@ -326,7 +320,20 @@ export default function AdminsPage() {
                                 </AlertDialogFooter>
                               </AlertDialogContent>
                             </AlertDialog>
+                          ) : (
+                            <span className="inline-block h-8 min-w-[72px] shrink-0" aria-hidden />
                           )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 min-w-[128px] shrink-0"
+                            asChild
+                          >
+                            <Link href={activityHref(admin)}>
+                              <ScrollText className="h-3.5 w-3.5 mr-1.5" />
+                              View activity
+                            </Link>
+                          </Button>
                         </div>
                       </TableCell>
                     )}

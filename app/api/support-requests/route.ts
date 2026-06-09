@@ -20,8 +20,11 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const page = Math.max(parseInt(searchParams.get('page') || '1', 10), 1);
+    const limit = Math.min(
+      Math.max(parseInt(searchParams.get('limit') || '25', 10), 1),
+      100,
+    );
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
     const activeOnly = searchParams.get('activeOnly') === 'true';
@@ -93,7 +96,7 @@ export async function GET(request: Request) {
           model: User,
           select: 'firstName lastName emailAddress',
         })
-        .sort({ createdAt: -1 })
+        .sort({ updatedAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),

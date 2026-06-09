@@ -32,6 +32,19 @@ const assignmentHistorySchema = new mongoose.Schema(
   { _id: true },
 );
 
+const statusHistorySchema = new mongoose.Schema(
+  {
+    fromStatus: { type: String, default: null },
+    toStatus: { type: String, required: true },
+    actorType: { type: String, enum: ['USER', 'ADMIN', 'SYSTEM'], required: true },
+    actorId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    actorName: { type: String, default: '' },
+    note: { type: String, default: '' },
+    changedAt: { type: Date, default: Date.now },
+  },
+  { _id: true },
+);
+
 const schema = new mongoose.Schema(
   {
     companyId: {
@@ -82,6 +95,10 @@ const schema = new mongoose.Schema(
     },
     assignmentHistory: {
       type: [assignmentHistorySchema],
+      default: [],
+    },
+    statusHistory: {
+      type: [statusHistorySchema],
       default: [],
     },
     unreadByAdmin: {

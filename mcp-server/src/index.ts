@@ -31,6 +31,10 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { spawn } from "child_process";
 import { existsSync, createWriteStream } from "fs";
+import {
+  getSystemNotifications,
+  updateSystemNotifications,
+} from "./notifications-api.js";
 
 // Configuration
 const REPO_ROOT = process.env.MCP_REPO_ROOT || path.resolve(process.cwd(), "..");
@@ -423,6 +427,43 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: [],
         },
       },
+      {
+        name: "get_system_notifications",
+        description:
+          "Read support email notification settings, admin-level toggles, and per-admin email preferences from the admin panel API.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {},
+          required: [],
+        },
+      },
+      {
+        name: "update_system_notifications",
+        description:
+          "Update support email notification settings. Super-admin manages global toggles and per-admin email delivery only.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            supportSendAlertEmail: { type: "boolean" },
+            adminPreferences: {
+              type: "array",
+              description: "Per-admin alert email preferences",
+              items: {
+                type: "object",
+                properties: {
+                  adminId: { type: "string" },
+                  notifySupportAlertEmail: {
+                    type: "boolean",
+                    description: "Whether this admin receives support alert emails",
+                  },
+                },
+                required: ["adminId"],
+              },
+            },
+          },
+          required: [],
+        },
+      },
     ],
   };
 });
@@ -567,6 +608,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: "text",
               text: JSON.stringify(listing, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "get_system_notifications": {
+        const payload = await getSystemNotifications();
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(payload, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "update_system_notifications": {
+        const payload = await updateSystemNotifications((args || {}) as Record<string, unknown>);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(payload, null, 2),
             },
           ],
         };

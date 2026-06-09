@@ -1,7 +1,9 @@
 export type AdminRecipient = {
+  id: string;
   email: string;
   name?: string;
   isSuperAdmin: boolean;
+  notifySupportAlertEmail: boolean;
 };
 
 export type TeamRecipient = {
@@ -10,72 +12,65 @@ export type TeamRecipient = {
 };
 
 export type SystemNotificationSettings = {
-  supportNotificationEmail: string | null;
   supportSendAlertEmail: boolean;
-  supportSendDetailEmail: boolean;
-  supportSendCustomerConfirmation: boolean;
-  supportNotifySuperAdmins: boolean;
-  supportNotifyAdmins: boolean;
+};
+
+export type AdminNotificationPreferenceUpdate = {
+  adminId: string;
+  notifySupportAlertEmail?: boolean;
+  /** @deprecated Use notifySupportAlertEmail */
+  notifySupportEmail?: boolean;
+};
+
+const resolveAdminAlertPreference = (
+  prefs:
+    | {
+        supportEmail?: boolean;
+        supportAlertEmail?: boolean;
+      }
+    | undefined,
+): boolean => {
+  if (prefs?.supportEmail === false) return false;
+  if (typeof prefs?.supportAlertEmail === 'boolean') return prefs.supportAlertEmail;
+  return true;
 };
 
 export const serializeSystemNotificationSettings = (config: {
-  supportNotificationEmail?: string | null;
   supportSendAlertEmail?: boolean;
-  supportSendDetailEmail?: boolean;
-  supportSendCustomerConfirmation?: boolean;
-  supportNotifySuperAdmins?: boolean;
-  supportNotifyAdmins?: boolean;
-  supportAlertEmails?: string[];
-  supportDetailEmails?: string[];
-}): SystemNotificationSettings => {
-  const legacyEmail =
-    config.supportNotificationEmail?.trim() ||
-    config.supportAlertEmails?.[0]?.trim() ||
-    config.supportDetailEmails?.[0]?.trim() ||
-    null;
+}): SystemNotificationSettings => ({
+  supportSendAlertEmail: config.supportSendAlertEmail !== false,
+});
 
-  return {
-    supportNotificationEmail: legacyEmail,
-    supportSendAlertEmail: config.supportSendAlertEmail !== false,
-    supportSendDetailEmail: config.supportSendDetailEmail !== false,
-    supportSendCustomerConfirmation: config.supportSendCustomerConfirmation !== false,
-    supportNotifySuperAdmins: config.supportNotifySuperAdmins !== false,
-    supportNotifyAdmins: config.supportNotifyAdmins !== false,
+export const serializeAdminRecipient = (admin: {
+  _id: { toString(): string } | string;
+  email: string;
+  name?: string;
+  isSuperAdmin?: boolean;
+  notificationPreferences?: {
+    supportEmail?: boolean;
+    supportAlertEmail?: boolean;
   };
-};
+}): AdminRecipient => ({
+  id: typeof admin._id === 'string' ? admin._id : admin._id.toString(),
+  email: admin.email,
+  name: admin.name,
+  isSuperAdmin: Boolean(admin.isSuperAdmin),
+  notifySupportAlertEmail: resolveAdminAlertPreference(admin.notificationPreferences),
+});
 
 export const computeTeamRecipients = ({
-  supportNotificationEmail,
-  supportNotifySuperAdmins,
-  supportNotifyAdmins,
+  supportSendAlertEmail,
   adminRecipients,
 }: {
-  supportNotificationEmail: string | null;
-  supportNotifySuperAdmins: boolean;
-  supportNotifyAdmins: boolean;
+  supportSendAlertEmail: boolean;
   adminRecipients: AdminRecipient[];
 }): TeamRecipient[] => {
-  const seen = new Set<string>();
-  const rows: TeamRecipient[] = [];
+  if (!supportSendAlertEmail) return [];
 
-  const add = (email: string, source: string) => {
-    const normalized = email.trim().toLowerCase();
-    if (!normalized || !normalized.includes('@') || seen.has(normalized)) return;
-    seen.add(normalized);
-    rows.push({ email: normalized, source });
-  };
-
-  if (supportNotificationEmail?.trim()) {
-    add(supportNotificationEmail, 'Support inbox');
-  }
-
-  for (const admin of adminRecipients) {
-    if (admin.isSuperAdmin && supportNotifySuperAdmins) {
-      add(admin.email, 'Super admin');
-    } else if (!admin.isSuperAdmin && supportNotifyAdmins) {
-      add(admin.email, 'Admin');
-    }
-  }
-
-  return rows;
+  return adminRecipients
+    .filter((admin) => admin.notifySupportAlertEmail)
+    .map((admin) => ({
+      email: admin.email.trim().toLowerCase(),
+      source: admin.isSuperAdmin ? 'Super admin' : 'Admin',
+    }));
 };

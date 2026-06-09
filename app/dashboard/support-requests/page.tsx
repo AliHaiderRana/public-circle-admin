@@ -2,19 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -32,6 +23,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
 import {
   SUPPORT_REQUEST_STATUS,
   SUPPORT_REQUEST_CATEGORY,
@@ -46,16 +38,18 @@ import {
   MessageCircle,
   Inbox,
   Settings2,
-  Clock,
-  User,
   RefreshCw,
 } from 'lucide-react';
 import { useSupportStats } from '@/hooks/use-support-stats';
 import { SupportCountBadge } from '@/components/SupportCountBadge';
 import { TicketChatPanel } from '@/components/TicketChatPanel';
+import { SupportInboxShell } from '@/components/support/SupportInboxShell';
+import { TicketStatusTimeline } from '@/components/support/TicketStatusTimeline';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { formatAdminDisplayName, formatSupportReferenceId } from '@/lib/support-admin.util';
+import { getSupportSocket } from '@/lib/support-socket';
+import type { StatusTimelineEntry } from '@/lib/support-status-timeline.util';
 
 type SupportRequestRow = {
   _id: string;
@@ -81,10 +75,6 @@ type AssignableAdmin = {
   email: string;
   isSuperAdmin: boolean;
 };
-
-function formatAssigneeName(name?: string | null) {
-  return formatAdminDisplayName(name, null);
-}
 
 function formatQueueDate(value: string) {
   const date = new Date(value);
@@ -126,16 +116,26 @@ function isActiveStatus(status: string) {
   );
 }
 
+function isTicketAssigned(request: SupportRequestRow): boolean {
+  return Boolean(request.assignedAdminId);
+}
+
+function isAssignedToAdmin(request: SupportRequestRow, adminId?: string): boolean {
+  if (!adminId || !request.assignedAdminId) return false;
+  return String(request.assignedAdminId) === adminId;
+}
+
 export default function SupportRequestsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const currentAdminId = user?.id ? String(user.id) : undefined;
   const currentAdminName = formatAdminDisplayName(user?.name, user?.email);
+  const isSuperAdmin = Boolean(user?.isSuperAdmin);
   const highlightRequestId = searchParams.get('highlight');
   const activeTicketId = searchParams.get('ticket');
   const { stats, refresh: refreshStats } = useSupportStats();
-  const highlightedRowRef = useRef<HTMLTableRowElement>(null);
+  const highlightedRowRef = useRef<HTMLButtonElement>(null);
 
   const selectTicket = useCallback(
     (ticketId: string | null) => {
@@ -164,30 +164,74 @@ export default function SupportRequestsPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [highlightFading, setHighlightFading] = useState(false);
   const [manageRequest, setManageRequest] = useState<SupportRequestRow | null>(null);
-  const [manageNotes, setManageNotes] = useState('');
   const [manageAssigneeId, setManageAssigneeId] = useState('');
+  const [manageNotes, setManageNotes] = useState('');
   const [assignableAdmins, setAssignableAdmins] = useState<AssignableAdmin[]>([]);
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 10,
+    limit: 25,
     total: 0,
     pages: 0,
   });
   const [chatRefreshKey, setChatRefreshKey] = useState(0);
   const [offPageTicket, setOffPageTicket] = useState<SupportRequestRow | null>(null);
+  const [manageStatusTimeline, setManageStatusTimeline] = useState<StatusTimelineEntry[]>([]);
+  const [loadingManageTimeline, setLoadingManageTimeline] = useState(false);
 
   const openManage = useCallback((request: SupportRequestRow) => {
     setManageRequest(request);
     setManageNotes(request.adminNotes ?? '');
     setManageAssigneeId(request.assignedAdminId ? String(request.assignedAdminId) : 'unassigned');
+    setManageStatusTimeline([]);
+  }, []);
+
+  const manageRequestId = manageRequest?._id ?? '';
+  const manageRequestStatus = manageRequest?.status ?? '';
+  const manageRequestUpdatedAt = manageRequest?.updatedAt ?? '';
+
+  useEffect(() => {
+    if (!manageRequestId) {
+      setManageStatusTimeline([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingManageTimeline(true);
+
+    fetch(`/api/support-requests/${manageRequestId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        if (Array.isArray(data.statusTimeline)) {
+          setManageStatusTimeline(data.statusTimeline);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setManageStatusTimeline([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingManageTimeline(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [manageRequestId, manageRequestStatus, manageRequestUpdatedAt, chatRefreshKey]);
+
+  useEffect(() => {
+    void getSupportSocket();
   }, []);
 
   useEffect(() => {
+    if (!isSuperAdmin) {
+      setAssignableAdmins([]);
+      return;
+    }
     fetch('/api/support/assignable-admins')
       .then((res) => (res.ok ? res.json() : { admins: [] }))
       .then((data) => setAssignableAdmins(data.admins ?? []))
       .catch(() => setAssignableAdmins([]));
-  }, []);
+  }, [isSuperAdmin]);
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
@@ -216,6 +260,17 @@ export default function SupportRequestsPage() {
       setLoading(false);
     }
   }, [pagination.page, pagination.limit, searchTerm, statusFilter, activeOnlyFilter, unassignedOnlyFilter, categoryFilter]);
+
+  const handlePageChange = useCallback((page: number) => {
+    setPagination((prev) => ({ ...prev, page }));
+  }, []);
+
+  const paginationRange = useMemo(() => {
+    if (pagination.total === 0) return null;
+    const start = (pagination.page - 1) * pagination.limit + 1;
+    const end = Math.min(pagination.page * pagination.limit, pagination.total);
+    return { start, end };
+  }, [pagination.page, pagination.limit, pagination.total]);
 
   const handleRefreshAll = useCallback(async () => {
     await Promise.all([fetchRequests(), refreshStats()]);
@@ -246,16 +301,39 @@ export default function SupportRequestsPage() {
     }
   }, [highlightRequestId, requests, activeTicketId, selectTicket]);
 
+  useEffect(() => {
+    if (loading || activeTicketId || highlightRequestId || requests.length === 0) return;
+    const firstUnread = requests.find((request) => (request.unreadByAdmin ?? 0) > 0);
+    const firstActive = requests.find((request) => isActiveStatus(request.status));
+    const pick = firstUnread ?? firstActive ?? requests[0];
+    if (pick) selectTicket(pick._id);
+  }, [loading, activeTicketId, highlightRequestId, requests, selectTicket]);
+
   const handleChatActivity = useCallback(() => {
     refreshStats();
-    if (activeTicketId) {
-      setRequests((prev) =>
-        prev.map((request) =>
-          request._id === activeTicketId ? { ...request, unreadByAdmin: 0 } : request,
-        ),
-      );
-    }
-  }, [refreshStats, activeTicketId]);
+  }, [refreshStats]);
+
+  const handleTicketUpdated = useCallback(
+    (ticketId: string, patch: Partial<SupportRequestRow>) => {
+      setRequests((prev) => {
+        const next = prev.map((request) =>
+          request._id === ticketId ? { ...request, ...patch } : request,
+        );
+        if (patch.updatedAt) {
+          return [...next].sort(
+            (a, b) =>
+              new Date(b.updatedAt || b.createdAt).getTime() -
+              new Date(a.updatedAt || a.createdAt).getTime(),
+          );
+        }
+        return next;
+      });
+      setOffPageTicket((prev) => (prev?._id === ticketId ? { ...prev, ...patch } : prev));
+      setManageRequest((prev) => (prev?._id === ticketId ? { ...prev, ...patch } : prev));
+      refreshStats();
+    },
+    [refreshStats],
+  );
 
   const activeTicket = useMemo(
     () => (activeTicketId ? requests.find((request) => request._id === activeTicketId) : null),
@@ -303,7 +381,7 @@ export default function SupportRequestsPage() {
 
   const applyManageUpdate = async (
     request: SupportRequestRow,
-    options: { status?: string; closeDialog?: boolean } = {},
+    options: { status?: string; closeDialog?: boolean; assignToCurrentAdmin?: boolean } = {},
   ) => {
     setUpdatingId(request._id);
     try {
@@ -313,17 +391,26 @@ export default function SupportRequestsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...(options.status ? { status: options.status } : {}),
-          adminNotes: manageNotes,
           previousStatus: request.status,
-          assignedAdminId: manageAssigneeId === 'unassigned' ? null : manageAssigneeId,
-          assignedAdminName: selectedAdmin?.name || '',
+          ...(isSuperAdmin ? { adminNotes: manageNotes } : {}),
+          ...(options.assignToCurrentAdmin && currentAdminId
+            ? {
+                assignedAdminId: currentAdminId,
+                assignedAdminName: currentAdminName,
+              }
+            : isSuperAdmin
+            ? {
+                assignedAdminId: manageAssigneeId === 'unassigned' ? null : manageAssigneeId,
+                assignedAdminName: selectedAdmin?.name || '',
+              }
+            : {}),
         }),
       });
       if (res.ok) {
         const updated = await res.json();
         const merged = {
           status: updated.status ?? request.status,
-          adminNotes: updated.adminNotes ?? manageNotes,
+          adminNotes: updated.adminNotes ?? request.adminNotes,
           assignedAdminId: updated.assignedAdminId ?? null,
           assignedAdminName: updated.assignedAdminName ?? '',
           pendingResolutionAt: updated.pendingResolutionAt ?? null,
@@ -338,7 +425,6 @@ export default function SupportRequestsPage() {
         setOffPageTicket((prev) =>
           prev?._id === request._id ? { ...prev, ...merged } : prev,
         );
-        setManageNotes(merged.adminNotes ?? '');
         setChatRefreshKey((key) => key + 1);
         refreshStats();
         if (options.closeDialog) setManageRequest(null);
@@ -350,6 +436,10 @@ export default function SupportRequestsPage() {
 
   const handleSaveManage = async () => {
     if (!manageRequest) return;
+    if (!isSuperAdmin) {
+      setManageRequest(null);
+      return;
+    }
     await applyManageUpdate(manageRequest, { closeDialog: true });
   };
 
@@ -386,438 +476,334 @@ export default function SupportRequestsPage() {
     label: SUPPORT_REQUEST_CATEGORY_LABELS[value] || value,
   }));
 
-  const activeOnPage = requests.filter((r) => isActiveStatus(r.status)).length;
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Support Requests</h2>
-          <p className="text-muted-foreground text-sm max-w-xl">
-            Pick a ticket to chat on the right. Use filters or search by ticket ID to find resolved
-            tickets.
+          <h2 className="text-2xl font-semibold tracking-tight">Support inbox</h2>
+          <p className="text-sm text-muted-foreground">
+            Conversations with customers — select a ticket to reply.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Card className="shadow-none border-dashed min-w-[140px]">
-            <CardContent className="flex items-center gap-3 p-3">
-              <div className="flex size-9 items-center justify-center rounded-lg bg-muted">
-                <Inbox className="size-4 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Total</p>
-                <p className="text-xl font-semibold tabular-nums">{pagination.total}</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="shadow-none border-dashed min-w-[160px]">
-            <CardContent className="flex items-center gap-3 p-3">
-              <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
-                <Clock className="size-4 text-primary" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Open & in progress</p>
-                <div className="flex items-center gap-2">
-                  {stats.openSupportRequests > 0 ? (
-                    <SupportCountBadge
-                      count={stats.openSupportRequests}
-                      className="min-h-7 min-w-7 px-2 text-xs"
-                    />
-                  ) : (
-                    <p className="text-xl font-semibold tabular-nums">0</p>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="shadow-none border-dashed min-w-[160px]">
-            <CardContent className="flex items-center gap-3 p-3">
-              <div className="flex size-9 items-center justify-center rounded-lg bg-destructive/10">
-                <MessageCircle className="size-4 text-destructive" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Unread messages</p>
-                <div className="flex items-center gap-2">
-                  {stats.unreadChatMessages > 0 ? (
-                    <SupportCountBadge
-                      count={stats.unreadChatMessages}
-                      className="min-h-7 min-w-7 px-2 text-xs"
-                    />
-                  ) : (
-                    <p className="text-xl font-semibold tabular-nums">0</p>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          {(stats as { unassignedTickets?: number }).unassignedTickets ? (
-            <Card className="shadow-none border-dashed min-w-[160px]">
-              <CardContent className="flex items-center gap-3 p-3">
-                <div className="flex size-9 items-center justify-center rounded-lg bg-amber-500/10">
-                  <User className="size-4 text-amber-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Unassigned</p>
-                  <p className="text-xl font-semibold tabular-nums">
-                    {(stats as { unassignedTickets?: number }).unassignedTickets}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary" className="font-normal">
+            {pagination.total} tickets
+          </Badge>
+          {stats.openSupportRequests > 0 && (
+            <Badge variant="outline" className="gap-1.5 font-normal">
+              <SupportCountBadge count={stats.openSupportRequests} variant="secondary" />
+              open
+            </Badge>
+          )}
+          {stats.unreadChatMessages > 0 && (
+            <Badge variant="outline" className="gap-1.5 font-normal border-destructive/30">
+              <SupportCountBadge count={stats.unreadChatMessages} />
+              unread
+            </Badge>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={handleRefreshAll}
+            disabled={loading}
+          >
+            <RefreshCw className={cn('size-4', loading && 'animate-spin')} />
+            Refresh
+          </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_420px] xl:grid-cols-[1fr_460px] lg:items-start">
-      <Card className="overflow-hidden">
-        <CardHeader className="pb-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-1">
-              <CardTitle>Request queue</CardTitle>
-              <CardDescription>
-                {loading
-                  ? 'Loading requests...'
-                  : pagination.total > 0
-                    ? `Showing ${requests.length} of ${pagination.total} requests`
-                    : 'No requests match your filters.'}
-                {activeOnPage > 0 && !statusFilter && !activeOnlyFilter && (
-                  <> · {activeOnPage} active on this page</>
-                )}
-              </CardDescription>
-            </div>
-            <div className="flex w-full items-center gap-2 lg:w-auto">
-              <div className="relative flex-1 lg:w-72">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground size-4" />
-              <Input
-                placeholder="Search ticket ID, company, subject..."
-                className="pl-9"
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setPagination((prev) => ({ ...prev, page: 1 }));
-                }}
-              />
+      <SupportInboxShell
+        sidebar={
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="shrink-0 space-y-3 border-b p-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search tickets…"
+                  className="h-9 pl-9"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setPagination((prev) => ({ ...prev, page: 1 }));
+                  }}
+                />
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="shrink-0 gap-2"
-                onClick={handleRefreshAll}
-                disabled={loading}
-              >
-                <RefreshCw className={cn('size-4', loading && 'animate-spin')} />
-                Refresh
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 pt-4 border-t">
-            <Button
-              variant={unassignedOnlyFilter ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => {
-                setUnassignedOnlyFilter((prev) => !prev);
-                setPagination((prev) => ({ ...prev, page: 1 }));
-              }}
-            >
-              Unassigned
-            </Button>
-            <Button
-              variant={activeOnlyFilter ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => {
-                setActiveOnlyFilter((prev) => !prev);
-                setStatusFilter('');
-                setPagination((prev) => ({ ...prev, page: 1 }));
-              }}
-            >
-              Needs attention
-              {stats.openSupportRequests > 0 && (
-                <SupportCountBadge count={stats.openSupportRequests} className="ml-1.5" />
-              )}
-            </Button>
-            <Select
-              value={categoryFilter || 'all'}
-              onValueChange={(value) => {
-                setCategoryFilter(value === 'all' ? '' : value);
-                setPagination((prev) => ({ ...prev, page: 1 }));
-              }}
-            >
-              <SelectTrigger className="w-48 h-8">
-                <SelectValue placeholder="Category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All categories</SelectItem>
-                {categoryOptions.map((c) => (
-                  <SelectItem key={c.value} value={c.value}>
-                    {c.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={statusFilter || 'all'}
-              onValueChange={(value) => {
-                setStatusFilter(value === 'all' ? '' : value);
-                setActiveOnlyFilter(false);
-                setPagination((prev) => ({ ...prev, page: 1 }));
-              }}
-            >
-              <SelectTrigger className="w-40 h-8">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All status</SelectItem>
-                {Object.values(SUPPORT_REQUEST_STATUS).map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {SUPPORT_REQUEST_STATUS_LABELS[s] ?? s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {(searchTerm || statusFilter || activeOnlyFilter || unassignedOnlyFilter || categoryFilter) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSearchTerm('');
-                  setStatusFilter('');
-                  setActiveOnlyFilter(false);
-                  setUnassignedOnlyFilter(false);
-                  setCategoryFilter('');
-                  setPagination((prev) => ({ ...prev, page: 1 }));
-                }}
-              >
-                Clear filters
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="pl-6 w-[38%]">Request</TableHead>
-                <TableHead className="w-[22%]">Customer</TableHead>
-                <TableHead>Assignee</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="whitespace-nowrap">Updated</TableHead>
-                <TableHead className="text-right pr-6 w-[88px]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>
-                    {Array.from({ length: 6 }).map((__, j) => (
-                      <TableCell key={j} className={j === 0 ? 'pl-6' : j === 5 ? 'pr-6' : ''}>
-                        <Skeleton className="h-4 w-full max-w-[120px]" />
-                      </TableCell>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant={unassignedOnlyFilter ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-8 w-full text-xs"
+                  onClick={() => {
+                    setUnassignedOnlyFilter((prev) => !prev);
+                    setPagination((prev) => ({ ...prev, page: 1 }));
+                  }}
+                >
+                  Unassigned
+                </Button>
+                <Button
+                  variant={activeOnlyFilter ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-8 w-full gap-1.5 text-xs"
+                  onClick={() => {
+                    setActiveOnlyFilter((prev) => !prev);
+                    setStatusFilter('');
+                    setPagination((prev) => ({ ...prev, page: 1 }));
+                  }}
+                >
+                  <span>Active</span>
+                  {stats.openSupportRequests > 0 && (
+                    <SupportCountBadge count={stats.openSupportRequests} />
+                  )}
+                </Button>
+                <Select
+                  value={statusFilter || 'all'}
+                  onValueChange={(value) => {
+                    setStatusFilter(value === 'all' ? '' : value);
+                    setActiveOnlyFilter(false);
+                    setPagination((prev) => ({ ...prev, page: 1 }));
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-full text-xs">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All status</SelectItem>
+                    {Object.values(SUPPORT_REQUEST_STATUS).map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {SUPPORT_REQUEST_STATUS_LABELS[s] ?? s}
+                      </SelectItem>
                     ))}
-                  </TableRow>
-                ))
-              ) : requests.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center h-48 text-muted-foreground">
-                    <Inbox className="size-10 mx-auto mb-3 opacity-30" />
-                    <p>No support requests found.</p>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                requests.map((request) => {
-                  const isHighlighted = highlightRequestId === request._id;
-                  const isSelected = activeTicketId === request._id;
-                  const unread = (request.unreadByAdmin ?? 0) > 0;
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={categoryFilter || 'all'}
+                  onValueChange={(value) => {
+                    setCategoryFilter(value === 'all' ? '' : value);
+                    setPagination((prev) => ({ ...prev, page: 1 }));
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-full text-xs">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All categories</SelectItem>
+                    {categoryOptions.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-                  return (
-                    <TableRow
-                      key={request._id}
-                      ref={isHighlighted ? highlightedRowRef : null}
-                      onClick={() => selectTicket(request._id)}
-                      className={cn(
-                        'cursor-pointer transition-colors border-l-2 border-l-transparent',
-                        isSelected && 'bg-primary/5 hover:bg-primary/5 border-l-primary',
-                        isHighlighted && !highlightFading && 'bg-amber-50 dark:bg-amber-950/20',
-                      )}
-                    >
-                      <TableCell className="pl-6 py-3">
-                        <div className="flex items-start gap-2 min-w-0">
-                          {unread && (
-                            <SupportCountBadge
-                              count={request.unreadByAdmin ?? 0}
-                              className="shrink-0 mt-0.5"
-                            />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {loading ? (
+                <div className="space-y-2 p-3">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Skeleton key={i} className="h-[72px] w-full rounded-lg" />
+                  ))}
+                </div>
+              ) : requests.length === 0 ? (
+                <div className="flex flex-col items-center justify-center px-6 py-16 text-center text-muted-foreground">
+                  <Inbox className="mb-3 size-10 opacity-30" />
+                  <p className="text-sm font-medium">No tickets found</p>
+                  <p className="mt-1 text-xs">Try clearing filters or search by ticket ID.</p>
+                </div>
+              ) : (
+                <ul className="divide-y">
+                  {requests.map((request) => {
+                    const isHighlighted = highlightRequestId === request._id;
+                    const isSelected = activeTicketId === request._id;
+                    const unread = (request.unreadByAdmin ?? 0) > 0;
+
+                    return (
+                      <li
+                        key={request._id}
+                        className={cn(
+                          'flex items-stretch',
+                          isSelected && 'border-l-2 border-l-primary bg-primary/8',
+                          isHighlighted && !highlightFading && 'bg-amber-50 dark:bg-amber-950/20',
+                        )}
+                      >
+                        <button
+                          type="button"
+                          ref={isHighlighted ? highlightedRowRef : null}
+                          onClick={() => selectTicket(request._id)}
+                          className={cn(
+                            'min-w-0 flex-1 px-3 py-3 text-left transition-colors hover:bg-muted/60',
+                            isSelected && 'hover:bg-primary/10',
                           )}
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium text-sm truncate" title={request.subject}>
-                              {request.subject}
-                            </p>
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
-                              <span className="font-mono text-[11px] text-muted-foreground">
-                                {getTicketReferenceId(request)}
-                              </span>
-                              <span className="text-muted-foreground/40">·</span>
-                              <span className="text-[11px] text-muted-foreground truncate">
-                                {SUPPORT_REQUEST_CATEGORY_LABELS[request.category] || request.category}
-                              </span>
+                        >
+                          <div className="flex items-start gap-2">
+                            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                              {getCompanyName(request).slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="truncate text-sm font-medium">{request.subject}</p>
+                                <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">
+                                  {formatQueueDate(request.updatedAt || request.createdAt)}
+                                </span>
+                              </div>
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                {getCompanyName(request)} · {formatUser(request.userId)}
+                              </p>
+                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                <span className="font-mono text-[10px] text-muted-foreground">
+                                  {getTicketReferenceId(request)}
+                                </span>
+                                {getStatusBadge(request.status)}
+                                {unread && (
+                                  <SupportCountBadge count={request.unreadByAdmin ?? 0} />
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate" title={getCompanyName(request)}>
-                            {getCompanyName(request)}
-                          </p>
-                          <p
-                            className="text-xs text-muted-foreground truncate mt-0.5"
-                            title={formatUser(request.userId)}
-                          >
-                            {formatUser(request.userId)}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-3 text-sm">
-                        {request.assignedAdminName ? (
-                          <span className="truncate block max-w-[100px]" title={request.assignedAdminName}>
-                            {formatAssigneeName(request.assignedAdminName)}
-                          </span>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="font-normal text-amber-700 border-amber-400/80 text-[11px]"
-                          >
-                            Unassigned
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="py-3">{getStatusBadge(request.status)}</TableCell>
-                      <TableCell
-                        className="py-3 text-xs text-muted-foreground whitespace-nowrap tabular-nums"
-                        title={new Date(request.updatedAt || request.createdAt).toLocaleString()}
-                      >
-                        {formatQueueDate(request.updatedAt || request.createdAt)}
-                      </TableCell>
-                      <TableCell className="text-right pr-4 py-3">
-                        <div className="flex justify-end gap-0.5">
+                        </button>
+                        <div className="flex shrink-0 items-start pt-2 pr-2">
                           <Button
-                            variant={isSelected ? 'secondary' : 'ghost'}
-                            size="icon"
-                            className="size-8"
-                            title="Open chat"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              selectTicket(request._id);
-                            }}
-                          >
-                            <MessageCircle className="size-4" />
-                          </Button>
-                          <Button
+                            type="button"
                             variant="ghost"
                             size="icon"
-                            className="size-8"
+                            className="size-7"
                             title="Manage ticket"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              openManage(request);
-                            }}
+                            onClick={() => openManage(request)}
                           >
-                            <Settings2 className="size-4" />
+                            <Settings2 className="size-3.5" />
                           </Button>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
-            </TableBody>
-          </Table>
-
-          {pagination.pages > 1 && (
-            <div className="flex items-center justify-between px-6 py-4 border-t">
-              <p className="text-sm text-muted-foreground">
-                Page {pagination.page} of {pagination.pages}
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPagination((prev) => ({ ...prev, page: prev.page - 1 }))}
-                  disabled={pagination.page === 1}
-                >
-                  <ChevronLeft className="size-4" />
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPagination((prev) => ({ ...prev, page: prev.page + 1 }))}
-                  disabled={pagination.page === pagination.pages}
-                >
-                  Next
-                  <ChevronRight className="size-4" />
-                </Button>
-              </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
 
-      <div className="lg:sticky lg:top-20">
-        {activeTicketId && !activeTicket && !loading && (
-          <div className="mb-2 rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            Ticket not on this page — chat history is still loaded. Clear filters or search by ticket
-            ID.
-          </div>
-        )}
-        {activeTicketId ? (
-          <TicketChatPanel
-            key={activeTicketId}
-            requestId={activeTicketId}
-            referenceId={
-              resolvedActiveTicket ? getTicketReferenceId(resolvedActiveTicket) : undefined
-            }
-            subject={resolvedActiveTicket?.subject}
-            companyName={resolvedActiveTicket ? getCompanyName(resolvedActiveTicket) : undefined}
-            userName={resolvedActiveTicket ? formatUser(resolvedActiveTicket.userId) : undefined}
-            adminNotes={resolvedActiveTicket?.adminNotes}
-            initialMessage={resolvedActiveTicket?.message}
-            currentAdminId={currentAdminId}
-            currentAdminName={currentAdminName}
-            onActivity={handleChatActivity}
-            onOpenManage={openManageForActiveTicket}
-            refreshKey={chatRefreshKey}
-            className="h-[calc(100vh-14rem)] min-h-[520px]"
-          />
-        ) : (
-          <Card className="flex h-[calc(100vh-14rem)] min-h-[520px] flex-col items-center justify-center border-dashed bg-muted/10 shadow-none">
-            <CardContent className="flex flex-col items-center gap-4 p-8 text-center">
-              <div className="flex size-14 items-center justify-center rounded-full bg-muted">
-                <MessageCircle className="size-7 text-muted-foreground/50" />
-              </div>
-              <div className="space-y-1.5 max-w-[260px]">
-                <p className="font-medium">Select a ticket</p>
-                <p className="text-sm text-muted-foreground">
-                  Click any row to open its conversation here, or use the chat icon on a row.
+            {pagination.total > 0 && (
+              <div className="flex shrink-0 flex-col gap-2 border-t px-3 py-2">
+                <p className="text-[11px] text-muted-foreground">
+                  {paginationRange
+                    ? `Showing ${paginationRange.start}–${paginationRange.end} of ${pagination.total}`
+                    : `${pagination.total} tickets`}
                 </p>
+                <div className="flex items-center justify-between gap-2">
+                  <Select
+                    value={pagination.limit.toString()}
+                    onValueChange={(value) => {
+                      setPagination((prev) => ({
+                        ...prev,
+                        limit: parseInt(value, 10),
+                        page: 1,
+                      }));
+                    }}
+                  >
+                    <SelectTrigger className="h-7 w-[4.5rem] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="25">25</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[11px] text-muted-foreground tabular-nums">
+                      {pagination.page}/{Math.max(pagination.pages, 1)}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7"
+                      onClick={() => handlePageChange(pagination.page - 1)}
+                      disabled={pagination.page === 1}
+                      aria-label="Previous page"
+                    >
+                      <ChevronLeft className="size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7"
+                      onClick={() => handlePageChange(pagination.page + 1)}
+                      disabled={pagination.page >= pagination.pages}
+                      aria-label="Next page"
+                    >
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  </div>
+                </div>
               </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-      </div>
+            )}
+          </div>
+        }
+        main={
+          <>
+            {activeTicketId && !activeTicket && !loading && (
+              <div className="shrink-0 border-b bg-amber-50/80 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                This ticket is not on the current page — conversation is still available below.
+              </div>
+            )}
+            {activeTicketId ? (
+              <TicketChatPanel
+                key={activeTicketId}
+                requestId={activeTicketId}
+                referenceId={
+                  resolvedActiveTicket ? getTicketReferenceId(resolvedActiveTicket) : undefined
+                }
+                subject={resolvedActiveTicket?.subject}
+                companyName={resolvedActiveTicket ? getCompanyName(resolvedActiveTicket) : undefined}
+                userName={resolvedActiveTicket ? formatUser(resolvedActiveTicket.userId) : undefined}
+                adminNotes={resolvedActiveTicket?.adminNotes}
+                initialMessage={resolvedActiveTicket?.message}
+                currentAdminId={currentAdminId}
+                currentAdminName={currentAdminName}
+                onActivity={handleChatActivity}
+                onTicketLoaded={(ticket) => {
+                  if (!activeTicketId) return;
+                  handleTicketUpdated(activeTicketId, {
+                    status: ticket.status,
+                    adminNotes: ticket.adminNotes,
+                    subject: ticket.subject,
+                    message: ticket.message,
+                    unreadByAdmin: ticket.unreadByAdmin,
+                    assignedAdminId: ticket.assignedAdminId,
+                    assignedAdminName: ticket.assignedAdminName,
+                    updatedAt: ticket.updatedAt,
+                  });
+                }}
+                onOpenManage={openManageForActiveTicket}
+                refreshKey={chatRefreshKey}
+                className="h-full min-h-0"
+              />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-muted-foreground">
+                <Inbox className="size-12 opacity-25" />
+                <div>
+                  <p className="font-medium text-foreground">No ticket selected</p>
+                  <p className="mt-1 max-w-sm text-sm">
+                    {loading ? 'Loading tickets…' : 'Choose a conversation from the list to start replying.'}
+                  </p>
+                </div>
+              </div>
+            )}
+          </>
+        }
+      />
 
       <Dialog
         open={!!manageRequest}
         onOpenChange={(open) => !open && setManageRequest(null)}
       >
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="flex max-h-[min(90vh,720px)] max-w-lg flex-col gap-0 overflow-hidden p-0">
           {manageRequest && (
             <>
-              <DialogHeader>
-                <DialogTitle>{manageRequest.subject}</DialogTitle>
+              <DialogHeader className="space-y-1 border-b px-6 py-4 text-left">
+                <DialogTitle className="pr-8 leading-snug">{manageRequest.subject}</DialogTitle>
                 <DialogDescription>
                   {getTicketReferenceId(manageRequest)} ·{' '}
                   {SUPPORT_REQUEST_CATEGORY_LABELS[manageRequest.category]} ·{' '}
@@ -825,150 +811,214 @@ export default function SupportRequestsPage() {
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-4">
-                <div className="grid gap-3 rounded-lg border bg-muted/30 p-3 text-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-muted-foreground">Submitted by</span>
-                    <span className="font-medium text-right">
-                      {formatUser(manageRequest.userId)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-muted-foreground">Submitted</span>
-                    <span>{new Date(manageRequest.createdAt).toLocaleString()}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-muted-foreground">Current status</span>
-                    {getStatusBadge(manageRequest.status)}
-                  </div>
-                </div>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                <div className="space-y-6 px-6 py-4">
+                  <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <dt className="text-muted-foreground">Submitted by</dt>
+                      <dd className="font-medium">{formatUser(manageRequest.userId)}</dd>
+                    </div>
+                    <div className="space-y-1">
+                      <dt className="text-muted-foreground">Submitted</dt>
+                      <dd>{new Date(manageRequest.createdAt).toLocaleString()}</dd>
+                    </div>
+                    <div className="space-y-1 sm:col-span-2">
+                      <dt className="text-muted-foreground">Status</dt>
+                      <dd>{getStatusBadge(manageRequest.status)}</dd>
+                    </div>
+                    <div className="space-y-1 sm:col-span-2">
+                      <dt className="text-muted-foreground">Assigned to</dt>
+                      <dd className="font-medium">
+                        {manageRequest.assignedAdminName?.trim() || 'Unassigned'}
+                      </dd>
+                    </div>
+                  </dl>
 
-                <div className="space-y-2">
-                  <Label>Customer message</Label>
-                  <div className="rounded-md border bg-background p-3 text-sm whitespace-pre-wrap max-h-40 overflow-y-auto">
-                    {manageRequest.message?.trim() ? (
-                      manageRequest.message
-                    ) : (
-                      <span className="text-muted-foreground italic">
-                        No description stored — check the conversation panel for messages.
-                      </span>
-                    )}
-                  </div>
-                </div>
+                  <Separator />
 
-                {manageRequest.adminNotes?.trim() ? (
                   <div className="space-y-2">
-                    <Label>Saved internal notes</Label>
-                    <div className="rounded-md border border-amber-200/80 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/20 p-3 text-sm whitespace-pre-wrap max-h-32 overflow-y-auto">
-                      {manageRequest.adminNotes}
+                    <Label>Customer message</Label>
+                    <div className="rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap max-h-32 overflow-y-auto">
+                      {manageRequest.message?.trim() ? (
+                        manageRequest.message
+                      ) : (
+                        <span className="text-muted-foreground italic">
+                          No description stored — check the conversation for messages.
+                        </span>
+                      )}
                     </div>
                   </div>
-                ) : null}
 
-                <div className="space-y-2">
-                  <Label htmlFor="manage-assignee">Assigned admin</Label>
-                  <Select
-                    value={manageAssigneeId || 'unassigned'}
-                    onValueChange={setManageAssigneeId}
-                    disabled={updatingId === manageRequest._id}
-                  >
-                    <SelectTrigger id="manage-assignee">
-                      <SelectValue placeholder="Unassigned" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unassigned">Unassigned</SelectItem>
-                      {assignableAdmins.map((admin) => (
-                        <SelectItem key={admin.id} value={admin.id}>
-                          {admin.name}
-                          {admin.isSuperAdmin ? ' (Super admin)' : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                  <Separator />
 
-                <div className="space-y-3">
-                  <Label>Status</Label>
-                  <div className="flex items-center gap-2">
-                    {getStatusBadge(manageRequest.status)}
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <Label>Ticket history</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Read-only audit trail — who changed the ticket and when.
+                      </p>
+                    </div>
+                    <div className="rounded-lg border bg-muted/20 p-3">
+                      <TicketStatusTimeline
+                        entries={manageStatusTimeline}
+                        loading={loadingManageTimeline}
+                      />
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Customers are notified automatically when the ticket status changes.
-                  </p>
-                  {manageRequest.status === SUPPORT_REQUEST_STATUS.PENDING_RESOLUTION && (
-                    <p className="text-xs text-muted-foreground rounded-md border bg-blue-50 dark:bg-blue-950/20 px-3 py-2">
-                      Waiting for the customer to confirm this ticket is resolved. It will close
-                      automatically after 7 days if they do not respond.
+
+                  <Separator />
+
+                  <div className="space-y-2">
+                    <Label htmlFor={isSuperAdmin ? 'manage-notes' : undefined}>
+                      Private team notes
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      {isSuperAdmin
+                        ? 'Internal only — not visible to the customer. Only super admins can add or edit these notes.'
+                        : 'Internal only — not visible to the customer. Read-only for admins.'}
                     </p>
-                  )}
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {manageRequest.status === SUPPORT_REQUEST_STATUS.OPEN && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
+                    {isSuperAdmin ? (
+                      <Textarea
+                        id="manage-notes"
+                        rows={4}
+                        placeholder="Add context for other admins (billing details, steps taken, escalation notes…)"
+                        value={manageNotes}
+                        onChange={(e) => setManageNotes(e.target.value)}
                         disabled={updatingId === manageRequest._id}
-                        onClick={() =>
-                          applyManageUpdate(manageRequest, {
-                            status: SUPPORT_REQUEST_STATUS.IN_PROGRESS,
-                          })
-                        }
-                      >
-                        Take ticket
-                      </Button>
-                    )}
-                    {(manageRequest.status === SUPPORT_REQUEST_STATUS.OPEN ||
-                      manageRequest.status === SUPPORT_REQUEST_STATUS.IN_PROGRESS) && (
-                      <Button
-                        type="button"
-                        variant="default"
-                        size="sm"
-                        disabled={updatingId === manageRequest._id}
-                        onClick={() =>
-                          applyManageUpdate(manageRequest, {
-                            status: SUPPORT_REQUEST_STATUS.RESOLVED,
-                            closeDialog: true,
-                          })
-                        }
-                      >
-                        Close ticket
-                      </Button>
-                    )}
-                    {(manageRequest.status === SUPPORT_REQUEST_STATUS.PENDING_RESOLUTION ||
-                      manageRequest.status === SUPPORT_REQUEST_STATUS.RESOLVED ||
-                      manageRequest.status === SUPPORT_REQUEST_STATUS.CLOSED) && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={updatingId === manageRequest._id}
-                        onClick={() =>
-                          applyManageUpdate(manageRequest, {
-                            status: SUPPORT_REQUEST_STATUS.IN_PROGRESS,
-                          })
-                        }
-                      >
-                        Reopen ticket
-                      </Button>
+                        className="min-h-[100px] resize-y"
+                      />
+                    ) : manageNotes.trim() ? (
+                      <div className="rounded-md border border-amber-200/80 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/20 p-3 text-sm whitespace-pre-wrap max-h-40 overflow-y-auto">
+                        {manageNotes}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic rounded-md border border-dashed bg-muted/20 px-3 py-4 text-center">
+                        No private notes yet.
+                      </p>
                     )}
                   </div>
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="manage-notes">Internal notes (optional)</Label>
-                  <Textarea
-                    id="manage-notes"
-                    placeholder="Notes for your team — not visible to the customer"
-                    value={manageNotes}
-                    onChange={(e) => setManageNotes(e.target.value)}
-                    rows={3}
-                    disabled={updatingId === manageRequest._id}
-                  />
+                  {isSuperAdmin ? (
+                    <>
+                      <Separator />
+                      <div className="space-y-2">
+                        <Label htmlFor="manage-assignee">Assigned admin</Label>
+                        <Select
+                          value={manageAssigneeId || 'unassigned'}
+                          onValueChange={setManageAssigneeId}
+                          disabled={updatingId === manageRequest._id}
+                        >
+                          <SelectTrigger id="manage-assignee">
+                            <SelectValue placeholder="Unassigned" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="unassigned">Unassigned</SelectItem>
+                            {assignableAdmins.map((admin) => (
+                              <SelectItem key={admin.id} value={admin.id}>
+                                {admin.name}
+                                {admin.isSuperAdmin ? ' (Super admin)' : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </>
+                  ) : null}
+
+                  <Separator />
+
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <Label>Quick actions</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Customers are notified automatically when the ticket status changes.
+                      </p>
+                    </div>
+                    {manageRequest.status === SUPPORT_REQUEST_STATUS.PENDING_RESOLUTION && (
+                      <p className="text-xs text-muted-foreground rounded-md border bg-blue-50 px-3 py-2 dark:bg-blue-950/20">
+                        Waiting for the customer to confirm resolution. Auto-closes after 7 days
+                        without a response.
+                      </p>
+                    )}
+                    {(manageRequest.status === SUPPORT_REQUEST_STATUS.RESOLVED ||
+                      manageRequest.status === SUPPORT_REQUEST_STATUS.CLOSED) && (
+                      <p className="text-xs text-muted-foreground rounded-md border bg-muted/40 px-3 py-2">
+                        This ticket was resolved and cannot be reopened.
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {manageRequest.status === SUPPORT_REQUEST_STATUS.OPEN &&
+                        !isTicketAssigned(manageRequest) && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={updatingId === manageRequest._id || !currentAdminId}
+                          onClick={() =>
+                            applyManageUpdate(manageRequest, {
+                              status: SUPPORT_REQUEST_STATUS.IN_PROGRESS,
+                              assignToCurrentAdmin: true,
+                            })
+                          }
+                        >
+                          Take ticket
+                        </Button>
+                      )}
+                      {manageRequest.status === SUPPORT_REQUEST_STATUS.OPEN &&
+                        isAssignedToAdmin(manageRequest, currentAdminId) && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={updatingId === manageRequest._id}
+                          onClick={() =>
+                            applyManageUpdate(manageRequest, {
+                              status: SUPPORT_REQUEST_STATUS.IN_PROGRESS,
+                            })
+                          }
+                        >
+                          Start working
+                        </Button>
+                      )}
+                      {(manageRequest.status === SUPPORT_REQUEST_STATUS.OPEN ||
+                        manageRequest.status === SUPPORT_REQUEST_STATUS.IN_PROGRESS) && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={updatingId === manageRequest._id}
+                          onClick={() =>
+                            applyManageUpdate(manageRequest, {
+                              status: SUPPORT_REQUEST_STATUS.RESOLVED,
+                              closeDialog: true,
+                            })
+                          }
+                        >
+                          Close ticket
+                        </Button>
+                      )}
+                      {manageRequest.status === SUPPORT_REQUEST_STATUS.PENDING_RESOLUTION && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={updatingId === manageRequest._id}
+                          onClick={() =>
+                            applyManageUpdate(manageRequest, {
+                              status: SUPPORT_REQUEST_STATUS.IN_PROGRESS,
+                            })
+                          }
+                        >
+                          Reopen ticket
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+              <DialogFooter className="gap-2 border-t px-6 py-4 sm:justify-between">
                 <Button
+                  type="button"
                   variant="outline"
                   onClick={() => {
                     selectTicket(manageRequest._id);
@@ -978,8 +1028,8 @@ export default function SupportRequestsPage() {
                   <MessageCircle className="size-4" />
                   Open chat
                 </Button>
-                <div className="flex gap-2 w-full sm:w-auto justify-end">
-                  <Button variant="ghost" onClick={() => setManageRequest(null)}>
+                <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">
+                  <Button variant="outline" onClick={() => setManageRequest(null)}>
                     Cancel
                   </Button>
                   <Button
@@ -989,10 +1039,12 @@ export default function SupportRequestsPage() {
                     {updatingId === manageRequest._id ? (
                       <>
                         <Loader2 className="size-4 animate-spin" />
-                        Saving...
+                        Saving…
                       </>
+                    ) : isSuperAdmin ? (
+                      'Save changes'
                     ) : (
-                      'Save assignment & notes'
+                      'Done'
                     )}
                   </Button>
                 </div>
