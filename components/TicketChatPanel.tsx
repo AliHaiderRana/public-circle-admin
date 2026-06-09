@@ -4,10 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Send, RefreshCw, Lock, Settings2, Mail } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Loader2, Send, RefreshCw, Lock, Settings2, Mail, Building2 } from 'lucide-react';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { TicketStatusTimeline } from '@/components/support/TicketStatusTimeline';
-import type { StatusTimelineEntry } from '@/lib/support-status-timeline.util';
 import {
   SUPPORT_CHAT_SENDER_TYPE,
   SUPPORT_REQUEST_CATEGORY_LABELS,
@@ -24,7 +25,7 @@ import {
 } from '@/lib/support-socket';
 
 const CHAT_PAGE_SIZE = 30;
-const CHAT_POLL_MS = 5000;
+const CHAT_POLL_MS = 15000;
 
 type ChatMessage = {
   _id: string;
@@ -33,12 +34,16 @@ type ChatMessage = {
   senderAdminId?: string;
   message: string;
   createdAt: string;
+  visibility?: 'CUSTOMER' | 'INTERNAL';
 };
 
 type TicketChatPanelProps = {
   requestId: string;
   referenceId?: string;
   subject?: string;
+  ticketMessage?: string;
+  adminNotes?: string;
+  companyId?: string;
   companyName?: string;
   userName?: string;
   currentAdminId?: string;
@@ -47,17 +52,16 @@ type TicketChatPanelProps = {
   onActivity?: () => void;
   onOpenManage?: () => void;
   onTicketLoaded?: (ticket: {
-    adminNotes?: string;
-    message?: string;
-    subject?: string;
     status?: string;
+    message?: string;
+    adminNotes?: string;
+    subject?: string;
     unreadByAdmin?: number;
     assignedAdminId?: string | null;
     assignedAdminName?: string;
     updatedAt?: string;
+    latestMessageId?: string | null;
   }) => void;
-  adminNotes?: string;
-  initialMessage?: string;
   showRefresh?: boolean;
   refreshKey?: number;
 };
@@ -105,6 +109,9 @@ export function TicketChatPanel({
   requestId,
   referenceId,
   subject,
+  ticketMessage: ticketMessageProp,
+  adminNotes: adminNotesProp,
+  companyId: companyIdProp,
   companyName,
   userName,
   currentAdminId,
@@ -113,8 +120,6 @@ export function TicketChatPanel({
   onActivity,
   onOpenManage,
   onTicketLoaded,
-  adminNotes: adminNotesProp,
-  initialMessage: initialMessageProp,
   showRefresh = true,
   refreshKey = 0,
 }: TicketChatPanelProps) {
@@ -125,14 +130,15 @@ export function TicketChatPanel({
   const [refreshing, setRefreshing] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [reply, setReply] = useState('');
+  const [replyInternal, setReplyInternal] = useState(false);
   const [sending, setSending] = useState(false);
   const [ticketStatus, setTicketStatus] = useState<string | null>(null);
   const [loadedSubject, setLoadedSubject] = useState<string | undefined>();
+  const [loadedTicketMessage, setLoadedTicketMessage] = useState<string | undefined>();
   const [loadedAdminNotes, setLoadedAdminNotes] = useState<string | undefined>();
-  const [loadedInitialMessage, setLoadedInitialMessage] = useState<string | undefined>();
   const [loadedCategory, setLoadedCategory] = useState<string | undefined>();
   const [loadedCreatedAt, setLoadedCreatedAt] = useState<string | undefined>();
-  const [statusTimeline, setStatusTimeline] = useState<StatusTimelineEntry[]>([]);
+  const [loadedCompanyId, setLoadedCompanyId] = useState<string | undefined>();
   const socketReadyRef = useRef(false);
   const [userOnline, setUserOnline] = useState<boolean | null>(null);
   const [deliveryNotice, setDeliveryNotice] = useState<string | null>(null);
@@ -190,42 +196,44 @@ export function TicketChatPanel({
           setLoadedSubject(data.ticket.subject);
         }
         if (!isOlderPage && data.ticket) {
-          const notes = typeof data.ticket.adminNotes === 'string' ? data.ticket.adminNotes : '';
-          const initial =
-            typeof data.ticket.message === 'string' ? data.ticket.message : '';
-          setLoadedAdminNotes(notes);
-          setLoadedInitialMessage(initial);
           setLoadedCategory(
             typeof data.ticket.category === 'string' ? data.ticket.category : undefined,
           );
           setLoadedCreatedAt(
             typeof data.ticket.createdAt === 'string' ? data.ticket.createdAt : undefined,
           );
-          setStatusTimeline(
-            Array.isArray(data.ticket.statusTimeline) ? data.ticket.statusTimeline : [],
-          );
+          if (typeof data.ticket.message === 'string') {
+            setLoadedTicketMessage(data.ticket.message);
+          }
+          if (typeof data.ticket.adminNotes === 'string') {
+            setLoadedAdminNotes(data.ticket.adminNotes);
+          }
+          if (data.ticket.companyId) {
+            setLoadedCompanyId(String(data.ticket.companyId));
+          }
           if (typeof data.userOnline === 'boolean') {
             setUserOnline(data.userOnline);
           } else if (typeof data.ticket.userOnline === 'boolean') {
             setUserOnline(data.ticket.userOnline);
           }
+
+          const latestMessageId =
+            !isOlderPage && incoming.length > 0 ? incoming[incoming.length - 1]._id : null;
           const metaKey = [
-            notes,
-            initial,
-            data.ticket.subject ?? '',
             data.ticket.status ?? '',
             data.ticket.unreadByAdmin ?? '',
             data.ticket.assignedAdminId ?? '',
             data.ticket.updatedAt ?? '',
-            Array.isArray(data.ticket.statusTimeline) ? data.ticket.statusTimeline.length : 0,
+            latestMessageId ?? '',
           ].join('|');
+
           if (metaKey !== lastTicketMetaRef.current) {
             lastTicketMetaRef.current = metaKey;
             onTicketLoadedRef.current?.({
-              adminNotes: notes,
-              message: initial,
-              subject: data.ticket.subject,
               status: data.ticket.status,
+              subject: data.ticket.subject,
+              message: data.ticket.message,
+              adminNotes: data.ticket.adminNotes,
               unreadByAdmin:
                 typeof data.ticket.unreadByAdmin === 'number'
                   ? data.ticket.unreadByAdmin
@@ -233,6 +241,7 @@ export function TicketChatPanel({
               assignedAdminId: data.ticket.assignedAdminId ?? null,
               assignedAdminName: data.ticket.assignedAdminName,
               updatedAt: data.ticket.updatedAt,
+              latestMessageId,
             });
           }
         }
@@ -277,11 +286,11 @@ export function TicketChatPanel({
     setTotalCount(0);
     setTicketStatus(null);
     setLoadedSubject(undefined);
+    setLoadedTicketMessage(undefined);
     setLoadedAdminNotes(undefined);
-    setLoadedInitialMessage(undefined);
     setLoadedCategory(undefined);
     setLoadedCreatedAt(undefined);
-    setStatusTimeline([]);
+    setLoadedCompanyId(undefined);
     socketReadyRef.current = false;
     setUserOnline(null);
     setDeliveryNotice(null);
@@ -300,6 +309,7 @@ export function TicketChatPanel({
     load();
 
     const interval = setInterval(() => {
+      if (socketReadyRef.current) return;
       load(undefined, true);
     }, CHAT_POLL_MS);
 
@@ -313,7 +323,6 @@ export function TicketChatPanel({
         if (payload.supportRequestId !== requestId || !payload.message) return;
         stickToBottomRef.current = true;
         setMessages((prev) => mergeMessages(prev, [payload.message]));
-        void fetchMessagesRef.current(undefined, { silent: true });
         onActivityRef.current?.();
       });
 
@@ -377,12 +386,15 @@ export function TicketChatPanel({
         senderAdminId?: string;
         message: string;
         createdAt: string;
+        visibility?: 'CUSTOMER' | 'INTERNAL';
         emailSent?: boolean;
         userWasOnline?: boolean;
       } | null = null;
 
       try {
-        const ack = await sendSupportChatMessage(requestId, trimmed);
+        const ack = await sendSupportChatMessage(requestId, trimmed, {
+          internal: replyInternal,
+        });
         if (ack.message) {
           sent = ack.message;
         }
@@ -390,7 +402,7 @@ export function TicketChatPanel({
         const res = await fetch(`/api/support-requests/${requestId}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: trimmed }),
+          body: JSON.stringify({ message: trimmed, internal: replyInternal }),
         });
         if (res.ok) {
           sent = await res.json();
@@ -401,8 +413,11 @@ export function TicketChatPanel({
         stickToBottomRef.current = true;
         setMessages((prev) => mergeMessages(prev, [sent]));
         setReply('');
+        setReplyInternal(false);
         onActivityRef.current?.();
-        if (sent.emailSent) {
+        if (sent.visibility === 'INTERNAL') {
+          setDeliveryNotice('Internal note saved — not visible to the customer.');
+        } else if (sent.emailSent) {
           setDeliveryNotice('Message sent — customer is offline and was notified by email.');
         } else if (sent.userWasOnline) {
           setDeliveryNotice('Message sent — customer is online in Public Circles.');
@@ -420,8 +435,8 @@ export function TicketChatPanel({
   };
 
   const displaySubject = subject || loadedSubject || 'Support ticket';
-  const rawAdminNotes = (adminNotesProp ?? loadedAdminNotes ?? '').trim();
-  const displayInitialMessage = (initialMessageProp ?? loadedInitialMessage ?? '').trim();
+  const displayTicketMessage = (ticketMessageProp ?? loadedTicketMessage ?? '').trim();
+  const displayAdminNotes = (adminNotesProp ?? loadedAdminNotes ?? '').trim();
   const categoryLabel = loadedCategory
     ? SUPPORT_REQUEST_CATEGORY_LABELS[loadedCategory] ?? loadedCategory
     : null;
@@ -429,15 +444,11 @@ export function TicketChatPanel({
     ? new Date(loadedCreatedAt).toLocaleString()
     : null;
 
-  const displayAdminNotes = rawAdminNotes;
-  const showTicketHistory =
-    Boolean(displayInitialMessage || displayAdminNotes || statusTimeline.length > 0) &&
-    !loading;
-
   const isReadOnly = ticketStatus ? READ_ONLY_STATUSES.has(ticketStatus) : false;
   const statusLabel = ticketStatus
     ? SUPPORT_REQUEST_STATUS_LABELS[ticketStatus] ?? ticketStatus
     : null;
+  const companyProfileId = companyIdProp || loadedCompanyId;
 
   return (
     <div
@@ -525,6 +536,20 @@ export function TicketChatPanel({
             )}
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {companyProfileId && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                asChild
+              >
+                <Link href={`/dashboard/companies/${companyProfileId}`}>
+                  <Building2 className="size-3 mr-1.5" />
+                  View company
+                </Link>
+              </Button>
+            )}
             {onOpenManage && (
               <Button
                 type="button"
@@ -585,54 +610,38 @@ export function TicketChatPanel({
             </Button>
           </div>
         )}
-        {showTicketHistory && (
-          <div className="rounded-xl border bg-background p-3.5 space-y-3 shadow-sm">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Ticket history
-            </p>
-            {statusTimeline.length > 0 && (
-              <TicketStatusTimeline entries={statusTimeline} compact />
-            )}
-            {displayInitialMessage && (
-              <div className="rounded-lg border bg-muted/30 p-3">
-                <p className="text-[11px] font-medium text-muted-foreground mb-1.5">
-                  Original customer message
-                  {submittedLabel ? (
-                    <span className="font-normal"> · {submittedLabel}</span>
-                  ) : null}
+        {(displayTicketMessage || displayAdminNotes) && (
+          <div className="space-y-3 pb-1">
+            {displayTicketMessage ? (
+              <div className="rounded-lg border bg-background p-3">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Ticket details
                 </p>
-                <p className="text-sm whitespace-pre-wrap leading-relaxed">{displayInitialMessage}</p>
+                <p className="mt-2 text-sm whitespace-pre-wrap leading-relaxed">
+                  {displayTicketMessage}
+                </p>
               </div>
-            )}
-            {displayAdminNotes && (
-              <div className="rounded-lg border border-amber-200/80 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/20 p-3">
-                <p className="text-[11px] font-medium text-amber-900 dark:text-amber-200 mb-1">
+            ) : null}
+            {displayAdminNotes ? (
+              <div className="rounded-lg border border-amber-200/80 bg-amber-50/80 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-amber-800 dark:text-amber-300">
                   Private team notes
                 </p>
-                <p className="text-[11px] text-muted-foreground mb-1.5">
-                  Read-only — not visible to the customer.
+                <p className="mt-1 text-[11px] text-amber-700/80 dark:text-amber-400/80">
+                  Internal only — not visible to the customer.
                 </p>
-                <p className="text-sm whitespace-pre-wrap leading-relaxed text-foreground/90">
+                <p className="mt-2 text-sm whitespace-pre-wrap leading-relaxed">
                   {displayAdminNotes}
                 </p>
               </div>
-            )}
+            ) : null}
           </div>
         )}
-        {showTicketHistory && messages.length > 0 && (
-          <div className="flex items-center gap-3 py-1">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              Conversation
-            </span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-        )}
-        {loading && messages.length === 0 && !showTicketHistory ? (
+        {loading && messages.length === 0 ? (
           <div className="flex justify-center py-16">
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
           </div>
-        ) : messages.length === 0 && !showTicketHistory ? (
+        ) : messages.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-16">No messages yet.</p>
         ) : (
           messages.map((msg) => {
@@ -650,6 +659,7 @@ export function TicketChatPanel({
             }
 
             const isAdmin = msg.senderType === SUPPORT_CHAT_SENDER_TYPE.ADMIN;
+            const isInternal = msg.visibility === 'INTERNAL';
             const label = isAdmin
               ? getAdminMessageLabel(
                   msg.senderName,
@@ -669,21 +679,24 @@ export function TicketChatPanel({
                     )}
                   >
                     {label}
+                    {isInternal ? (
+                      <span className="ml-1.5 font-normal text-amber-700 dark:text-amber-300">
+                        · Internal
+                      </span>
+                    ) : null}
                   </p>
                   <div
                     className={cn(
                       'rounded-2xl px-3.5 py-2.5 text-sm shadow-sm',
                       isAdmin
-                        ? 'bg-muted text-foreground border border-border/80 rounded-br-md'
+                        ? isInternal
+                          ? 'bg-amber-50/90 text-foreground border border-amber-200/80 border-dashed rounded-br-md dark:bg-amber-950/25 dark:border-amber-900/50'
+                          : 'bg-muted text-foreground border border-border/80 rounded-br-md'
                         : 'bg-background border rounded-bl-md',
                     )}
                   >
                     <p className="whitespace-pre-wrap leading-relaxed">{msg.message}</p>
-                    <p
-                      className={cn(
-                        'text-[10px] mt-1.5 tabular-nums text-muted-foreground text-right',
-                      )}
-                    >
+                    <p className="text-[10px] mt-1.5 tabular-nums text-muted-foreground text-right">
                       {formatMessageTime(msg.createdAt)}
                     </p>
                   </div>
@@ -703,34 +716,52 @@ export function TicketChatPanel({
             Replies disabled while ticket is {statusLabel?.toLowerCase() ?? 'closed'}.
           </p>
         ) : (
-          <div className="flex gap-2 items-end">
-            <Textarea
-              placeholder="Type a reply…"
-              value={reply}
-              onChange={(e) => setReply(e.target.value)}
-              rows={2}
-              disabled={sending}
-              className="min-h-[72px] resize-none flex-1"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id={`internal-reply-${requestId}`}
+                checked={replyInternal}
+                onCheckedChange={(checked) => setReplyInternal(checked === true)}
+                disabled={sending}
+              />
+              <Label
+                htmlFor={`internal-reply-${requestId}`}
+                className="text-xs text-muted-foreground cursor-pointer"
+              >
+                Internal note (not visible to customer)
+              </Label>
+            </div>
+            <div className="flex gap-2 items-end">
+              <Textarea
+                placeholder={
+                  replyInternal ? 'Add an internal team note…' : 'Type a reply to the customer…'
                 }
-              }}
-            />
-            <Button
-              onClick={handleSend}
-              disabled={sending || !reply.trim()}
-              size="icon"
-              className="size-10 shrink-0"
-              title="Send reply"
-            >
-              {sending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Send className="size-4" />
-              )}
-            </Button>
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                rows={2}
+                disabled={sending}
+                className="min-h-[72px] resize-none flex-1"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+              />
+              <Button
+                onClick={handleSend}
+                disabled={sending || !reply.trim()}
+                size="icon"
+                className="size-10 shrink-0"
+                title={replyInternal ? 'Save internal note' : 'Send reply'}
+              >
+                {sending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Send className="size-4" />
+                )}
+              </Button>
+            </div>
           </div>
         )}
       </div>

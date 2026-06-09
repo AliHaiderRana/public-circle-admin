@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -49,7 +49,11 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { formatAdminDisplayName, formatSupportReferenceId } from '@/lib/support-admin.util';
 import { getSupportSocket } from '@/lib/support-socket';
-import type { StatusTimelineEntry } from '@/lib/support-status-timeline.util';
+import {
+  buildTicketHistoryForAdmin,
+  type StatusTimelineEntry,
+} from '@/lib/support-status-timeline.util';
+import type { AssignmentHistoryEntry } from '@/lib/support-assignment.util';
 
 type SupportRequestRow = {
   _id: string;
@@ -126,33 +130,44 @@ function isAssignedToAdmin(request: SupportRequestRow, adminId?: string): boolea
 }
 
 export default function SupportRequestsPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const { user } = useAuth();
   const currentAdminId = user?.id ? String(user.id) : undefined;
   const currentAdminName = formatAdminDisplayName(user?.name, user?.email);
   const isSuperAdmin = Boolean(user?.isSuperAdmin);
   const highlightRequestId = searchParams.get('highlight');
-  const activeTicketId = searchParams.get('ticket');
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(
+    () => searchParams.get('ticket'),
+  );
   const { stats, refresh: refreshStats } = useSupportStats();
   const highlightedRowRef = useRef<HTMLButtonElement>(null);
+  const resolvedActiveTicketRef = useRef<SupportRequestRow | null>(null);
 
-  const selectTicket = useCallback(
-    (ticketId: string | null) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (ticketId) {
-        params.set('ticket', ticketId);
-      } else {
-        params.delete('ticket');
-      }
-      const qs = params.toString();
-      router.replace(
-        qs ? `/dashboard/support-requests?${qs}` : '/dashboard/support-requests',
-        { scroll: false },
-      );
-    },
-    [router, searchParams],
-  );
+  useEffect(() => {
+    const ticketFromUrl = searchParams.get('ticket');
+    setSelectedTicketId((current) => (current === ticketFromUrl ? current : ticketFromUrl));
+  }, [searchParams]);
+
+  const selectTicket = useCallback((ticketId: string | null) => {
+    setSelectedTicketId(ticketId || null);
+  }, []);
+
+  useEffect(() => {
+    const ticketFromUrl = searchParams.get('ticket');
+    if (ticketFromUrl === selectedTicketId) return;
+
+    const params = new URLSearchParams(searchParams.toString());
+    if (selectedTicketId) {
+      params.set('ticket', selectedTicketId);
+    } else {
+      params.delete('ticket');
+    }
+    const qs = params.toString();
+    const nextUrl = qs ? `${pathname}?${qs}` : pathname;
+    router.replace(nextUrl, { scroll: false });
+  }, [selectedTicketId, searchParams, pathname, router]);
 
   const [requests, setRequests] = useState<SupportRequestRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -177,21 +192,37 @@ export default function SupportRequestsPage() {
   const [offPageTicket, setOffPageTicket] = useState<SupportRequestRow | null>(null);
   const [manageStatusTimeline, setManageStatusTimeline] = useState<StatusTimelineEntry[]>([]);
   const [loadingManageTimeline, setLoadingManageTimeline] = useState(false);
+  const [manageAssignmentHistory, setManageAssignmentHistory] = useState<AssignmentHistoryEntry[]>(
+    [],
+  );
+  const [manageOriginalAssigneeId, setManageOriginalAssigneeId] = useState('unassigned');
+  const [chatAnchorMessageId, setChatAnchorMessageId] = useState<string | null>(null);
+  const [manageSaveError, setManageSaveError] = useState('');
 
   const openManage = useCallback((request: SupportRequestRow) => {
     setManageRequest(request);
     setManageNotes(request.adminNotes ?? '');
-    setManageAssigneeId(request.assignedAdminId ? String(request.assignedAdminId) : 'unassigned');
+    const assigneeId = request.assignedAdminId ? String(request.assignedAdminId) : 'unassigned';
+    setManageAssigneeId(assigneeId);
+    setManageOriginalAssigneeId(assigneeId);
+    setManageSaveError('');
     setManageStatusTimeline([]);
+    setManageAssignmentHistory([]);
   }, []);
 
   const manageRequestId = manageRequest?._id ?? '';
   const manageRequestStatus = manageRequest?.status ?? '';
   const manageRequestUpdatedAt = manageRequest?.updatedAt ?? '';
 
+  const manageTicketHistory = useMemo(
+    () => buildTicketHistoryForAdmin(manageStatusTimeline, manageAssignmentHistory),
+    [manageStatusTimeline, manageAssignmentHistory],
+  );
+
   useEffect(() => {
     if (!manageRequestId) {
       setManageStatusTimeline([]);
+      setManageAssignmentHistory([]);
       return;
     }
 
@@ -204,6 +235,9 @@ export default function SupportRequestsPage() {
         if (cancelled || !data) return;
         if (Array.isArray(data.statusTimeline)) {
           setManageStatusTimeline(data.statusTimeline);
+        }
+        if (Array.isArray(data.assignmentHistory)) {
+          setManageAssignmentHistory(data.assignmentHistory);
         }
       })
       .catch(() => {
@@ -274,10 +308,10 @@ export default function SupportRequestsPage() {
 
   const handleRefreshAll = useCallback(async () => {
     await Promise.all([fetchRequests(), refreshStats()]);
-    if (activeTicketId) {
+    if (selectedTicketId) {
       setChatRefreshKey((key) => key + 1);
     }
-  }, [fetchRequests, refreshStats, activeTicketId]);
+  }, [fetchRequests, refreshStats, selectedTicketId]);
 
   useEffect(() => {
     fetchRequests();
@@ -295,19 +329,19 @@ export default function SupportRequestsPage() {
     if (
       highlightRequestId &&
       requests.some((request) => request._id === highlightRequestId) &&
-      activeTicketId !== highlightRequestId
+      selectedTicketId !== highlightRequestId
     ) {
       selectTicket(highlightRequestId);
     }
-  }, [highlightRequestId, requests, activeTicketId, selectTicket]);
+  }, [highlightRequestId, requests, selectedTicketId, selectTicket]);
 
   useEffect(() => {
-    if (loading || activeTicketId || highlightRequestId || requests.length === 0) return;
+    if (loading || selectedTicketId || highlightRequestId || requests.length === 0) return;
     const firstUnread = requests.find((request) => (request.unreadByAdmin ?? 0) > 0);
     const firstActive = requests.find((request) => isActiveStatus(request.status));
     const pick = firstUnread ?? firstActive ?? requests[0];
     if (pick) selectTicket(pick._id);
-  }, [loading, activeTicketId, highlightRequestId, requests, selectTicket]);
+  }, [loading, selectedTicketId, highlightRequestId, requests, selectTicket]);
 
   const handleChatActivity = useCallback(() => {
     refreshStats();
@@ -336,28 +370,29 @@ export default function SupportRequestsPage() {
   );
 
   const activeTicket = useMemo(
-    () => (activeTicketId ? requests.find((request) => request._id === activeTicketId) : null),
-    [activeTicketId, requests],
+    () => (selectedTicketId ? requests.find((request) => request._id === selectedTicketId) : null),
+    [selectedTicketId, requests],
   );
 
   const resolvedActiveTicket = activeTicket ?? offPageTicket;
+  resolvedActiveTicketRef.current = resolvedActiveTicket;
 
   const openManageForActiveTicket = useCallback(() => {
     if (resolvedActiveTicket) {
       openManage(resolvedActiveTicket);
       return;
     }
-    if (!activeTicketId) return;
-    fetch(`/api/support-requests/${activeTicketId}`)
+    if (!selectedTicketId) return;
+    fetch(`/api/support-requests/${selectedTicketId}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data) openManage(data as SupportRequestRow);
       })
       .catch(() => undefined);
-  }, [resolvedActiveTicket, activeTicketId, openManage]);
+  }, [resolvedActiveTicket, selectedTicketId, openManage]);
 
   useEffect(() => {
-    if (!activeTicketId) {
+    if (!selectedTicketId) {
       setOffPageTicket(null);
       return;
     }
@@ -367,7 +402,7 @@ export default function SupportRequestsPage() {
     }
 
     let cancelled = false;
-    fetch(`/api/support-requests/${activeTicketId}`)
+    fetch(`/api/support-requests/${selectedTicketId}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!cancelled && data) setOffPageTicket(data as SupportRequestRow);
@@ -377,15 +412,22 @@ export default function SupportRequestsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeTicketId, activeTicket]);
+  }, [selectedTicketId, activeTicket]);
 
   const applyManageUpdate = async (
     request: SupportRequestRow,
     options: { status?: string; closeDialog?: boolean; assignToCurrentAdmin?: boolean } = {},
   ) => {
     setUpdatingId(request._id);
+    setManageSaveError('');
     try {
       const selectedAdmin = assignableAdmins.find((a) => a.id === manageAssigneeId);
+      const originalAssignee = request.assignedAdminId
+        ? String(request.assignedAdminId)
+        : 'unassigned';
+      const assigneeChanged =
+        isSuperAdmin && !options.assignToCurrentAdmin && manageAssigneeId !== originalAssignee;
+
       const res = await fetch(`/api/support-requests/${request._id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -402,6 +444,11 @@ export default function SupportRequestsPage() {
             ? {
                 assignedAdminId: manageAssigneeId === 'unassigned' ? null : manageAssigneeId,
                 assignedAdminName: selectedAdmin?.name || '',
+                ...(assigneeChanged
+                  ? {
+                      anchorMessageId: chatAnchorMessageId,
+                    }
+                  : {}),
               }
             : {}),
         }),
@@ -425,9 +472,15 @@ export default function SupportRequestsPage() {
         setOffPageTicket((prev) =>
           prev?._id === request._id ? { ...prev, ...merged } : prev,
         );
+        if (assigneeChanged) {
+          setManageOriginalAssigneeId(manageAssigneeId);
+        }
         setChatRefreshKey((key) => key + 1);
         refreshStats();
         if (options.closeDialog) setManageRequest(null);
+      } else {
+        const payload = await res.json().catch(() => ({}));
+        setManageSaveError(payload?.error || 'Failed to save ticket changes.');
       }
     } finally {
       setUpdatingId(null);
@@ -440,6 +493,7 @@ export default function SupportRequestsPage() {
       setManageRequest(null);
       return;
     }
+
     await applyManageUpdate(manageRequest, { closeDialog: true });
   };
 
@@ -470,6 +524,55 @@ export default function SupportRequestsPage() {
         return <Badge variant="destructive">{label}</Badge>;
     }
   };
+
+  const handleTicketLoaded = useCallback(
+    (ticket: {
+      adminNotes?: string;
+      message?: string;
+      subject?: string;
+      status?: string;
+      unreadByAdmin?: number;
+      assignedAdminId?: string | null;
+      assignedAdminName?: string;
+      updatedAt?: string;
+      latestMessageId?: string | null;
+    }) => {
+      if (!selectedTicketId) return;
+      if (ticket.latestMessageId) {
+        setChatAnchorMessageId(ticket.latestMessageId);
+      }
+
+      const current = resolvedActiveTicketRef.current;
+      const patch: Partial<SupportRequestRow> = {};
+      if (ticket.status && ticket.status !== current?.status) patch.status = ticket.status;
+      if (
+        ticket.unreadByAdmin !== undefined &&
+        ticket.unreadByAdmin !== current?.unreadByAdmin
+      ) {
+        patch.unreadByAdmin = ticket.unreadByAdmin;
+      }
+      if (
+        ticket.assignedAdminId !== undefined &&
+        String(ticket.assignedAdminId ?? '') !== String(current?.assignedAdminId ?? '')
+      ) {
+        patch.assignedAdminId = ticket.assignedAdminId;
+        patch.assignedAdminName = ticket.assignedAdminName;
+      }
+      if (ticket.adminNotes !== undefined && ticket.adminNotes !== current?.adminNotes) {
+        patch.adminNotes = ticket.adminNotes;
+      }
+      if (ticket.subject && ticket.subject !== current?.subject) patch.subject = ticket.subject;
+      if (ticket.message && ticket.message !== current?.message) patch.message = ticket.message;
+      if (ticket.updatedAt && ticket.updatedAt !== current?.updatedAt) {
+        patch.updatedAt = ticket.updatedAt;
+      }
+
+      if (Object.keys(patch).length > 0) {
+        handleTicketUpdated(selectedTicketId, patch);
+      }
+    },
+    [selectedTicketId, handleTicketUpdated],
+  );
 
   const categoryOptions = Object.values(SUPPORT_REQUEST_CATEGORY).map((value) => ({
     value,
@@ -617,7 +720,7 @@ export default function SupportRequestsPage() {
                 <ul className="divide-y">
                   {requests.map((request) => {
                     const isHighlighted = highlightRequestId === request._id;
-                    const isSelected = activeTicketId === request._id;
+                    const isSelected = selectedTicketId === request._id;
                     const unread = (request.unreadByAdmin ?? 0) > 0;
 
                     return (
@@ -743,39 +846,30 @@ export default function SupportRequestsPage() {
         }
         main={
           <>
-            {activeTicketId && !activeTicket && !loading && (
+            {selectedTicketId && !activeTicket && !loading && (
               <div className="shrink-0 border-b bg-amber-50/80 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                 This ticket is not on the current page — conversation is still available below.
               </div>
             )}
-            {activeTicketId ? (
+            {selectedTicketId ? (
               <TicketChatPanel
-                key={activeTicketId}
-                requestId={activeTicketId}
+                key={selectedTicketId}
+                requestId={selectedTicketId}
                 referenceId={
                   resolvedActiveTicket ? getTicketReferenceId(resolvedActiveTicket) : undefined
                 }
                 subject={resolvedActiveTicket?.subject}
+                ticketMessage={resolvedActiveTicket?.message}
+                adminNotes={resolvedActiveTicket?.adminNotes}
+                companyId={
+                  resolvedActiveTicket ? getCompanyId(resolvedActiveTicket) ?? undefined : undefined
+                }
                 companyName={resolvedActiveTicket ? getCompanyName(resolvedActiveTicket) : undefined}
                 userName={resolvedActiveTicket ? formatUser(resolvedActiveTicket.userId) : undefined}
-                adminNotes={resolvedActiveTicket?.adminNotes}
-                initialMessage={resolvedActiveTicket?.message}
                 currentAdminId={currentAdminId}
                 currentAdminName={currentAdminName}
                 onActivity={handleChatActivity}
-                onTicketLoaded={(ticket) => {
-                  if (!activeTicketId) return;
-                  handleTicketUpdated(activeTicketId, {
-                    status: ticket.status,
-                    adminNotes: ticket.adminNotes,
-                    subject: ticket.subject,
-                    message: ticket.message,
-                    unreadByAdmin: ticket.unreadByAdmin,
-                    assignedAdminId: ticket.assignedAdminId,
-                    assignedAdminName: ticket.assignedAdminName,
-                    updatedAt: ticket.updatedAt,
-                  });
-                }}
+                onTicketLoaded={handleTicketLoaded}
                 onOpenManage={openManageForActiveTicket}
                 refreshKey={chatRefreshKey}
                 className="h-full min-h-0"
@@ -855,12 +949,12 @@ export default function SupportRequestsPage() {
                     <div className="space-y-1">
                       <Label>Ticket history</Label>
                       <p className="text-xs text-muted-foreground">
-                        Read-only audit trail — who changed the ticket and when.
+                        Read-only audit trail — status changes, assignments, and who did what.
                       </p>
                     </div>
                     <div className="rounded-lg border bg-muted/20 p-3">
                       <TicketStatusTimeline
-                        entries={manageStatusTimeline}
+                        entries={manageTicketHistory}
                         loading={loadingManageTimeline}
                       />
                     </div>
@@ -1015,6 +1109,10 @@ export default function SupportRequestsPage() {
                   </div>
                 </div>
               </div>
+
+              {manageSaveError ? (
+                <p className="border-t px-6 py-2 text-sm text-destructive">{manageSaveError}</p>
+              ) : null}
 
               <DialogFooter className="gap-2 border-t px-6 py-4 sm:justify-between">
                 <Button

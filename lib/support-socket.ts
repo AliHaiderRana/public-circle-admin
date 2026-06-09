@@ -8,6 +8,7 @@ export type SupportChatSocketMessage = {
   senderAdminId?: string;
   message: string;
   createdAt: string;
+  visibility?: 'CUSTOMER' | 'INTERNAL';
   emailSent?: boolean;
   userWasOnline?: boolean;
 };
@@ -107,6 +108,7 @@ export function leaveSupportChatRoom(supportRequestId: string) {
 export async function sendSupportChatMessage(
   supportRequestId: string,
   message: string,
+  options: { internal?: boolean } = {},
 ): Promise<SupportChatSendAck> {
   const activeSocket = await getSupportSocket();
   if (!activeSocket) {
@@ -116,7 +118,7 @@ export async function sendSupportChatMessage(
   return new Promise((resolve, reject) => {
     activeSocket.emit(
       SOCKET_CHANNELS.SUPPORT_CHAT_SEND,
-      { supportRequestId, message },
+      { supportRequestId, message, internal: Boolean(options.internal) },
       (ack?: SupportChatSendAck) => {
         if (ack?.ok) {
           resolve(ack);

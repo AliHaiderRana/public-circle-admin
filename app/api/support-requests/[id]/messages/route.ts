@@ -54,6 +54,7 @@ export async function POST(
   const { id } = await params;
   const body = await request.json();
   const message = typeof body.message === 'string' ? body.message.trim() : '';
+  const internal = Boolean(body.internal);
 
   if (!message) {
     return NextResponse.json({ error: 'Message is required' }, { status: 400 });
@@ -65,6 +66,7 @@ export async function POST(
       method: 'POST',
       body: JSON.stringify({
         message,
+        internal,
         adminId: session.userId,
         adminName: adminDisplayName,
         adminEmail: session.email || '',

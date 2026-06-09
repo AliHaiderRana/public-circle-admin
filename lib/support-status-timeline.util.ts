@@ -1,4 +1,5 @@
 import { SUPPORT_REQUEST_STATUS } from '@/lib/constants';
+import type { AssignmentHistoryEntry } from '@/lib/support-assignment.util';
 
 const SUPPORT_STATUS_ACTOR = {
   USER: 'USER',
@@ -21,6 +22,17 @@ export type StatusTimelineEntry = StatusHistoryEntry & {
   label: string;
   statusLabel: string;
 };
+
+export type TicketHistoryEntry =
+  | (StatusTimelineEntry & { kind: 'status' })
+  | {
+      kind: 'assignment';
+      _id?: string;
+      label: string;
+      changedAt: string;
+      note?: string;
+      anchorMessagePreview?: string;
+    };
 
 type TicketForTimeline = {
   statusHistory?: StatusHistoryEntry[];
@@ -113,6 +125,32 @@ export function buildStatusTimelineForAdmin(ticket: TicketForTimeline): StatusTi
       label: getTimelineLabel(entry),
       statusLabel: formatStatusLabel(entry.toStatus),
     }));
+}
+
+export function buildTicketHistoryForAdmin(
+  statusTimeline: StatusTimelineEntry[],
+  assignmentHistory: AssignmentHistoryEntry[] = [],
+): TicketHistoryEntry[] {
+  const statusItems: TicketHistoryEntry[] = statusTimeline.map((entry) => ({
+    ...entry,
+    kind: 'status',
+  }));
+
+  const assignmentItems: TicketHistoryEntry[] = assignmentHistory.map((entry) => ({
+    kind: 'assignment',
+    _id: entry._id,
+    label: entry.label,
+    changedAt:
+      entry.assignedAt instanceof Date
+        ? entry.assignedAt.toISOString()
+        : String(entry.assignedAt),
+    note: entry.note,
+    anchorMessagePreview: entry.anchorMessagePreview,
+  }));
+
+  return [...statusItems, ...assignmentItems].sort(
+    (a, b) => new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime(),
+  );
 }
 
 export function formatTimelineTimestamp(value: string) {

@@ -15,6 +15,7 @@ import {
 } from '@/lib/admin-audit';
 import { formatSupportReferenceId } from '@/lib/support-admin.util';
 import { buildStatusTimelineForAdmin } from '@/lib/support-status-timeline.util';
+import { formatAssignmentHistoryForAdmin } from '@/lib/support-assignment.util';
 
 const SERVER_API_URL =
   process.env.SERVER_API_URL ||
@@ -56,6 +57,9 @@ export async function GET(
         statusHistory: request.statusHistory as Parameters<typeof buildStatusTimelineForAdmin>[0]['statusHistory'],
         createdAt: request.createdAt,
       }),
+      assignmentHistory: formatAssignmentHistoryForAdmin(
+        request.assignmentHistory as Parameters<typeof formatAssignmentHistoryForAdmin>[0],
+      ),
     });
   } catch (error) {
     console.error('Error fetching support request:', error);
@@ -74,7 +78,13 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await request.json();
-  const { status, adminNotes, assignedAdminId, assignedAdminName } = body;
+  const {
+    status,
+    adminNotes,
+    assignedAdminId,
+    assignedAdminName,
+    anchorMessageId,
+  } = body;
 
   if (status && !Object.values(SUPPORT_REQUEST_STATUS).includes(status)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
@@ -127,6 +137,7 @@ export async function PATCH(
               assignedAdminName: assignedAdminName || '',
               assignedByAdminId: session.userId,
               assignedByName: session.name || session.email || '',
+              anchorMessageId: anchorMessageId || null,
             }
           : {}),
         ...(status
