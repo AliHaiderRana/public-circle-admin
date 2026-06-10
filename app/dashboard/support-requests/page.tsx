@@ -48,7 +48,11 @@ import { TicketStatusTimeline } from '@/components/support/TicketStatusTimeline'
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { formatAdminDisplayName, formatSupportReferenceId } from '@/lib/support-admin.util';
-import { getSupportSocket } from '@/lib/support-socket';
+import { getSupportSocket, subscribeSupportChatMessage } from '@/lib/support-socket';
+import {
+  broadcastAdminSupportTabEvent,
+  subscribeAdminSupportTabSync,
+} from '@/lib/support-tab-sync';
 import {
   buildTicketHistoryForAdmin,
   type StatusTimelineEntry,
@@ -151,6 +155,20 @@ export default function SupportRequestsPage() {
   }, [searchParams]);
 
   const selectTicket = useCallback((ticketId: string | null) => {
+    if (ticketId) {
+      setRequests((prev) => {
+        const target = prev.find((request) => request._id === ticketId);
+        if (!target || (target.unreadByAdmin ?? 0) === 0) return prev;
+        return prev.map((request) =>
+          request._id === ticketId ? { ...request, unreadByAdmin: 0 } : request,
+        );
+      });
+      setOffPageTicket((prev) =>
+        prev?._id === ticketId && (prev.unreadByAdmin ?? 0) > 0
+          ? { ...prev, unreadByAdmin: 0 }
+          : prev,
+      );
+    }
     setSelectedTicketId(ticketId || null);
   }, []);
 
@@ -314,6 +332,58 @@ export default function SupportRequestsPage() {
   }, [fetchRequests, refreshStats, selectedTicketId]);
 
   useEffect(() => {
+    let unsubscribeSocket: (() => void) | undefined;
+
+    void (async () => {
+      const activeSocket = await getSupportSocket();
+      if (!activeSocket) return;
+
+      unsubscribeSocket = subscribeSupportChatMessage(activeSocket, (payload) => {
+        if (!payload.message) return;
+        broadcastAdminSupportTabEvent({
+          type: 'CHAT_MESSAGE',
+          supportRequestId: payload.supportRequestId,
+          message: payload.message,
+        });
+        void fetchRequests();
+        void refreshStats();
+      });
+    })();
+
+    const unsubscribeTab = subscribeAdminSupportTabSync((event) => {
+      if (event.type === 'CHAT_MESSAGE') {
+        void fetchRequests();
+        void refreshStats();
+        return;
+      }
+      if (event.type === 'INVALIDATE_REQUESTS') {
+        void fetchRequests();
+        return;
+      }
+      if (event.type === 'INVALIDATE_STATS') {
+        void refreshStats();
+      }
+    });
+
+    const onInvalidateRequests = () => {
+      void fetchRequests();
+    };
+    const onInvalidateStats = () => {
+      void refreshStats();
+    };
+
+    window.addEventListener('admin-support:invalidate-requests', onInvalidateRequests);
+    window.addEventListener('admin-support:invalidate-stats', onInvalidateStats);
+
+    return () => {
+      unsubscribeSocket?.();
+      unsubscribeTab();
+      window.removeEventListener('admin-support:invalidate-requests', onInvalidateRequests);
+      window.removeEventListener('admin-support:invalidate-stats', onInvalidateStats);
+    };
+  }, [fetchRequests, refreshStats]);
+
+  useEffect(() => {
     fetchRequests();
   }, [fetchRequests]);
 
@@ -334,14 +404,6 @@ export default function SupportRequestsPage() {
       selectTicket(highlightRequestId);
     }
   }, [highlightRequestId, requests, selectedTicketId, selectTicket]);
-
-  useEffect(() => {
-    if (loading || selectedTicketId || highlightRequestId || requests.length === 0) return;
-    const firstUnread = requests.find((request) => (request.unreadByAdmin ?? 0) > 0);
-    const firstActive = requests.find((request) => isActiveStatus(request.status));
-    const pick = firstUnread ?? firstActive ?? requests[0];
-    if (pick) selectTicket(pick._id);
-  }, [loading, selectedTicketId, highlightRequestId, requests, selectTicket]);
 
   const handleChatActivity = useCallback(() => {
     refreshStats();
@@ -376,6 +438,12 @@ export default function SupportRequestsPage() {
 
   const resolvedActiveTicket = activeTicket ?? offPageTicket;
   resolvedActiveTicketRef.current = resolvedActiveTicket;
+
+  const handleCloseActiveTicket = () => {
+    const ticket = resolvedActiveTicketRef.current;
+    if (!ticket) return;
+    void applyManageUpdate(ticket, { status: SUPPORT_REQUEST_STATUS.RESOLVED });
+  };
 
   const openManageForActiveTicket = useCallback(() => {
     if (resolvedActiveTicket) {
@@ -570,6 +638,11 @@ export default function SupportRequestsPage() {
       if (Object.keys(patch).length > 0) {
         handleTicketUpdated(selectedTicketId, patch);
       }
+
+      if (ticket.unreadByAdmin === 0) {
+        window.dispatchEvent(new Event('admin-notifications:refresh'));
+        window.dispatchEvent(new Event('support-stats:refresh'));
+      }
     },
     [selectedTicketId, handleTicketUpdated],
   );
@@ -580,8 +653,8 @@ export default function SupportRequestsPage() {
   }));
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Support inbox</h2>
           <p className="text-sm text-muted-foreground">
@@ -619,6 +692,7 @@ export default function SupportRequestsPage() {
       </div>
 
       <SupportInboxShell
+        className="min-h-0 flex-1"
         sidebar={
           <div className="flex h-full min-h-0 flex-col">
             <div className="shrink-0 space-y-3 border-b p-3">
@@ -703,7 +777,7 @@ export default function SupportRequestsPage() {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
               {loading ? (
                 <div className="space-y-2 p-3">
                   {Array.from({ length: 6 }).map((_, i) => (
@@ -760,6 +834,22 @@ export default function SupportRequestsPage() {
                                   {getTicketReferenceId(request)}
                                 </span>
                                 {getStatusBadge(request.status)}
+                                {request.assignedAdminName ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="max-w-[8rem] truncate text-[10px] font-normal"
+                                    title={`Assigned to ${request.assignedAdminName}`}
+                                  >
+                                    {request.assignedAdminName}
+                                  </Badge>
+                                ) : (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] font-normal text-muted-foreground"
+                                  >
+                                    Unassigned
+                                  </Badge>
+                                )}
                                 {unread && (
                                   <SupportCountBadge count={request.unreadByAdmin ?? 0} />
                                 )}
@@ -871,11 +961,13 @@ export default function SupportRequestsPage() {
                 onActivity={handleChatActivity}
                 onTicketLoaded={handleTicketLoaded}
                 onOpenManage={openManageForActiveTicket}
+                onCloseTicket={handleCloseActiveTicket}
+                closingTicket={updatingId === selectedTicketId}
                 refreshKey={chatRefreshKey}
                 className="h-full min-h-0"
               />
             ) : (
-              <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-muted-foreground">
+              <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-8 text-center text-muted-foreground">
                 <Inbox className="size-12 opacity-25" />
                 <div>
                   <p className="font-medium text-foreground">No ticket selected</p>

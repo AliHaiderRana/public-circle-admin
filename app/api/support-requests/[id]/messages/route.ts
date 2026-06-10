@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
+import dbConnect from '@/lib/db';
+import SupportRequest from '@/lib/models/SupportRequest';
 import { getServerSession } from '@/lib/auth';
 import { internalApiFetch } from '@/lib/internal-api.server';
 import { formatAdminDisplayName } from '@/lib/support-admin.util';
-
+import { canAdminAccessTicket } from '@/lib/support-access.util';
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -22,6 +24,15 @@ export async function GET(
   const queryString = query.toString();
 
   try {
+    await dbConnect();
+    const ticket = await SupportRequest.findById(id).select('assignedAdminId').lean();
+    if (!ticket) {
+      return NextResponse.json({ error: 'Support request not found' }, { status: 404 });
+    }
+    if (!canAdminAccessTicket(session, ticket)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const response = await internalApiFetch(
       `/support-requests/${id}/messages${queryString ? `?${queryString}` : ''}`,
       { timeoutMs: 15000 },
@@ -35,7 +46,9 @@ export async function GET(
       );
     }
 
-    return NextResponse.json(payload.data ?? payload);
+    const data = payload.data ?? payload;
+
+    return NextResponse.json(data);
   } catch (error) {
     console.error('[support-messages] fetch failed:', error);
     return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 });
@@ -61,6 +74,15 @@ export async function POST(
   }
 
   try {
+    await dbConnect();
+    const ticket = await SupportRequest.findById(id).select('assignedAdminId').lean();
+    if (!ticket) {
+      return NextResponse.json({ error: 'Support request not found' }, { status: 404 });
+    }
+    if (!canAdminAccessTicket(session, ticket)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const adminDisplayName = formatAdminDisplayName(session.name, session.email);
     const response = await internalApiFetch(`/support-requests/${id}/messages`, {
       method: 'POST',

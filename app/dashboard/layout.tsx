@@ -2,6 +2,7 @@
 
 import ProtectedRoute from "@/components/ProtectedRoute";
 import NotificationDropdown from "@/components/NotificationDropdown";
+import { AdminNotificationSoundProvider } from "@/components/AdminNotificationSoundProvider";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -31,7 +32,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, type ComponentType } from "react";
+import { useState, useEffect, type ComponentType } from "react";
+import {
+  getActiveAdminSupportTicketId,
+  setActiveAdminSupportTicketId,
+} from "@/lib/admin-support-view";
+import { leaveSupportChatRoom } from "@/lib/support-socket";
 import { SupportCountBadge } from "@/components/SupportCountBadge";
 import { useSupportStats } from "@/hooks/use-support-stats";
 import { formatAdminDisplayName } from "@/lib/support-admin.util";
@@ -121,9 +127,23 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { stats } = useSupportStats();
+  const isSupportInboxPage =
+    pathname === "/dashboard/support-requests" ||
+    pathname.startsWith("/dashboard/support-requests/");
+
+  useEffect(() => {
+    if (isSupportInboxPage) return;
+
+    const activeTicketId = getActiveAdminSupportTicketId();
+    if (!activeTicketId) return;
+
+    setActiveAdminSupportTicketId(null);
+    void leaveSupportChatRoom(activeTicketId);
+  }, [isSupportInboxPage]);
 
   return (
     <ProtectedRoute>
+      <AdminNotificationSoundProvider>
       <div className="flex h-screen bg-background text-foreground">
         <aside
           className={cn(
@@ -257,11 +277,26 @@ export default function DashboardLayout({
             </div>
           </header>
 
-          <main className="flex-1 overflow-y-auto bg-muted/30">
-            <div className="p-4 lg:p-8">{children}</div>
+          <main
+            className={cn(
+              "flex-1 bg-muted/30",
+              isSupportInboxPage
+                ? "flex min-h-0 flex-col overflow-hidden"
+                : "overflow-y-auto",
+            )}
+          >
+            <div
+              className={cn(
+                "p-4 lg:p-8",
+                isSupportInboxPage && "flex min-h-0 flex-1 flex-col overflow-hidden",
+              )}
+            >
+              {children}
+            </div>
           </main>
         </div>
       </div>
+      </AdminNotificationSoundProvider>
     </ProtectedRoute>
   );
 }

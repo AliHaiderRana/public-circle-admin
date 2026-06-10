@@ -13,14 +13,16 @@ export function SupportInboxShell({ sidebar, main, className }: SupportInboxShel
   return (
     <div
       className={cn(
-        'flex h-[calc(100vh-7rem)] min-h-[560px] overflow-hidden rounded-xl border bg-background shadow-sm',
+        'flex min-h-0 flex-1 overflow-hidden rounded-xl border bg-background shadow-sm',
         className,
       )}
     >
       <aside className="flex h-full min-h-0 w-full max-w-[380px] shrink-0 flex-col overflow-hidden border-r bg-muted/20">
         {sidebar}
       </aside>
-      <section className="flex min-w-0 flex-1 flex-col bg-background">{main}</section>
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+        {main}
+      </section>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
   formatSupportReferenceId,
   parseTicketIdSearchSuffix,
 } from '@/lib/support-admin.util';
+import { assignedTicketsFilterForAdmin } from '@/lib/support-access.util';
 
 export async function GET(request: Request) {
   const session = await getServerSession();
@@ -31,7 +32,9 @@ export async function GET(request: Request) {
     const unassignedOnly = searchParams.get('unassignedOnly') === 'true';
     const category = searchParams.get('category') || '';
 
-    const query: Record<string, unknown> = {};
+    const query: Record<string, unknown> = {
+      ...assignedTicketsFilterForAdmin(session),
+    };
 
     if (activeOnly) {
       query.status = {

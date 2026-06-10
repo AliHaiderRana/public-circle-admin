@@ -4,9 +4,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { Loader2, Send, RefreshCw, Lock, Settings2, Mail, Building2 } from 'lucide-react';
+import {
+  Loader2,
+  Send,
+  RefreshCw,
+  Lock,
+  Settings2,
+  Mail,
+  Building2,
+  CheckCircle2,
+  UserRound,
+} from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import {
@@ -23,6 +31,14 @@ import {
   sendSupportChatMessage,
   subscribeSupportChatMessage,
 } from '@/lib/support-socket';
+import {
+  canMarkAdminSupportTicketRead,
+  setActiveAdminSupportTicketId,
+} from '@/lib/admin-support-view';
+import {
+  broadcastAdminSupportTabEvent,
+  onAdminSupportTabChatMessage,
+} from '@/lib/support-tab-sync';
 
 const CHAT_PAGE_SIZE = 30;
 const CHAT_POLL_MS = 15000;
@@ -51,6 +67,8 @@ type TicketChatPanelProps = {
   className?: string;
   onActivity?: () => void;
   onOpenManage?: () => void;
+  onCloseTicket?: () => void;
+  closingTicket?: boolean;
   onTicketLoaded?: (ticket: {
     status?: string;
     message?: string;
@@ -119,6 +137,8 @@ export function TicketChatPanel({
   className,
   onActivity,
   onOpenManage,
+  onCloseTicket,
+  closingTicket = false,
   onTicketLoaded,
   showRefresh = true,
   refreshKey = 0,
@@ -139,6 +159,8 @@ export function TicketChatPanel({
   const [loadedCategory, setLoadedCategory] = useState<string | undefined>();
   const [loadedCreatedAt, setLoadedCreatedAt] = useState<string | undefined>();
   const [loadedCompanyId, setLoadedCompanyId] = useState<string | undefined>();
+  const [loadedProjectName, setLoadedProjectName] = useState<string | undefined>();
+  const [loadedAssignedAdminName, setLoadedAssignedAdminName] = useState<string | undefined>();
   const socketReadyRef = useRef(false);
   const [userOnline, setUserOnline] = useState<boolean | null>(null);
   const [deliveryNotice, setDeliveryNotice] = useState<string | null>(null);
@@ -148,9 +170,36 @@ export function TicketChatPanel({
   const onActivityRef = useRef(onActivity);
   const onTicketLoadedRef = useRef(onTicketLoaded);
   const lastTicketMetaRef = useRef<string>('');
+  const markedSeenForTicketRef = useRef<string | null>(null);
   const fetchMessagesRef = useRef<
     (before?: string, opts?: { silent?: boolean }) => Promise<void>
   >(() => Promise.resolve());
+  const markTicketSeenRef = useRef<() => void>(() => undefined);
+
+  const markTicketSeen = useCallback(() => {
+    if (!canMarkAdminSupportTicketRead(requestId)) return;
+    if (markedSeenForTicketRef.current === requestId) return;
+
+    markedSeenForTicketRef.current = requestId;
+    onTicketLoadedRef.current?.({ unreadByAdmin: 0 });
+
+    void fetch('/api/notifications/mark-read-by-ticket', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ supportRequestId: requestId }),
+    })
+      .then(() => {
+        window.dispatchEvent(new Event('admin-notifications:refresh'));
+        window.dispatchEvent(new Event('support-stats:refresh'));
+      })
+      .catch(() => {
+        markedSeenForTicketRef.current = null;
+      });
+  }, [requestId]);
+
+  useEffect(() => {
+    markTicketSeenRef.current = markTicketSeen;
+  }, [markTicketSeen]);
 
   useEffect(() => {
     onActivityRef.current = onActivity;
@@ -159,6 +208,22 @@ export function TicketChatPanel({
   useEffect(() => {
     onTicketLoadedRef.current = onTicketLoaded;
   }, [onTicketLoaded]);
+
+  const scrollToBottomIfNearEnd = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 64;
+    if (nearBottom) {
+      stickToBottomRef.current = true;
+      requestAnimationFrame(() => {
+        const scrollEl = scrollContainerRef.current;
+        if (!scrollEl) return;
+        scrollEl.scrollTop = scrollEl.scrollHeight;
+      });
+    } else {
+      stickToBottomRef.current = false;
+    }
+  }, []);
 
   const mergeMessages = useCallback((existing: ChatMessage[], incoming: ChatMessage[]) => {
     const map = new Map<string, ChatMessage>();
@@ -211,6 +276,12 @@ export function TicketChatPanel({
           if (data.ticket.companyId) {
             setLoadedCompanyId(String(data.ticket.companyId));
           }
+          if (typeof data.ticket.projectName === 'string' && data.ticket.projectName.trim()) {
+            setLoadedProjectName(data.ticket.projectName.trim());
+          }
+          if (typeof data.ticket.assignedAdminName === 'string') {
+            setLoadedAssignedAdminName(data.ticket.assignedAdminName);
+          }
           if (typeof data.userOnline === 'boolean') {
             setUserOnline(data.userOnline);
           } else if (typeof data.ticket.userOnline === 'boolean') {
@@ -262,6 +333,7 @@ export function TicketChatPanel({
               initialLoadNotifiedRef.current = true;
               onActivityRef.current?.();
             }
+            markTicketSeenRef.current?.();
           }
           if (stickToBottomRef.current) {
             requestAnimationFrame(() => {
@@ -281,6 +353,8 @@ export function TicketChatPanel({
   fetchMessagesRef.current = fetchMessages;
 
   useEffect(() => {
+    setActiveAdminSupportTicketId(requestId);
+    markedSeenForTicketRef.current = null;
     setMessages([]);
     setHasMoreOlder(false);
     setTotalCount(0);
@@ -291,6 +365,8 @@ export function TicketChatPanel({
     setLoadedCategory(undefined);
     setLoadedCreatedAt(undefined);
     setLoadedCompanyId(undefined);
+    setLoadedProjectName(undefined);
+    setLoadedAssignedAdminName(undefined);
     socketReadyRef.current = false;
     setUserOnline(null);
     setDeliveryNotice(null);
@@ -321,9 +397,20 @@ export function TicketChatPanel({
 
       unsubscribe = subscribeSupportChatMessage(activeSocket, (payload) => {
         if (payload.supportRequestId !== requestId || !payload.message) return;
-        stickToBottomRef.current = true;
         setMessages((prev) => mergeMessages(prev, [payload.message]));
+        scrollToBottomIfNearEnd();
+        if (payload.message.senderType === SUPPORT_CHAT_SENDER_TYPE.USER) {
+          markedSeenForTicketRef.current = null;
+          markTicketSeenRef.current?.();
+        }
         onActivityRef.current?.();
+        broadcastAdminSupportTabEvent({
+          type: 'CHAT_MESSAGE',
+          supportRequestId: payload.supportRequestId,
+          message: payload.message,
+        });
+        broadcastAdminSupportTabEvent({ type: 'INVALIDATE_REQUESTS' });
+        broadcastAdminSupportTabEvent({ type: 'INVALIDATE_STATS' });
       });
 
       const joined = await joinSupportChatRoom(requestId);
@@ -336,8 +423,35 @@ export function TicketChatPanel({
       clearInterval(interval);
       unsubscribe?.();
       leaveSupportChatRoom(requestId);
+      setActiveAdminSupportTicketId(null);
     };
-  }, [requestId, mergeMessages]);
+  }, [requestId, mergeMessages, scrollToBottomIfNearEnd]);
+
+  useEffect(() => {
+    if (!loading && requestId) {
+      markTicketSeenRef.current?.();
+    }
+  }, [loading, requestId]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        markTicketSeenRef.current?.();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [requestId]);
+
+  useEffect(() => {
+    return onAdminSupportTabChatMessage((payload) => {
+      if (payload.supportRequestId !== requestId) return;
+      setMessages((prev) => mergeMessages(prev, [payload.message]));
+      scrollToBottomIfNearEnd();
+      onActivityRef.current?.();
+    });
+  }, [requestId, mergeMessages, scrollToBottomIfNearEnd]);
 
   useEffect(() => {
     if (!refreshKey) return;
@@ -412,6 +526,13 @@ export function TicketChatPanel({
       if (sent) {
         stickToBottomRef.current = true;
         setMessages((prev) => mergeMessages(prev, [sent]));
+        broadcastAdminSupportTabEvent({
+          type: 'CHAT_MESSAGE',
+          supportRequestId: requestId,
+          message: sent,
+        });
+        broadcastAdminSupportTabEvent({ type: 'INVALIDATE_REQUESTS' });
+        broadcastAdminSupportTabEvent({ type: 'INVALIDATE_STATS' });
         setReply('');
         setReplyInternal(false);
         onActivityRef.current?.();
@@ -453,7 +574,7 @@ export function TicketChatPanel({
   return (
     <div
       className={cn(
-        'flex flex-col overflow-hidden rounded-xl border bg-card shadow-sm min-h-[420px]',
+        'flex min-h-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm',
         className,
       )}
     >
@@ -466,6 +587,11 @@ export function TicketChatPanel({
                   {referenceId}
                 </Badge>
               )}
+              {loadedProjectName ? (
+                <Badge variant="secondary" className="text-[11px] font-normal shrink-0">
+                  {loadedProjectName}
+                </Badge>
+              ) : null}
               {statusLabel && ticketStatus && (
                 <Badge
                   variant="outline"
@@ -520,6 +646,11 @@ export function TicketChatPanel({
                     {submittedLabel}
                   </p>
                 )}
+                <p className="flex items-center gap-1">
+                  <UserRound className="size-3 shrink-0 opacity-70" />
+                  <span className="font-medium text-foreground/80">Assigned to:</span>{' '}
+                  {loadedAssignedAdminName?.trim() || 'Unassigned'}
+                </p>
                 {totalCount > 0 && (
                   <p>
                     <span className="font-medium text-foreground/80">Messages:</span> {totalCount}
@@ -535,7 +666,26 @@ export function TicketChatPanel({
               </p>
             )}
           </div>
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+            {onCloseTicket &&
+              !isReadOnly &&
+              (ticketStatus === SUPPORT_REQUEST_STATUS.OPEN ||
+                ticketStatus === SUPPORT_REQUEST_STATUS.IN_PROGRESS) && (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={onCloseTicket}
+                  disabled={closingTicket}
+                >
+                  {closingTicket ? (
+                    <Loader2 className="size-3 mr-1.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="size-3 mr-1.5" />
+                  )}
+                  Close ticket
+                </Button>
+              )}
             {companyProfileId && (
               <Button
                 type="button"
@@ -596,7 +746,7 @@ export function TicketChatPanel({
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-3 bg-muted/5"
+        className="custom-scrollbar flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-3 bg-muted/5"
       >
         {loadingOlder && (
           <div className="flex justify-center pb-2">
@@ -707,40 +857,61 @@ export function TicketChatPanel({
         )}
       </div>
 
-      <div className="border-t bg-background p-3 shrink-0 space-y-2">
-        {deliveryNotice && (
-          <p className="text-xs text-muted-foreground text-center px-2">{deliveryNotice}</p>
-        )}
+      <div className="shrink-0 border-t bg-muted/15 px-4 py-3">
+        {deliveryNotice ? (
+          <p className="mb-2 text-[11px] leading-snug text-muted-foreground">{deliveryNotice}</p>
+        ) : null}
         {isReadOnly ? (
-          <p className="text-xs text-muted-foreground text-center py-2">
+          <p className="py-1 text-center text-xs text-muted-foreground">
             Replies disabled while ticket is {statusLabel?.toLowerCase() ?? 'closed'}.
           </p>
         ) : (
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id={`internal-reply-${requestId}`}
-                checked={replyInternal}
-                onCheckedChange={(checked) => setReplyInternal(checked === true)}
+            <div className="flex items-center justify-between gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
                 disabled={sending}
-              />
-              <Label
-                htmlFor={`internal-reply-${requestId}`}
-                className="text-xs text-muted-foreground cursor-pointer"
+                onClick={() => setReplyInternal((prev) => !prev)}
+                className={cn(
+                  'h-7 gap-1.5 px-2.5 text-xs font-normal',
+                  replyInternal
+                    ? 'bg-amber-100 text-amber-900 hover:bg-amber-100/90 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/50'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
               >
-                Internal note (not visible to customer)
-              </Label>
+                <Lock className="size-3 shrink-0" />
+                Internal note
+                {replyInternal ? (
+                  <span className="rounded-full bg-amber-200/80 px-1.5 py-px text-[10px] font-medium text-amber-900 dark:bg-amber-800/60 dark:text-amber-100">
+                    On
+                  </span>
+                ) : null}
+              </Button>
+              <span className="hidden text-[10px] text-muted-foreground sm:inline">
+                Enter to send · Shift+Enter for new line
+              </span>
             </div>
-            <div className="flex gap-2 items-end">
+            <div
+              className={cn(
+                'flex items-end gap-2 rounded-2xl border bg-background px-2 py-1.5 shadow-sm transition-colors',
+                replyInternal
+                  ? 'border-amber-200/90 bg-amber-50/40 dark:border-amber-900/50 dark:bg-amber-950/15'
+                  : 'border-border/80',
+              )}
+            >
               <Textarea
                 placeholder={
-                  replyInternal ? 'Add an internal team note…' : 'Type a reply to the customer…'
+                  replyInternal
+                    ? 'Write an internal note for your team…'
+                    : 'Write a reply to the customer…'
                 }
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
-                rows={2}
+                rows={1}
                 disabled={sending}
-                className="min-h-[72px] resize-none flex-1"
+                className="max-h-32 min-h-[40px] flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -752,7 +923,12 @@ export function TicketChatPanel({
                 onClick={handleSend}
                 disabled={sending || !reply.trim()}
                 size="icon"
-                className="size-10 shrink-0"
+                className={cn(
+                  'mb-0.5 size-9 shrink-0 rounded-full',
+                  replyInternal
+                    ? 'bg-amber-600 text-white hover:bg-amber-700'
+                    : 'bg-primary text-primary-foreground hover:bg-primary/90',
+                )}
                 title={replyInternal ? 'Save internal note' : 'Send reply'}
               >
                 {sending ? (

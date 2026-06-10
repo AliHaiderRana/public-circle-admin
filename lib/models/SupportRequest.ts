@@ -65,6 +65,12 @@ const schema = new mongoose.Schema(
       index: true,
       ref: MODELS.USER,
     },
+    projectGroupId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+      index: true,
+      ref: MODELS.COMPANY_GROUPING,
+    },
     category: {
       type: String,
       enum: Object.values(SUPPORT_REQUEST_CATEGORY),

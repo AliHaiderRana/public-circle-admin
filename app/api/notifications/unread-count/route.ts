@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import AdminNotification from '@/lib/models/AdminNotification';
 import { getServerSession } from '@/lib/auth';
-
 export async function GET() {
   const session = await getServerSession();
   if (!session) {

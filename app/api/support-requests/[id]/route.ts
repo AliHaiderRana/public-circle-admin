@@ -16,6 +16,7 @@ import {
 import { formatSupportReferenceId } from '@/lib/support-admin.util';
 import { buildStatusTimelineForAdmin } from '@/lib/support-status-timeline.util';
 import { formatAssignmentHistoryForAdmin } from '@/lib/support-assignment.util';
+import { canAdminAccessTicket } from '@/lib/support-access.util';
 
 const SERVER_API_URL =
   process.env.SERVER_API_URL ||
@@ -48,6 +49,10 @@ export async function GET(
 
     if (!request) {
       return NextResponse.json({ error: 'Support request not found' }, { status: 404 });
+    }
+
+    if (!canAdminAccessTicket(session, request)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     return NextResponse.json({
@@ -122,6 +127,19 @@ export async function PATCH(
   }
 
   try {
+    await dbConnect();
+    const existingTicket = await SupportRequest.findById(id)
+      .select('assignedAdminId')
+      .lean();
+
+    if (!existingTicket) {
+      return NextResponse.json({ error: 'Support request not found' }, { status: 404 });
+    }
+
+    if (!canAdminAccessTicket(session, existingTicket)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const response = await fetch(`${SERVER_API_URL}/internal/support-requests/${id}`, {
       method: 'PATCH',
       headers: {

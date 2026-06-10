@@ -74,7 +74,16 @@ export function useSupportStats(refreshIntervalMs = 30000) {
     const interval = setInterval(() => {
       void fetchSupportStats();
     }, refreshIntervalMs);
-    return () => clearInterval(interval);
+
+    const onRefresh = () => {
+      void fetchSupportStats(true);
+    };
+    window.addEventListener('support-stats:refresh', onRefresh);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('support-stats:refresh', onRefresh);
+    };
   }, [refreshIntervalMs]);
 
   const refresh = useCallback(async () => {
