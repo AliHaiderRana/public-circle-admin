@@ -47,8 +47,8 @@ type SidebarItem = {
   href: string;
   icon: ComponentType<{ className?: string }>;
   superAdminOnly?: boolean;
-  countKey?: "unreadChatMessages" | "openSupportRequests";
-  secondaryCountKey?: "unreadChatMessages" | "openSupportRequests";
+  countKey?: "unreadChatMessages" | "openSupportRequests" | "pendingCustomerRequests";
+  secondaryCountKey?: "unreadChatMessages" | "openSupportRequests" | "pendingCustomerRequests";
 };
 
 const sidebarItems: SidebarItem[] = [
@@ -57,6 +57,7 @@ const sidebarItems: SidebarItem[] = [
     name: "Customer Requests",
     href: "/dashboard/customer-requests",
     icon: ClipboardList,
+    countKey: "pendingCustomerRequests",
   },
   {
     name: "Support Requests",

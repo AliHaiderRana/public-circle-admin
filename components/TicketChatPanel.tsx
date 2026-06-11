@@ -9,6 +9,8 @@ import {
   Send,
   RefreshCw,
   Lock,
+  ImagePlus,
+  X,
   Settings2,
   Mail,
   Building2,
@@ -39,6 +41,16 @@ import {
   broadcastAdminSupportTabEvent,
   onAdminSupportTabChatMessage,
 } from '@/lib/support-tab-sync';
+import {
+  SUPPORT_CHAT_IMAGE_ACCEPT,
+  uploadSupportChatImage,
+  validateSupportChatImageFile,
+  type SupportChatAttachment,
+} from '@/lib/support-chat-attachment';
+import {
+  SupportChatImagePreview,
+  SupportChatImageThumbnail,
+} from '@/components/SupportChatImagePreview';
 
 const CHAT_PAGE_SIZE = 30;
 const CHAT_POLL_MS = 15000;
@@ -51,6 +63,7 @@ type ChatMessage = {
   message: string;
   createdAt: string;
   visibility?: 'CUSTOMER' | 'INTERNAL';
+  attachment?: SupportChatAttachment;
 };
 
 type TicketChatPanelProps = {
@@ -151,6 +164,9 @@ export function TicketChatPanel({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [reply, setReply] = useState('');
   const [replyInternal, setReplyInternal] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [sending, setSending] = useState(false);
   const [ticketStatus, setTicketStatus] = useState<string | null>(null);
   const [loadedSubject, setLoadedSubject] = useState<string | undefined>();
@@ -164,6 +180,10 @@ export function TicketChatPanel({
   const socketReadyRef = useRef(false);
   const [userOnline, setUserOnline] = useState<boolean | null>(null);
   const [deliveryNotice, setDeliveryNotice] = useState<string | null>(null);
+  const [fullscreenImage, setFullscreenImage] = useState<{
+    src: string;
+    alt: string;
+  } | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const initialLoadNotifiedRef = useRef(false);
@@ -488,35 +508,43 @@ export function TicketChatPanel({
     }
   };
 
+  const clearSelectedImage = useCallback(() => {
+    setImageFile(null);
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
+    setImagePreviewUrl(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, [imagePreviewUrl]);
+
   const handleSend = async () => {
     const trimmed = reply.trim();
-    if (!trimmed || sending) return;
+    if ((!trimmed && !imageFile) || sending) return;
+    if (replyInternal && imageFile) return;
     setSending(true);
     try {
-      let sent: {
-        _id: string;
-        senderType: string;
-        senderName: string;
-        senderAdminId?: string;
-        message: string;
-        createdAt: string;
-        visibility?: 'CUSTOMER' | 'INTERNAL';
-        emailSent?: boolean;
-        userWasOnline?: boolean;
-      } | null = null;
+      let sent: ChatMessage | null = null;
+      const attachment = imageFile ? await uploadSupportChatImage(requestId, imageFile) : undefined;
 
       try {
         const ack = await sendSupportChatMessage(requestId, trimmed, {
           internal: replyInternal,
+          attachment,
         });
         if (ack.message) {
-          sent = ack.message;
+          sent = ack.message as ChatMessage;
         }
       } catch {
         const res = await fetch(`/api/support-requests/${requestId}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: trimmed, internal: replyInternal }),
+          body: JSON.stringify({
+            message: trimmed,
+            internal: replyInternal,
+            attachment,
+          }),
         });
         if (res.ok) {
           sent = await res.json();
@@ -535,6 +563,7 @@ export function TicketChatPanel({
         broadcastAdminSupportTabEvent({ type: 'INVALIDATE_STATS' });
         setReply('');
         setReplyInternal(false);
+        clearSelectedImage();
         onActivityRef.current?.();
         if (sent.visibility === 'INTERNAL') {
           setDeliveryNotice('Internal note saved — not visible to the customer.');
@@ -845,7 +874,21 @@ export function TicketChatPanel({
                         : 'bg-background border rounded-bl-md',
                     )}
                   >
-                    <p className="whitespace-pre-wrap leading-relaxed">{msg.message}</p>
+                    {msg.attachment?.viewUrl ? (
+                      <SupportChatImageThumbnail
+                        src={msg.attachment.viewUrl}
+                        alt={msg.attachment.originalName || 'Chat image'}
+                        onClick={() =>
+                          setFullscreenImage({
+                            src: msg.attachment!.viewUrl!,
+                            alt: msg.attachment?.originalName || 'Chat image',
+                          })
+                        }
+                      />
+                    ) : null}
+                    {msg.message?.trim() ? (
+                      <p className="whitespace-pre-wrap leading-relaxed">{msg.message}</p>
+                    ) : null}
                     <p className="text-[10px] mt-1.5 tabular-nums text-muted-foreground text-right">
                       {formatMessageTime(msg.createdAt)}
                     </p>
@@ -893,6 +936,27 @@ export function TicketChatPanel({
                 Enter to send · Shift+Enter for new line
               </span>
             </div>
+            {imagePreviewUrl ? (
+              <div className="flex items-center gap-2 rounded-lg border bg-background px-2 py-2">
+                <img
+                  src={imagePreviewUrl}
+                  alt={imageFile?.name || 'Selected image'}
+                  className="h-14 w-14 rounded-md object-cover"
+                />
+                <div className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                  {imageFile?.name}
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 shrink-0"
+                  onClick={clearSelectedImage}
+                >
+                  <X className="size-3.5" />
+                </Button>
+              </div>
+            ) : null}
             <div
               className={cn(
                 'flex items-end gap-2 rounded-2xl border bg-background px-2 py-1.5 shadow-sm transition-colors',
@@ -901,6 +965,41 @@ export function TicketChatPanel({
                   : 'border-border/80',
               )}
             >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={SUPPORT_CHAT_IMAGE_ACCEPT}
+                className="hidden"
+                disabled={replyInternal || sending}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const validationError = validateSupportChatImageFile(file);
+                  if (validationError) {
+                    setDeliveryNotice(validationError);
+                    return;
+                  }
+                  if (imagePreviewUrl) {
+                    URL.revokeObjectURL(imagePreviewUrl);
+                  }
+                  setImageFile(file);
+                  setImagePreviewUrl(URL.createObjectURL(file));
+                  if (fileInputRef.current) {
+                    fileInputRef.current.value = '';
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="mb-0.5 size-9 shrink-0 rounded-full"
+                disabled={sending || replyInternal}
+                onClick={() => fileInputRef.current?.click()}
+                title="Attach image"
+              >
+                <ImagePlus className="size-4" />
+              </Button>
               <Textarea
                 placeholder={
                   replyInternal
@@ -921,7 +1020,7 @@ export function TicketChatPanel({
               />
               <Button
                 onClick={handleSend}
-                disabled={sending || !reply.trim()}
+                disabled={sending || (!reply.trim() && !imageFile)}
                 size="icon"
                 className={cn(
                   'mb-0.5 size-9 shrink-0 rounded-full',
@@ -941,6 +1040,15 @@ export function TicketChatPanel({
           </div>
         )}
       </div>
+
+      <SupportChatImagePreview
+        src={fullscreenImage?.src ?? null}
+        alt={fullscreenImage?.alt}
+        open={Boolean(fullscreenImage)}
+        onOpenChange={(open) => {
+          if (!open) setFullscreenImage(null);
+        }}
+      />
     </div>
   );
 }

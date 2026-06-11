@@ -100,6 +100,7 @@ export default function CustomerRequestsPage() {
       });
       if (res.ok) {
         setRequests(prev => prev.map(r => r._id === id ? { ...r, requestStatus: status } : r));
+        window.dispatchEvent(new Event('support-stats:refresh'));
       }
     } catch (err) {
       console.error('Failed to update status');

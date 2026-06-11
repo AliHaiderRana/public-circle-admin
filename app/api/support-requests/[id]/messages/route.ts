@@ -68,9 +68,10 @@ export async function POST(
   const body = await request.json();
   const message = typeof body.message === 'string' ? body.message.trim() : '';
   const internal = Boolean(body.internal);
+  const attachment = body.attachment;
 
-  if (!message) {
-    return NextResponse.json({ error: 'Message is required' }, { status: 400 });
+  if (!message && !attachment) {
+    return NextResponse.json({ error: 'Message or image is required' }, { status: 400 });
   }
 
   try {
@@ -89,6 +90,7 @@ export async function POST(
       body: JSON.stringify({
         message,
         internal,
+        attachment,
         adminId: session.userId,
         adminName: adminDisplayName,
         adminEmail: session.email || '',

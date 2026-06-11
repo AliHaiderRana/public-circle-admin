@@ -53,7 +53,15 @@ export async function leaveSupportChatRoom(supportRequestId: string) {
 export async function sendSupportChatMessage(
   supportRequestId: string,
   message: string,
-  options: { internal?: boolean } = {},
+  options: {
+    internal?: boolean;
+    attachment?: {
+      s3Path: string;
+      originalName: string;
+      contentType: string;
+      size: number;
+    };
+  } = {},
 ): Promise<SupportChatSendAck> {
   const activeSocket = await getSupportSocket();
   if (!activeSocket) {
@@ -63,7 +71,12 @@ export async function sendSupportChatMessage(
   return new Promise((resolve, reject) => {
     activeSocket.emit(
       SOCKET_CHANNELS.SUPPORT_CHAT_SEND,
-      { supportRequestId, message, internal: Boolean(options.internal) },
+      {
+        supportRequestId,
+        message,
+        internal: Boolean(options.internal),
+        attachment: options.attachment,
+      },
       (ack?: SupportChatSendAck) => {
         if (ack?.ok) {
           resolve(ack);

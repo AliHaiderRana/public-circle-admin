@@ -9,6 +9,7 @@ import {
   getSupportStatsCache,
   setSupportStatsCache,
 } from '@/lib/support-stats-cache.server';
+import { getPendingCustomerRequestsCount } from '@/lib/customer-request-stats.server';
 
 const CACHE_TTL_MS = 15000;
 
@@ -26,7 +27,7 @@ export async function GET() {
         SUPPORT_REQUEST_STATUS.IN_PROGRESS,
       ];
       const assignedFilter = assignedTicketsFilterForAdmin(session);
-      const [chatAgg, openSupportRequests] = await Promise.all([
+      const [chatAgg, openSupportRequests, pendingCustomerRequests] = await Promise.all([
         SupportRequest.aggregate([
           { $match: assignedFilter },
           { $group: { _id: null, unreadChatMessages: { $sum: '$unreadByAdmin' } } },
@@ -35,12 +36,14 @@ export async function GET() {
           ...assignedFilter,
           status: { $in: activeStatuses },
         }),
+        getPendingCustomerRequestsCount(),
       ]);
 
       return NextResponse.json({
         unreadChatMessages: chatAgg[0]?.unreadChatMessages ?? 0,
         openSupportRequests,
         unassignedTickets: 0,
+        pendingCustomerRequests,
       });
     } catch (error) {
       console.error('[support-stats] scoped fetch failed:', error);
@@ -54,7 +57,8 @@ export async function GET() {
   const now = Date.now();
   const statsCache = getSupportStatsCache();
   if (statsCache && statsCache.expiresAt > now) {
-    return NextResponse.json(statsCache.data);
+    const pendingCustomerRequests = await getPendingCustomerRequestsCount();
+    return NextResponse.json({ ...statsCache.data, pendingCustomerRequests });
   }
 
   try {
@@ -71,12 +75,14 @@ export async function GET() {
     }
 
     const data = payload?.data ?? payload;
+    const pendingCustomerRequests = await getPendingCustomerRequestsCount();
+    const merged = { ...data, pendingCustomerRequests };
     setSupportStatsCache({
-      data,
+      data: merged,
       expiresAt: now + CACHE_TTL_MS,
     });
 
-    return NextResponse.json(data);
+    return NextResponse.json(merged);
   } catch (error) {
     const cached = getSupportStatsCache();
     if (cached) {
