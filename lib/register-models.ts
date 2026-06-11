@@ -12,6 +12,8 @@ import TemplateCategory from './models/TemplateCategory';
 import EditorAsset from './models/EditorAsset';
 import Plan from './models/Plan';
 import AdminActivity from './models/AdminActivity';
+import AdminImpersonationActivity from './models/AdminImpersonationActivity';
+import CronHistory from './models/CronHistory';
 import SupportRequest from './models/SupportRequest';
 
 export function registerModels() {
@@ -31,6 +33,8 @@ export function registerModels() {
     EditorAsset,
     Plan,
     AdminActivity,
+    AdminImpersonationActivity,
+    CronHistory,
     SupportRequest,
   };
 }

@@ -5,6 +5,8 @@ import {
   ADMIN_AUDIT_ACTION,
   ADMIN_AUDIT_CATEGORY,
 } from '@/lib/admin-audit';
+import { getAdminLocalCronDefinition } from '@/lib/admin-cron-definitions';
+import { runAdminLocalCronInBackground } from '@/lib/admin-cron-runner.server';
 
 const SERVER_API_URL = process.env.SERVER_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || 'internal_admin_cron_key_2024';
@@ -26,6 +28,27 @@ export async function POST(
 
   if (!name) {
     return NextResponse.json({ error: 'Cron name is required' }, { status: 400 });
+  }
+
+  const localCron = getAdminLocalCronDefinition(name);
+  if (localCron) {
+    runAdminLocalCronInBackground(name);
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.CRON_TRIGGER,
+        category: ADMIN_AUDIT_CATEGORY.CRON,
+        resourceType: 'cron',
+        resourceId: name,
+        details: { cronName: name, source: 'admin' },
+      });
+    }
+
+    return NextResponse.json({
+      message: `Cron '${name}' triggered successfully. It will run in the background.`,
+      data: { name, triggered: true, source: 'admin' },
+    });
   }
 
   try {

@@ -5,6 +5,7 @@ import {
   ADMIN_AUDIT_ACTION,
   ADMIN_AUDIT_CATEGORY,
 } from "@/lib/admin-audit";
+import { getAdminLocalCronsForApi } from "@/lib/admin-cron-status.server";
 
 const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:3001";
 const INTERNAL_API_KEY =
@@ -44,8 +45,23 @@ export async function GET() {
     }
 
     const data = await res.json();
-    console.log("[API] Successfully fetched", data.crons?.length || 0, "crons");
-    return NextResponse.json(data);
+    const localCrons = await getAdminLocalCronsForApi();
+    const localCronNames = new Set(localCrons.map((cron) => cron.name));
+    const mergedCrons = [
+      ...(data.crons || []).filter((cron: { name: string }) => !localCronNames.has(cron.name)),
+      ...localCrons,
+    ].sort((a, b) =>
+      String(a.displayName || a.name).localeCompare(String(b.displayName || b.name))
+    );
+
+    console.log(
+      "[API] Successfully fetched",
+      mergedCrons.length,
+      "crons (",
+      localCrons.length,
+      "local )"
+    );
+    return NextResponse.json({ ...data, crons: mergedCrons });
   } catch (error: any) {
     console.error("[API] Error fetching crons via backend:", error);
     return NextResponse.json(

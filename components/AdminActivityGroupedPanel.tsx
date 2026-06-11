@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -42,11 +42,15 @@ import {
   type UnifiedActivityRow,
 } from '@/lib/unified-admin-activity';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Building2,
-  ChevronDown,
   ChevronRight,
-  ChevronsDownUp,
-  ChevronsUpDown,
   LayoutDashboard,
   LogIn,
   ScrollText,
@@ -249,19 +253,8 @@ function ActivityDetailCell({ row }: { row: UnifiedActivityRow }) {
   );
 }
 
-function SessionRecordsBadge({
-  count,
-  expanded,
-  loadedCount,
-}: {
-  count: number;
-  expanded?: boolean;
-  loadedCount?: number;
-}) {
-  const displayCount =
-    expanded && loadedCount !== undefined ? loadedCount : count;
-
-  if (displayCount <= 0) {
+function SessionRecordsBadge({ count }: { count: number }) {
+  if (count <= 0) {
     return (
       <Badge variant="outline" className="font-normal text-muted-foreground">
         No actions
@@ -271,8 +264,24 @@ function SessionRecordsBadge({
 
   return (
     <Badge variant="secondary" className="font-normal tabular-nums">
-      {displayCount} record{displayCount === 1 ? '' : 's'}
+      {count} record{count === 1 ? '' : 's'}
     </Badge>
+  );
+}
+
+type GroupedTimelineSessionEntry = Extract<GroupedTimelineEntry, { kind: 'session' }>;
+
+function ActivityTableHeader() {
+  return (
+    <TableHeader>
+      <TableRow className="hover:bg-transparent">
+        <TableHead className="w-[150px] pl-6">When</TableHead>
+        <TableHead>Action</TableHead>
+        <TableHead className="w-[130px]">Source</TableHead>
+        <TableHead className="w-[160px]">Customer</TableHead>
+        <TableHead className="w-[140px] pr-6">Category</TableHead>
+      </TableRow>
+    </TableHeader>
   );
 }
 
@@ -338,7 +347,7 @@ export default function AdminActivityGroupedPanel({
   const [sort, setSort] = useState<AuditSortOrder>('desc');
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
+  const [sessionModal, setSessionModal] = useState<GroupedTimelineSessionEntry | null>(null);
   const [sessionActions, setSessionActions] = useState<Record<string, UnifiedActivityRow[]>>({});
   const [loadingSessions, setLoadingSessions] = useState<Set<string>>(new Set());
 
@@ -361,14 +370,6 @@ export default function AdminActivityGroupedPanel({
   const categoryLabel = useMemo(
     () => categoryOptions.find((opt) => opt.value === category)?.label,
     [categoryOptions, category]
-  );
-
-  const sessionIdsOnPage = useMemo(
-    () =>
-      timeline
-        .filter((entry): entry is Extract<GroupedTimelineEntry, { kind: 'session' }> => entry.kind === 'session')
-        .map((entry) => entry.sessionId),
-    [timeline]
   );
 
   const hasActiveFilters =
@@ -423,7 +424,7 @@ export default function AdminActivityGroupedPanel({
 
   useEffect(() => {
     setPage(1);
-    setExpandedSessions(new Set());
+    setSessionModal(null);
     setSessionActions({});
   }, [adminEmail, dateFrom, dateTo, sort, source, category, limit]);
 
@@ -468,38 +469,15 @@ export default function AdminActivityGroupedPanel({
     [buildBaseParams]
   );
 
-  const toggleSession = useCallback(
-    (sessionId: string) => {
-      let shouldLoad = false;
-      setExpandedSessions((prev) => {
-        const next = new Set(prev);
-        if (next.has(sessionId)) {
-          next.delete(sessionId);
-        } else {
-          next.add(sessionId);
-          shouldLoad = true;
-        }
-        return next;
-      });
-      if (shouldLoad && !sessionActions[sessionId]) {
-        void loadSessionActions(sessionId);
+  const openSessionModal = useCallback(
+    (entry: GroupedTimelineSessionEntry) => {
+      setSessionModal(entry);
+      if (!sessionActions[entry.sessionId]) {
+        void loadSessionActions(entry.sessionId);
       }
     },
     [loadSessionActions, sessionActions]
   );
-
-  const expandAllSessions = useCallback(() => {
-    setExpandedSessions(new Set(sessionIdsOnPage));
-    for (const sessionId of sessionIdsOnPage) {
-      if (!sessionActions[sessionId]) {
-        void loadSessionActions(sessionId);
-      }
-    }
-  }, [sessionIdsOnPage, sessionActions, loadSessionActions]);
-
-  const collapseAllSessions = useCallback(() => {
-    setExpandedSessions(new Set());
-  }, []);
 
   const clearFilters = () => {
     setDateFrom('');
@@ -510,10 +488,14 @@ export default function AdminActivityGroupedPanel({
   };
 
   const handleRefresh = () => {
-    setExpandedSessions(new Set());
+    setSessionModal(null);
     setSessionActions({});
     setRefreshKey((k) => k + 1);
   };
+
+  const modalSessionId = sessionModal?.sessionId ?? '';
+  const modalActions = modalSessionId ? sessionActions[modalSessionId] : undefined;
+  const modalLoading = modalSessionId ? loadingSessions.has(modalSessionId) : false;
 
   const renderActivityRow = (row: UnifiedActivityRow, nested = false) => (
     <TableRow
@@ -555,9 +537,6 @@ export default function AdminActivityGroupedPanel({
       </TableCell>
     </TableRow>
   );
-
-  const allSessionsExpanded =
-    sessionIdsOnPage.length > 0 && sessionIdsOnPage.every((id) => expandedSessions.has(id));
 
   return (
     <div className="space-y-6">
@@ -686,50 +665,19 @@ export default function AdminActivityGroupedPanel({
 
       <Card>
         <CardHeader className="border-b">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <CardTitle className="text-lg">Activity timeline</CardTitle>
-              <CardDescription>
-                {loading
-                  ? 'Loading activity…'
-                  : `${total.toLocaleString()} entries · expand a login session to see API payloads`}
-              </CardDescription>
-            </div>
-            {source !== 'admin_panel' && sessionIdsOnPage.length > 0 && !loading && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                onClick={allSessionsExpanded ? collapseAllSessions : expandAllSessions}
-              >
-                {allSessionsExpanded ? (
-                  <>
-                    <ChevronsDownUp className="h-3.5 w-3.5" />
-                    Collapse sessions
-                  </>
-                ) : (
-                  <>
-                    <ChevronsUpDown className="h-3.5 w-3.5" />
-                    Expand all sessions
-                  </>
-                )}
-              </Button>
-            )}
+          <div>
+            <CardTitle className="text-lg">Activity timeline</CardTitle>
+            <CardDescription>
+              {loading
+                ? 'Loading activity…'
+                : `${total.toLocaleString()} entries · open a login session to view Public Circle actions`}
+            </CardDescription>
           </div>
         </CardHeader>
         <CardContent className="p-0">
           <ScrollArea className="h-[min(70vh,760px)]">
             <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-[150px] pl-6">When</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead className="w-[130px]">Source</TableHead>
-                  <TableHead className="w-[160px]">Customer</TableHead>
-                  <TableHead className="w-[140px] pr-6">Category</TableHead>
-                </TableRow>
-              </TableHeader>
+              <ActivityTableHeader />
               <TableBody>
                 {loading ? (
                   Array.from({ length: 8 }).map((_, i) => (
@@ -770,12 +718,7 @@ export default function AdminActivityGroupedPanel({
                       return renderActivityRow(entry.row);
                     }
 
-                    const expanded = expandedSessions.has(entry.sessionId);
-                    const actions = sessionActions[entry.sessionId];
-                    const isLoadingSession = loadingSessions.has(entry.sessionId);
-                    const loadedCount = actions?.length;
-                    const recordCount =
-                      expanded && loadedCount !== undefined ? loadedCount : entry.actionCount;
+                    const recordCount = entry.actionCount;
                     const hasRecords = recordCount > 0;
                     const customerLabel = getCustomerDisplayLabel({
                       name: entry.customerName,
@@ -783,106 +726,74 @@ export default function AdminActivityGroupedPanel({
                     });
 
                     return (
-                      <Fragment key={entry.id}>
-                        <TableRow
-                          className="cursor-pointer bg-muted/40 hover:bg-muted/60"
-                          onClick={() => toggleSession(entry.sessionId)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              toggleSession(entry.sessionId);
-                            }
-                          }}
-                          tabIndex={0}
-                          role="button"
-                          aria-expanded={expanded}
-                        >
-                          <TableCell className="align-top py-3 pl-6">
-                            <WhenCell iso={entry.createdAt} />
-                          </TableCell>
-                          <TableCell className="align-top whitespace-normal min-w-[280px] py-3">
-                            <div className="flex items-start gap-2">
-                              <span className="mt-0.5 text-muted-foreground">
-                                {expanded ? (
-                                  <ChevronDown className="h-4 w-4" />
-                                ) : (
-                                  <ChevronRight className="h-4 w-4" />
-                                )}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <div className="flex items-center gap-1.5 text-sm font-medium leading-snug min-w-0">
-                                    <LogIn className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                    <span>{sanitizeSummaryForDisplay(entry.loginSummary)}</span>
-                                  </div>
-                                  <SessionRecordsBadge
-                                    count={entry.actionCount}
-                                    expanded={expanded}
-                                    loadedCount={loadedCount}
-                                  />
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {hasRecords
-                                    ? expanded
-                                      ? `Click to hide ${recordCount} nested record${recordCount === 1 ? '' : 's'}`
-                                      : `Click to view ${recordCount} nested record${recordCount === 1 ? '' : 's'}`
-                                    : 'No Public Circle actions in this session'}
-                                  {entry.companyName && (
-                                    <>
-                                      {' '}
-                                      · <Building2 className="inline h-3 w-3 -mt-px" />{' '}
-                                      {entry.companyName}
-                                    </>
-                                  )}
-                                </p>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="align-top py-3">
-                            <Badge variant="secondary" className="font-normal">
-                              Login session
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="align-top py-3">
-                            <span className="text-xs text-foreground/80 truncate block max-w-[200px]">
-                              {customerLabel || '—'}
+                      <TableRow
+                        key={entry.id}
+                        className="cursor-pointer bg-muted/40 hover:bg-muted/60"
+                        onClick={() => openSessionModal(entry)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            openSessionModal(entry);
+                          }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-haspopup="dialog"
+                      >
+                        <TableCell className="align-top py-3 pl-6">
+                          <WhenCell iso={entry.createdAt} />
+                        </TableCell>
+                        <TableCell className="align-top whitespace-normal min-w-[280px] py-3">
+                          <div className="flex items-start gap-2">
+                            <span className="mt-0.5 text-muted-foreground">
+                              <ChevronRight className="h-4 w-4" />
                             </span>
-                          </TableCell>
-                          <TableCell className="align-top py-3 pr-6">
-                            <div className="flex flex-col gap-1.5 items-start">
-                              <Badge variant="outline" className="text-[10px] font-normal">
-                                Impersonation
-                              </Badge>
-                              {hasRecords && !expanded && (
-                                <span className="text-[10px] text-muted-foreground">
-                                  Expand for details
-                                </span>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-
-                        {expanded && isLoadingSession && (
-                          <TableRow className="bg-muted/15">
-                            <TableCell colSpan={5} className="py-4 pl-12">
-                              <div className="space-y-2 max-w-xl">
-                                <Skeleton className="h-10 w-full" />
-                                <Skeleton className="h-10 w-full" />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex items-center gap-1.5 text-sm font-medium leading-snug min-w-0">
+                                  <LogIn className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                  <span>{sanitizeSummaryForDisplay(entry.loginSummary)}</span>
+                                </div>
+                                <SessionRecordsBadge count={entry.actionCount} />
                               </div>
-                            </TableCell>
-                          </TableRow>
-                        )}
-
-                        {expanded && !isLoadingSession && actions && actions.length === 0 && (
-                          <TableRow className="bg-muted/15">
-                            <TableCell colSpan={5} className="py-3 pl-12 text-xs text-muted-foreground">
-                              No Public Circle actions recorded for this session.
-                            </TableCell>
-                          </TableRow>
-                        )}
-
-                        {expanded && actions?.map((row) => renderActivityRow(row, true))}
-                      </Fragment>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {hasRecords
+                                  ? `Click to view ${recordCount} Public Circle record${recordCount === 1 ? '' : 's'}`
+                                  : 'No Public Circle actions in this session'}
+                                {entry.companyName && (
+                                  <>
+                                    {' '}
+                                    · <Building2 className="inline h-3 w-3 -mt-px" />{' '}
+                                    {entry.companyName}
+                                  </>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="align-top py-3">
+                          <Badge variant="secondary" className="font-normal">
+                            Login session
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="align-top py-3">
+                          <span className="text-xs text-foreground/80 truncate block max-w-[200px]">
+                            {customerLabel || '—'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="align-top py-3 pr-6">
+                          <div className="flex flex-col gap-1.5 items-start">
+                            <Badge variant="outline" className="text-[10px] font-normal">
+                              Impersonation
+                            </Badge>
+                            {hasRecords && (
+                              <span className="text-[10px] text-muted-foreground">
+                                Open for details
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
                     );
                   })
                 )}
@@ -906,6 +817,63 @@ export default function AdminActivityGroupedPanel({
           </div>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={sessionModal !== null}
+        onOpenChange={(open) => {
+          if (!open) setSessionModal(null);
+        }}
+      >
+        <DialogContent className="flex max-h-[min(90vh,900px)] w-[min(96vw,1100px)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
+          <DialogHeader className="space-y-2 border-b px-6 py-4 text-left">
+            <DialogTitle>Public Circle session actions</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-1 text-sm text-muted-foreground">
+                {sessionModal && (
+                  <>
+                    <p>{sanitizeSummaryForDisplay(sessionModal.loginSummary)}</p>
+                    <p>
+                      {getCustomerDisplayLabel({
+                        name: sessionModal.customerName,
+                        companyName: sessionModal.companyName,
+                      })}
+                      {sessionModal.companyName ? ` · ${sessionModal.companyName}` : ''}
+                      {sessionModal.actionCount > 0
+                        ? ` · ${sessionModal.actionCount} record${sessionModal.actionCount === 1 ? '' : 's'}`
+                        : ''}
+                    </p>
+                  </>
+                )}
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+
+          <ScrollArea className="h-[min(60vh,640px)]">
+            <Table>
+              <ActivityTableHeader />
+              <TableBody>
+                {modalLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell colSpan={5} className="py-3">
+                        <Skeleton className="h-12 w-full" />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : modalActions && modalActions.length > 0 ? (
+                  modalActions.map((row) => renderActivityRow(row))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-12 text-center text-sm text-muted-foreground">
+                      No Public Circle actions recorded for this session.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
