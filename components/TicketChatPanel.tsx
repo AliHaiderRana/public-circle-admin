@@ -16,9 +16,24 @@ import {
   Building2,
   CheckCircle2,
   UserRound,
+  Trash2,
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import {
+  getSupportTicketPreviewText,
+  getSupportTicketSubjectTitle,
+} from '@/lib/support-ticket-display.util';
 import {
   SUPPORT_CHAT_SENDER_TYPE,
   SUPPORT_REQUEST_CATEGORY_LABELS,
@@ -41,6 +56,7 @@ import {
   broadcastAdminSupportTabEvent,
   onAdminSupportTabChatMessage,
 } from '@/lib/support-tab-sync';
+import { subscribeAdminSupportChatPurged } from '@/lib/admin-notification-socket';
 import {
   SUPPORT_CHAT_IMAGE_ACCEPT,
   uploadSupportChatImage,
@@ -51,6 +67,14 @@ import {
   SupportChatImagePreview,
   SupportChatImageThumbnail,
 } from '@/components/SupportChatImagePreview';
+import { SupportChatUploadingImage } from '@/components/SupportChatUploadingImage';
+import {
+  createOptimisticAdminChatMessage,
+  createPendingUploadState,
+  patchPendingMessageUpload,
+  revokePendingUploadPreview,
+  shouldShowChatMessageText,
+} from '@/lib/support-chat-pending';
 
 const CHAT_PAGE_SIZE = 30;
 const CHAT_POLL_MS = 15000;
@@ -64,6 +88,11 @@ type ChatMessage = {
   createdAt: string;
   visibility?: 'CUSTOMER' | 'INTERNAL';
   attachment?: SupportChatAttachment;
+  pendingUpload?: {
+    previewUrl: string;
+    progress: number;
+    error?: string;
+  };
 };
 
 type TicketChatPanelProps = {
@@ -81,7 +110,10 @@ type TicketChatPanelProps = {
   onActivity?: () => void;
   onOpenManage?: () => void;
   onCloseTicket?: () => void;
+  onForceResolveTicket?: () => void;
   closingTicket?: boolean;
+  isSuperAdmin?: boolean;
+  onTicketDeleted?: () => void;
   onTicketLoaded?: (ticket: {
     status?: string;
     message?: string;
@@ -151,7 +183,10 @@ export function TicketChatPanel({
   onActivity,
   onOpenManage,
   onCloseTicket,
+  onForceResolveTicket,
   closingTicket = false,
+  isSuperAdmin = false,
+  onTicketDeleted,
   onTicketLoaded,
   showRefresh = true,
   refreshKey = 0,
@@ -184,6 +219,8 @@ export function TicketChatPanel({
     src: string;
     alt: string;
   } | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingChat, setDeletingChat] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const initialLoadNotifiedRef = useRef(false);
@@ -390,6 +427,7 @@ export function TicketChatPanel({
     socketReadyRef.current = false;
     setUserOnline(null);
     setDeliveryNotice(null);
+    setDeleteConfirmOpen(false);
     lastTicketMetaRef.current = '';
     stickToBottomRef.current = true;
     initialLoadNotifiedRef.current = false;
@@ -519,18 +557,92 @@ export function TicketChatPanel({
     }
   }, [imagePreviewUrl]);
 
+  const applyTicketDeleted = useCallback(() => {
+    setMessages([]);
+    setTotalCount(0);
+    setHasMoreOlder(false);
+    setReply('');
+    setReplyInternal(false);
+    clearSelectedImage();
+    onTicketDeleted?.();
+    broadcastAdminSupportTabEvent({ type: 'INVALIDATE_REQUESTS' });
+    broadcastAdminSupportTabEvent({ type: 'INVALIDATE_STATS' });
+  }, [clearSelectedImage, onTicketDeleted]);
+
+  const handleDeleteTicket = async () => {
+    if (!canDeleteChat) {
+      setDeliveryNotice('Only resolved tickets can be deleted.');
+      setDeleteConfirmOpen(false);
+      return;
+    }
+
+    setDeletingChat(true);
+    try {
+      const res = await fetch(`/api/support-requests/${requestId}/chat`, {
+        method: 'DELETE',
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeliveryNotice(payload?.error || 'Failed to delete support ticket.');
+        return;
+      }
+      applyTicketDeleted();
+      setDeleteConfirmOpen(false);
+    } catch {
+      setDeliveryNotice('Failed to delete support ticket. Please try again.');
+    } finally {
+      setDeletingChat(false);
+    }
+  };
+
+  useEffect(() => {
+    return subscribeAdminSupportChatPurged((payload) => {
+      if (payload.supportRequestId !== requestId) return;
+      applyTicketDeleted();
+    });
+  }, [applyTicketDeleted, requestId]);
+
   const handleSend = async () => {
     const trimmed = reply.trim();
     if ((!trimmed && !imageFile) || sending) return;
     if (replyInternal && imageFile) return;
+
+    const pendingUpload = imageFile ? createPendingUploadState(imageFile) : undefined;
+    const optimistic = createOptimisticAdminChatMessage(trimmed, {
+      senderName: currentAdminName || 'Admin',
+      senderAdminId: currentAdminId,
+      visibility: replyInternal ? 'INTERNAL' : 'CUSTOMER',
+      pendingUpload,
+    });
+
+    const savedReply = trimmed;
+    const savedReplyInternal = replyInternal;
+    const savedImageFile = imageFile;
+
     setSending(true);
+    stickToBottomRef.current = true;
+    setMessages((prev) => mergeMessages(prev, [optimistic as ChatMessage]));
+    setReply('');
+    setReplyInternal(false);
+    clearSelectedImage();
+
     try {
       let sent: ChatMessage | null = null;
-      const attachment = imageFile ? await uploadSupportChatImage(requestId, imageFile) : undefined;
+      const attachment = savedImageFile
+        ? await uploadSupportChatImage(requestId, savedImageFile, (progress) => {
+            setMessages((prev) =>
+              patchPendingMessageUpload(prev, optimistic._id, { progress }),
+            );
+          })
+        : undefined;
+
+      setMessages((prev) =>
+        patchPendingMessageUpload(prev, optimistic._id, { progress: 100 }),
+      );
 
       try {
-        const ack = await sendSupportChatMessage(requestId, trimmed, {
-          internal: replyInternal,
+        const ack = await sendSupportChatMessage(requestId, savedReply, {
+          internal: savedReplyInternal,
           attachment,
         });
         if (ack.message) {
@@ -541,8 +653,8 @@ export function TicketChatPanel({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            message: trimmed,
-            internal: replyInternal,
+            message: savedReply,
+            internal: savedReplyInternal,
             attachment,
           }),
         });
@@ -552,8 +664,11 @@ export function TicketChatPanel({
       }
 
       if (sent) {
-        stickToBottomRef.current = true;
-        setMessages((prev) => mergeMessages(prev, [sent]));
+        revokePendingUploadPreview(optimistic);
+        setMessages((prev) => {
+          const withoutPending = prev.filter((item) => item._id !== optimistic._id);
+          return mergeMessages(withoutPending, [sent as ChatMessage]);
+        });
         broadcastAdminSupportTabEvent({
           type: 'CHAT_MESSAGE',
           supportRequestId: requestId,
@@ -561,9 +676,6 @@ export function TicketChatPanel({
         });
         broadcastAdminSupportTabEvent({ type: 'INVALIDATE_REQUESTS' });
         broadcastAdminSupportTabEvent({ type: 'INVALIDATE_STATS' });
-        setReply('');
-        setReplyInternal(false);
-        clearSelectedImage();
         onActivityRef.current?.();
         if (sent.visibility === 'INTERNAL') {
           setDeliveryNotice('Internal note saved — not visible to the customer.');
@@ -579,13 +691,52 @@ export function TicketChatPanel({
           if (el) el.scrollTop = el.scrollHeight;
         });
       }
+    } catch {
+      if (pendingUpload) {
+        setMessages((prev) =>
+          patchPendingMessageUpload(prev, optimistic._id, { error: 'Upload failed' }),
+        );
+        window.setTimeout(() => {
+          setMessages((prev) => {
+            const failed = prev.find((item) => item._id === optimistic._id);
+            revokePendingUploadPreview(failed);
+            return prev.filter((item) => item._id !== optimistic._id);
+          });
+        }, 1800);
+      } else {
+        setMessages((prev) => prev.filter((item) => item._id !== optimistic._id));
+      }
+      setReply(savedReply);
+      setReplyInternal(savedReplyInternal);
     } finally {
       setSending(false);
     }
   };
 
-  const displaySubject = subject || loadedSubject || 'Support ticket';
+  const displaySubject = subject || loadedSubject || '';
   const displayTicketMessage = (ticketMessageProp ?? loadedTicketMessage ?? '').trim();
+  const latestChatPreview = (() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const msg = messages[index];
+      if (msg.pendingUpload) continue;
+      const text = msg.message?.trim() || '';
+      if (text && !isSystemMessage(text)) return text;
+      if (msg.attachment?.viewUrl) return 'Image attachment';
+    }
+    return undefined;
+  })();
+  const displayHeadline = getSupportTicketSubjectTitle(
+    displaySubject,
+    [companyName, userName].filter(Boolean).join(' · ') || 'Support ticket',
+  );
+  const displayPreview = getSupportTicketPreviewText(
+    {
+      lastMessagePreview: latestChatPreview,
+      message: displayTicketMessage,
+      category: loadedCategory,
+    },
+    { excludeSubject: true },
+  );
   const displayAdminNotes = (adminNotesProp ?? loadedAdminNotes ?? '').trim();
   const categoryLabel = loadedCategory
     ? SUPPORT_REQUEST_CATEGORY_LABELS[loadedCategory] ?? loadedCategory
@@ -595,6 +746,8 @@ export function TicketChatPanel({
     : null;
 
   const isReadOnly = ticketStatus ? READ_ONLY_STATUSES.has(ticketStatus) : false;
+  const canDeleteChat =
+    isSuperAdmin && Boolean(ticketStatus && READ_ONLY_STATUSES.has(ticketStatus));
   const statusLabel = ticketStatus
     ? SUPPORT_REQUEST_STATUS_LABELS[ticketStatus] ?? ticketStatus
     : null;
@@ -655,7 +808,14 @@ export function TicketChatPanel({
                 </Badge>
               )}
             </div>
-            <h3 className="text-base font-semibold leading-snug">{displaySubject}</h3>
+            <div className="space-y-1">
+              <h3 className="text-base font-semibold leading-snug">{displayHeadline}</h3>
+              {displayPreview && displayPreview !== 'No messages yet' ? (
+                <p className="text-sm text-muted-foreground line-clamp-2" title={displayPreview}>
+                  {displayPreview}
+                </p>
+              ) : null}
+            </div>
             {(companyName || userName || categoryLabel || submittedLabel) && (
               <div className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
                 {(companyName || userName) && (
@@ -699,21 +859,38 @@ export function TicketChatPanel({
             {onCloseTicket &&
               !isReadOnly &&
               (ticketStatus === SUPPORT_REQUEST_STATUS.OPEN ||
-                ticketStatus === SUPPORT_REQUEST_STATUS.IN_PROGRESS) && (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={onCloseTicket}
-                  disabled={closingTicket}
-                >
-                  {closingTicket ? (
-                    <Loader2 className="size-3 mr-1.5 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="size-3 mr-1.5" />
+                ticketStatus === SUPPORT_REQUEST_STATUS.IN_PROGRESS ||
+                ticketStatus === SUPPORT_REQUEST_STATUS.PENDING_RESOLUTION) && (
+                <>
+                  {ticketStatus === SUPPORT_REQUEST_STATUS.PENDING_RESOLUTION ? null : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={onCloseTicket}
+                      disabled={closingTicket}
+                    >
+                      {closingTicket ? (
+                        <Loader2 className="size-3 mr-1.5 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="size-3 mr-1.5" />
+                      )}
+                      Close ticket
+                    </Button>
                   )}
-                  Close ticket
-                </Button>
+                  {onForceResolveTicket ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="h-8 text-xs"
+                      onClick={onForceResolveTicket}
+                      disabled={closingTicket}
+                    >
+                      Resolve without confirmation
+                    </Button>
+                  ) : null}
+                </>
               )}
             {companyProfileId && (
               <Button
@@ -741,6 +918,24 @@ export function TicketChatPanel({
                 Manage
               </Button>
             )}
+            {canDeleteChat ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => setDeleteConfirmOpen(true)}
+                disabled={deletingChat}
+                title="Permanently delete ticket (resolved only)"
+              >
+                {deletingChat ? (
+                  <Loader2 className="size-3 mr-1.5 animate-spin" />
+                ) : (
+                  <Trash2 className="size-3 mr-1.5" />
+                )}
+                Delete ticket
+              </Button>
+            ) : null}
             {showRefresh && (
               <Button
                 type="button"
@@ -848,6 +1043,11 @@ export function TicketChatPanel({
                 )
               : msg.senderName?.trim() || userName || 'Customer';
 
+            const showText = shouldShowChatMessageText(msg.message);
+            const hasImage = Boolean(
+              msg.pendingUpload || msg.attachment?.viewUrl,
+            );
+
             return (
               <div key={msg._id} className={cn('flex', isAdmin ? 'justify-end' : 'justify-start')}>
                 <div className={cn('max-w-[82%] space-y-1', isAdmin ? 'items-end' : 'items-start')}>
@@ -864,35 +1064,54 @@ export function TicketChatPanel({
                       </span>
                     ) : null}
                   </p>
-                  <div
+                  {(showText || hasImage) ? (
+                    <div
+                      className={cn(
+                        'rounded-2xl text-sm shadow-sm',
+                        showText ? 'px-3.5 py-2.5' : 'p-1.5',
+                        isAdmin
+                          ? isInternal
+                            ? 'bg-amber-50/90 text-foreground border border-amber-200/80 border-dashed rounded-br-md dark:bg-amber-950/25 dark:border-amber-900/50'
+                            : 'bg-muted text-foreground border border-border/80 rounded-br-md'
+                          : 'bg-background border rounded-bl-md',
+                      )}
+                    >
+                      {msg.pendingUpload ? (
+                        <SupportChatUploadingImage
+                          src={msg.pendingUpload.previewUrl}
+                          alt="Uploading image"
+                          progress={msg.pendingUpload.progress}
+                          error={msg.pendingUpload.error}
+                        />
+                      ) : null}
+                      {!msg.pendingUpload && msg.attachment?.viewUrl ? (
+                        <SupportChatImageThumbnail
+                          src={msg.attachment.viewUrl}
+                          alt={msg.attachment.originalName || 'Chat image'}
+                          className={showText ? undefined : 'mb-0'}
+                          onClick={() =>
+                            setFullscreenImage({
+                              src: msg.attachment!.viewUrl!,
+                              alt: msg.attachment?.originalName || 'Chat image',
+                            })
+                          }
+                        />
+                      ) : null}
+                      {showText ? (
+                        <p className={cn('whitespace-pre-wrap leading-relaxed', hasImage && 'mt-2')}>
+                          {msg.message?.trim()}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <p
                     className={cn(
-                      'rounded-2xl px-3.5 py-2.5 text-sm shadow-sm',
-                      isAdmin
-                        ? isInternal
-                          ? 'bg-amber-50/90 text-foreground border border-amber-200/80 border-dashed rounded-br-md dark:bg-amber-950/25 dark:border-amber-900/50'
-                          : 'bg-muted text-foreground border border-border/80 rounded-br-md'
-                        : 'bg-background border rounded-bl-md',
+                      'text-[10px] tabular-nums text-muted-foreground px-1',
+                      isAdmin ? 'text-right' : 'text-left',
                     )}
                   >
-                    {msg.attachment?.viewUrl ? (
-                      <SupportChatImageThumbnail
-                        src={msg.attachment.viewUrl}
-                        alt={msg.attachment.originalName || 'Chat image'}
-                        onClick={() =>
-                          setFullscreenImage({
-                            src: msg.attachment!.viewUrl!,
-                            alt: msg.attachment?.originalName || 'Chat image',
-                          })
-                        }
-                      />
-                    ) : null}
-                    {msg.message?.trim() ? (
-                      <p className="whitespace-pre-wrap leading-relaxed">{msg.message}</p>
-                    ) : null}
-                    <p className="text-[10px] mt-1.5 tabular-nums text-muted-foreground text-right">
-                      {formatMessageTime(msg.createdAt)}
-                    </p>
-                  </div>
+                    {formatMessageTime(msg.createdAt)}
+                  </p>
                 </div>
               </div>
             );
@@ -906,7 +1125,7 @@ export function TicketChatPanel({
         ) : null}
         {isReadOnly ? (
           <p className="py-1 text-center text-xs text-muted-foreground">
-            Replies disabled while ticket is {statusLabel?.toLowerCase() ?? 'closed'}.
+            {`Replies disabled while ticket is ${statusLabel?.toLowerCase() ?? 'closed'}.`}
           </p>
         ) : (
           <div className="space-y-2">
@@ -1049,6 +1268,51 @@ export function TicketChatPanel({
           if (!open) setFullscreenImage(null);
         }}
       />
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently delete this ticket?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  This will <strong className="text-foreground">permanently delete the ticket</strong>,
+                  all chat messages, related notifications, and every attached image from S3 storage.
+                </p>
+                <p>This action cannot be undone.</p>
+                <p>Available only for resolved tickets.</p>
+                {totalCount > 0 ? (
+                  <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs">
+                    About to delete <strong>{totalCount}</strong> message
+                    {totalCount === 1 ? '' : 's'}
+                    {messages.some((msg) => msg.attachment?.viewUrl) ? ' including image attachments' : ''}.
+                  </p>
+                ) : null}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingChat}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deletingChat}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                void handleDeleteTicket();
+              }}
+            >
+              {deletingChat ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                'Delete ticket permanently'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -52,27 +52,59 @@ export async function presignSupportChatImageUpload(requestId: string, file: Fil
   };
 }
 
-export async function uploadSupportChatImageToS3(uploadUrl: string, file: File, contentType: string) {
-  const response = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': contentType },
-    body: file,
+export async function uploadSupportChatImageToS3(
+  uploadUrl: string,
+  file: File,
+  contentType: string,
+  onProgress?: (progress: number) => void,
+) {
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', uploadUrl);
+    xhr.setRequestHeader('Content-Type', contentType);
+    xhr.upload.onprogress = (event) => {
+      if (!onProgress || !event.lengthComputable) return;
+      onProgress(Math.round((event.loaded / event.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+        return;
+      }
+      reject(
+        new Error(
+          xhr.status === 404
+            ? 'Image upload failed: S3 bucket not found. Check S3_SUPPORT_CHAT_BUCKET on the server.'
+            : `Failed to upload image to storage (HTTP ${xhr.status}).`,
+        ),
+      );
+    };
+    xhr.onerror = () =>
+      reject(
+        new Error(
+          'Failed to upload image to storage. This is often a missing S3 bucket or CORS configuration issue.',
+        ),
+      );
+    xhr.send(file);
   });
-  if (!response.ok) {
-    throw new Error('Failed to upload image.');
-  }
 }
 
 export async function uploadSupportChatImage(
   requestId: string,
   file: File,
+  onProgress?: (progress: number) => void,
 ): Promise<SupportChatAttachmentPayload> {
   const validationError = validateSupportChatImageFile(file);
   if (validationError) {
     throw new Error(validationError);
   }
+  onProgress?.(5);
   const presign = await presignSupportChatImageUpload(requestId, file);
-  await uploadSupportChatImageToS3(presign.uploadUrl, file, presign.contentType);
+  onProgress?.(12);
+  await uploadSupportChatImageToS3(presign.uploadUrl, file, presign.contentType, (uploadPercent) => {
+    onProgress?.(12 + Math.round(uploadPercent * 0.83));
+  });
+  onProgress?.(100);
   return {
     s3Path: presign.s3Path,
     originalName: file.name,

@@ -17,6 +17,14 @@ export type AdminSupportTabSyncEvent =
       message: AdminSupportChatMessage;
       sourceTabId: string;
     }
+  | {
+      type: 'TICKET_STATUS';
+      supportRequestId: string;
+      status: string;
+      pendingResolutionAt?: string | null;
+      autoResolveAt?: string | null;
+      sourceTabId: string;
+    }
   | { type: 'INVALIDATE_REQUESTS'; sourceTabId: string }
   | { type: 'INVALIDATE_STATS'; sourceTabId: string };
 
@@ -51,6 +59,13 @@ function getChannel() {
         return;
       }
 
+      if (payload.type === 'TICKET_STATUS') {
+        window.dispatchEvent(
+          new CustomEvent('admin-support:ticket-status', { detail: payload }),
+        );
+        return;
+      }
+
       if (payload.type === 'INVALIDATE_REQUESTS') {
         window.dispatchEvent(new CustomEvent('admin-support:invalidate-requests'));
         return;
@@ -66,6 +81,13 @@ function getChannel() {
 
 export type AdminSupportTabSyncPayload =
   | { type: 'CHAT_MESSAGE'; supportRequestId: string; message: AdminSupportChatMessage }
+  | {
+      type: 'TICKET_STATUS';
+      supportRequestId: string;
+      status: string;
+      pendingResolutionAt?: string | null;
+      autoResolveAt?: string | null;
+    }
   | { type: 'INVALIDATE_REQUESTS' }
   | { type: 'INVALIDATE_STATS' };
 

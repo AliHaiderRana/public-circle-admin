@@ -32,8 +32,25 @@ type SupportChatListener = (payload: {
   userWasOnline?: boolean;
 }) => void;
 
+type SupportTicketStatusListener = (payload: {
+  supportRequestId: string;
+  status: string;
+  previousStatus?: string | null;
+  pendingResolutionAt?: string | null;
+  autoResolveAt?: string | null;
+}) => void;
+
+type SupportChatPurgedListener = (payload: {
+  supportRequestId: string;
+  purgedAt: string;
+  deletedByAdminId?: string | null;
+  deletedByAdminName?: string | null;
+}) => void;
+
 const notificationListeners = new Set<AdminNotificationListener>();
 const supportChatListeners = new Set<SupportChatListener>();
+const supportTicketStatusListeners = new Set<SupportTicketStatusListener>();
+const supportChatPurgedListeners = new Set<SupportChatPurgedListener>();
 const connectionListeners = new Set<(connected: boolean) => void>();
 
 let socket: Socket | null = null;
@@ -46,6 +63,8 @@ function notifyConnection(connected: boolean) {
 function attachSocketHandlers(activeSocket: Socket) {
   activeSocket.off(SOCKET_CHANNELS.ADMIN_NOTIFICATION_CREATED);
   activeSocket.off(SOCKET_CHANNELS.SUPPORT_CHAT_MESSAGE);
+  activeSocket.off(SOCKET_CHANNELS.SUPPORT_CHAT_PURGED);
+  activeSocket.off(SOCKET_CHANNELS.SUPPORT_TICKET_STATUS_UPDATED);
 
   activeSocket.on(SOCKET_CHANNELS.ADMIN_NOTIFICATION_CREATED, (notification: AdminNotificationPayload) => {
     notificationListeners.forEach((listener) => listener(notification));
@@ -60,6 +79,31 @@ function attachSocketHandlers(activeSocket: Socket) {
       userWasOnline?: boolean;
     }) => {
       supportChatListeners.forEach((listener) => listener(payload));
+    },
+  );
+
+  activeSocket.on(
+    SOCKET_CHANNELS.SUPPORT_TICKET_STATUS_UPDATED,
+    (payload: {
+      supportRequestId: string;
+      status: string;
+      previousStatus?: string | null;
+      pendingResolutionAt?: string | null;
+      autoResolveAt?: string | null;
+    }) => {
+      supportTicketStatusListeners.forEach((listener) => listener(payload));
+    },
+  );
+
+  activeSocket.on(
+    SOCKET_CHANNELS.SUPPORT_CHAT_PURGED,
+    (payload: {
+      supportRequestId: string;
+      purgedAt: string;
+      deletedByAdminId?: string | null;
+      deletedByAdminName?: string | null;
+    }) => {
+      supportChatPurgedListeners.forEach((listener) => listener(payload));
     },
   );
 }
@@ -90,6 +134,24 @@ export function subscribeAdminSupportChatMessages(listener: SupportChatListener)
 
   return () => {
     supportChatListeners.delete(listener);
+  };
+}
+
+export function subscribeAdminSupportTicketStatus(listener: SupportTicketStatusListener) {
+  supportTicketStatusListeners.add(listener);
+  void ensureAdminNotificationSocket();
+
+  return () => {
+    supportTicketStatusListeners.delete(listener);
+  };
+}
+
+export function subscribeAdminSupportChatPurged(listener: SupportChatPurgedListener) {
+  supportChatPurgedListeners.add(listener);
+  void ensureAdminNotificationSocket();
+
+  return () => {
+    supportChatPurgedListeners.delete(listener);
   };
 }
 

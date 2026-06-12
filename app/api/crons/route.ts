@@ -6,10 +6,10 @@ import {
   ADMIN_AUDIT_CATEGORY,
 } from "@/lib/admin-audit";
 import { getAdminLocalCronsForApi } from "@/lib/admin-cron-status.server";
-
-const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:3001";
-const INTERNAL_API_KEY =
-  process.env.INTERNAL_API_KEY || "internal_admin_cron_key_2024";
+import {
+  getBackendApiUrl,
+  getBackendAuthHeaders,
+} from "@/lib/backend-api.server";
 
 /**
  * GET /api/crons
@@ -22,12 +22,10 @@ export async function GET() {
   }
 
   try {
-    console.log("[API] Fetching crons from:", API_BASE_URL);
-    const res = await fetch(`${API_BASE_URL}/crons`, {
-      headers: {
-        "x-internal-api-key": INTERNAL_API_KEY,
-      },
-    });
+    const apiBaseUrl = getBackendApiUrl();
+    const headers = await getBackendAuthHeaders();
+    console.log("[API] Fetching crons from:", apiBaseUrl);
+    const res = await fetch(`${apiBaseUrl}/crons`, { headers });
 
     console.log("[API] Backend response status:", res.status);
 
@@ -38,7 +36,7 @@ export async function GET() {
         {
           error: "Failed to fetch crons from backend",
           details: errorBody?.error || errorBody?.message || `Backend returned ${res.status}`,
-          backendUrl: API_BASE_URL,
+          backendUrl: apiBaseUrl,
         },
         { status: res.status }
       );
@@ -68,7 +66,7 @@ export async function GET() {
       { 
         error: "Failed to connect to backend", 
         details: error.message,
-        backendUrl: API_BASE_URL 
+        backendUrl: getBackendApiUrl(),
       },
       { status: 500 }
     );
@@ -94,12 +92,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    const res = await fetch(`${API_BASE_URL}/crons/seed`, {
+    const res = await fetch(`${getBackendApiUrl()}/crons/seed`, {
       method: "POST",
-      headers: {
-        "x-internal-api-key": INTERNAL_API_KEY,
+      headers: await getBackendAuthHeaders({
         "Content-Type": "application/json",
-      },
+      }),
       body: JSON.stringify({}),
     });
 

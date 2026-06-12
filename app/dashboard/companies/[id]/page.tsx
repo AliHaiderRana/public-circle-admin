@@ -24,7 +24,6 @@ import {
   Play,
   LogIn,
 } from 'lucide-react';
-import AdminImpersonationActivitySection from '@/components/AdminImpersonationActivitySection';
 import { useAuth } from '@/context/AuthContext';
 import { startImpersonation } from '@/lib/impersonate-client';
 import {
@@ -780,12 +779,6 @@ export default function CompanyDetailPage() {
           </CardContent>
         </Card>
 
-        <AdminImpersonationActivitySection
-          companyId={String(params.id)}
-          title="Login as user activity"
-          description="Filter by admin, date, and category. Actions performed in Public Circle while impersonating users in this company."
-          showFilters
-        />
       </div>
     </div>
   );

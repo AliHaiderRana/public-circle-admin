@@ -89,6 +89,7 @@ export async function PATCH(
     assignedAdminId,
     assignedAdminName,
     anchorMessageId,
+    forceResolve,
   } = body;
 
   if (status && !Object.values(SUPPORT_REQUEST_STATUS).includes(status)) {
@@ -122,6 +123,13 @@ export async function PATCH(
   if (typeof adminNotes === 'string' && !session.isSuperAdmin) {
     return NextResponse.json(
       { error: 'Only super admins can update private team notes' },
+      { status: 403 },
+    );
+  }
+
+  if (forceResolve && !session.isSuperAdmin) {
+    return NextResponse.json(
+      { error: 'Only super admins can resolve tickets without customer confirmation' },
       { status: 403 },
     );
   }
@@ -164,6 +172,7 @@ export async function PATCH(
               actingAdminName: session.name || session.email || '',
             }
           : {}),
+        ...(forceResolve ? { forceResolve: true } : {}),
       }),
     });
 

@@ -61,6 +61,7 @@ export type GroupedTimelineSessionEntry = {
   loginSummary: string;
   customerEmail: string;
   customerName?: string;
+  companyId?: string;
   companyName?: string;
   actionCount: number;
 };

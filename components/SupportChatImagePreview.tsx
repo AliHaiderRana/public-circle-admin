@@ -3,6 +3,7 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Maximize2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SupportChatZoomableImage } from '@/components/SupportChatZoomableImage';
 
 type SupportChatImagePreviewProps = {
   src: string | null;
@@ -22,7 +23,7 @@ export function SupportChatImagePreview({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay
           className={cn(
-            'fixed inset-0 z-[100] bg-black/92 backdrop-blur-sm',
+            'fixed inset-0 z-[100] bg-black/95',
             'data-[state=open]:animate-in data-[state=closed]:animate-out',
             'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
           )}
@@ -32,36 +33,37 @@ export function SupportChatImagePreview({
             'fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 sm:p-8 outline-none',
             'data-[state=open]:animate-in data-[state=closed]:animate-out',
             'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-            'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
           )}
-          onPointerDownOutside={() => onOpenChange(false)}
+          onPointerDownOutside={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}
+          onClick={() => onOpenChange(false)}
         >
           <DialogPrimitive.Title className="sr-only">{alt}</DialogPrimitive.Title>
           <DialogPrimitive.Description className="sr-only">
-            Full-screen chat image preview. Press Escape or click outside to close.
+            Full-screen chat image preview with zoom. Press Escape or click outside to close.
           </DialogPrimitive.Description>
 
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="absolute right-3 top-3 z-10 inline-flex size-10 items-center justify-center rounded-full border border-white/15 bg-black/45 text-white shadow-lg transition hover:bg-black/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 sm:right-5 sm:top-5"
-            aria-label="Close image preview"
-          >
-            <X className="size-5" />
-          </button>
+          <div className="absolute right-3 top-3 z-10 sm:right-5 sm:top-5">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenChange(false);
+              }}
+              className="inline-flex size-10 items-center justify-center rounded-full border border-white/15 bg-black/45 text-white shadow-lg transition hover:bg-black/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+              aria-label="Close image preview"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
 
-          {src ? (
-            <div className="flex max-h-full w-full max-w-[min(100%,80rem)] flex-col items-center gap-3">
-              <img
-                src={src}
-                alt={alt}
-                className="max-h-[calc(100dvh-5rem)] w-auto max-w-full rounded-md object-contain shadow-2xl"
-              />
-              {alt && alt !== 'Chat image' ? (
-                <p className="max-w-lg truncate px-2 text-center text-xs text-white/70 sm:text-sm">
-                  {alt}
-                </p>
-              ) : null}
+          {src && open ? (
+            <div
+              className="flex max-h-full w-full max-w-[min(100%,80rem)] flex-col items-center"
+              onClick={(event) => event.stopPropagation()}
+              onWheel={(event) => event.stopPropagation()}
+            >
+              <SupportChatZoomableImage src={src} alt={alt} />
             </div>
           ) : null}
         </DialogPrimitive.Content>
@@ -95,11 +97,7 @@ export function SupportChatImageThumbnail({
       )}
       aria-label={`View full size: ${alt}`}
     >
-      <img
-        src={src}
-        alt={alt}
-        className="max-h-48 max-w-full bg-muted/30 object-contain"
-      />
+      <img src={src} alt={alt} className="max-h-48 max-w-full bg-muted/30 object-contain" />
       <span
         className={cn(
           'pointer-events-none absolute inset-0 flex items-center justify-center',

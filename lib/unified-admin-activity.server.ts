@@ -18,6 +18,12 @@ import type {
   UnifiedActivityRow,
 } from '@/lib/unified-admin-activity';
 
+function normalizeObjectId(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  const id = String(value).trim();
+  return mongoose.Types.ObjectId.isValid(id) ? id : undefined;
+}
+
 function parseCategoryFilter(
   raw: string,
   source: string
@@ -408,9 +414,84 @@ function sortTimelineEntries(
   });
 }
 
+async function enrichSessionCompanies({
+  sessionsMap,
+  User,
+  Company,
+}: {
+  sessionsMap: Map<string, GroupedTimelineEntry & { kind: 'session' }>;
+  User: mongoose.Model<unknown>;
+  Company: mongoose.Model<unknown>;
+}) {
+  const sessions = Array.from(sessionsMap.values()).filter(
+    (entry): entry is Extract<GroupedTimelineEntry, { kind: 'session' }> =>
+      entry.kind === 'session'
+  );
+  if (sessions.length === 0) return;
+
+  const missingCompanyId = sessions.filter(
+    (session) => !session.companyId && session.customerEmail.trim()
+  );
+  if (missingCompanyId.length > 0) {
+    const emails = [
+      ...new Set(
+        missingCompanyId.map((session) => session.customerEmail.trim().toLowerCase())
+      ),
+    ];
+    const users = (await User.find({ emailAddress: { $in: emails } })
+      .select('emailAddress company')
+      .lean()) as { emailAddress: string; company: unknown }[];
+
+    const companyIdByEmail = new Map<string, string>();
+    for (const user of users) {
+      const id = normalizeObjectId(user.company);
+      if (id) companyIdByEmail.set(user.emailAddress.trim().toLowerCase(), id);
+    }
+
+    for (const [sessionId, session] of sessionsMap) {
+      if (session.kind !== 'session' || session.companyId) continue;
+      const email = session.customerEmail.trim().toLowerCase();
+      const companyId = companyIdByEmail.get(email);
+      if (!companyId) continue;
+      sessionsMap.set(sessionId, { ...session, companyId });
+    }
+  }
+
+  const companyIds = [
+    ...new Set(
+      Array.from(sessionsMap.values())
+        .filter(
+          (entry): entry is Extract<GroupedTimelineEntry, { kind: 'session' }> =>
+            entry.kind === 'session' && Boolean(entry.companyId)
+        )
+        .map((entry) => entry.companyId as string)
+    ),
+  ];
+  if (companyIds.length === 0) return;
+
+  const companies = (await Company.find({ _id: { $in: companyIds } })
+    .select('name')
+    .lean()) as { _id: unknown; name?: string }[];
+  const companyNameById = new Map<string, string>();
+  for (const company of companies) {
+    const id = normalizeObjectId(company._id);
+    const name = typeof company.name === 'string' ? company.name.trim() : '';
+    if (id && name) companyNameById.set(id, name);
+  }
+
+  for (const [sessionId, session] of sessionsMap) {
+    if (session.kind !== 'session' || !session.companyId || session.companyName) continue;
+    const companyName = companyNameById.get(session.companyId);
+    if (!companyName) continue;
+    sessionsMap.set(sessionId, { ...session, companyName });
+  }
+}
+
 export async function fetchGroupedAdminTimeline({
   AdminActivity,
   AdminImpersonationActivity,
+  User,
+  Company,
   page,
   limit,
   sort,
@@ -426,6 +507,8 @@ export async function fetchGroupedAdminTimeline({
 }: {
   AdminActivity: mongoose.Model<unknown>;
   AdminImpersonationActivity: mongoose.Model<unknown>;
+  User: mongoose.Model<unknown>;
+  Company: mongoose.Model<unknown>;
   page: number;
   limit: number;
   sort: AuditSortOrder;
@@ -490,6 +573,7 @@ export async function fetchGroupedAdminTimeline({
           $group: {
             _id: '$sessionId',
             customerEmail: { $first: '$impersonatedUserEmail' },
+            companyId: { $max: '$companyId' },
             sessionStartAt: { $min: '$createdAt' },
             actionCount: {
               $sum: {
@@ -507,6 +591,7 @@ export async function fetchGroupedAdminTimeline({
       String(row._id),
       {
         customerEmail: String(row.customerEmail ?? ''),
+        companyId: normalizeObjectId(row.companyId),
         sessionStartAt: row.sessionStartAt as Date,
         actionCount: Number(row.actionCount ?? 0),
       },
@@ -552,6 +637,8 @@ export async function fetchGroupedAdminTimeline({
         typeof details?.impersonatedUserName === 'string'
           ? details.impersonatedUserName
           : undefined,
+      companyId:
+        normalizeObjectId(details?.companyId) ?? agg?.companyId,
       companyName: typeof details?.companyName === 'string' ? details.companyName : undefined,
       actionCount: agg?.actionCount ?? 0,
     });
@@ -577,9 +664,47 @@ export async function fetchGroupedAdminTimeline({
         loginSummary:
           mappedStart?.summary ?? `Started Login as user (${agg.customerEmail})`,
         customerEmail: agg.customerEmail,
+        companyId:
+          normalizeObjectId(startRow?.companyId) ?? agg.companyId,
         actionCount: agg.actionCount,
       });
     }
+  }
+
+  if (includeSessions) {
+    const sessionsMissingCompany = Array.from(sessionsMap.entries()).filter(
+      ([, session]) => session.kind === 'session' && !session.companyId
+    );
+    if (sessionsMissingCompany.length > 0) {
+      const sessionIds = sessionsMissingCompany.map(([sessionId]) => sessionId);
+      const companyRows = (await AdminImpersonationActivity.aggregate([
+        {
+          $match: {
+            sessionId: { $in: sessionIds },
+            companyId: { $exists: true, $ne: null },
+          },
+        },
+        {
+          $group: {
+            _id: '$sessionId',
+            companyId: { $max: '$companyId' },
+          },
+        },
+      ])) as { _id: string; companyId: unknown }[];
+
+      for (const row of companyRows) {
+        const sessionId = String(row._id);
+        const session = sessionsMap.get(sessionId);
+        const companyId = normalizeObjectId(row.companyId);
+        if (session?.kind === 'session' && companyId) {
+          sessionsMap.set(sessionId, { ...session, companyId });
+        }
+      }
+    }
+  }
+
+  if (includeSessions) {
+    await enrichSessionCompanies({ sessionsMap, User, Company });
   }
 
   const entries: GroupedTimelineEntry[] = [];

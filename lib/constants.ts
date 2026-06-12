@@ -87,6 +87,8 @@ export const SOCKET_CHANNELS = {
   SUPPORT_CHAT_LEAVE: "support-chat-leave",
   SUPPORT_CHAT_SEND: "support-chat-send",
   SUPPORT_CHAT_MESSAGE: "support-chat-message",
+  SUPPORT_CHAT_PURGED: "support-chat-purged",
+  SUPPORT_TICKET_STATUS_UPDATED: "support-ticket-status-updated",
 };
 
 export const ADMIN_NOTIFICATION_TYPES = {

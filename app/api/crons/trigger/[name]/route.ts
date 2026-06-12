@@ -7,9 +7,7 @@ import {
 } from '@/lib/admin-audit';
 import { getAdminLocalCronDefinition } from '@/lib/admin-cron-definitions';
 import { runAdminLocalCronInBackground } from '@/lib/admin-cron-runner.server';
-
-const SERVER_API_URL = process.env.SERVER_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || 'internal_admin_cron_key_2024';
+import { getBackendApiUrl, getBackendAuthHeaders } from '@/lib/backend-api.server';
 
 /**
  * POST /api/crons/trigger/[name]
@@ -53,12 +51,11 @@ export async function POST(
 
   try {
     // Call the server API to trigger the cron using internal API key
-    const response = await fetch(`${SERVER_API_URL}/crons/trigger/${name}`, {
+    const response = await fetch(`${getBackendApiUrl()}/crons/trigger/${name}`, {
       method: 'POST',
-      headers: {
+      headers: await getBackendAuthHeaders({
         'Content-Type': 'application/json',
-        'X-Internal-API-Key': INTERNAL_API_KEY,
-      },
+      }),
     });
 
     const data = await response.json();

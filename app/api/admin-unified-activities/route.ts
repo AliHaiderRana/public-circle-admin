@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import AdminActivity from '@/lib/models/AdminActivity';
 import AdminImpersonationActivity from '@/lib/models/AdminImpersonationActivity';
+import User from '@/lib/models/User';
+import Company from '@/lib/models/Company';
 import { requireSuperAdminSession } from '@/lib/auth';
 import { parseAuditSortOrder } from '@/lib/audit-query';
 import {
@@ -77,6 +79,8 @@ export async function GET(request: Request) {
       const result = await fetchGroupedAdminTimeline({
         AdminActivity,
         AdminImpersonationActivity,
+        User,
+        Company,
         page,
         limit,
         sort,

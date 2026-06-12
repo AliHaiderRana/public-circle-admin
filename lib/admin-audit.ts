@@ -197,6 +197,21 @@ export function buildAuditSummary(
       return 'Updated support request settings';
     case ADMIN_AUDIT_ACTION.SYSTEM_NOTIFICATIONS_UPDATE:
       return 'Updated system notifications';
+    case ADMIN_AUDIT_ACTION.SUPPORT_CHAT_DELETE: {
+      const subject = typeof d.subject === 'string' ? d.subject.trim() : '';
+      const sq = subject ? ` “${subject}”` : '';
+      const messagesDeleted =
+        typeof d.messagesDeleted === 'number' ? d.messagesDeleted : null;
+      const attachmentsDeleted =
+        typeof d.attachmentsDeleted === 'number' ? d.attachmentsDeleted : null;
+      const counts =
+        messagesDeleted != null
+          ? ` (${messagesDeleted} message(s), ${attachmentsDeleted ?? 0} image(s) removed from S3)`
+          : '';
+      return d.ticketDeleted
+        ? `Permanently deleted support ticket${sq}${counts}${companySuffix(d.companyName)}`
+        : `Permanently deleted support chat${sq}${counts}${companySuffix(d.companyName)}`;
+    }
     case ADMIN_AUDIT_ACTION.SUPPORT_REQUEST_UPDATE: {
       const subject = typeof d.subject === 'string' ? d.subject.trim() : '';
       const categoryLabel =

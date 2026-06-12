@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import {
+  ADMIN_NOTIFICATION_TYPES,
   SUPPORT_REQUEST_STATUS,
   SUPPORT_REQUEST_CATEGORY,
   SUPPORT_REQUEST_CATEGORY_LABELS,
@@ -45,10 +46,19 @@ import { SupportCountBadge } from '@/components/SupportCountBadge';
 import { TicketChatPanel } from '@/components/TicketChatPanel';
 import { SupportInboxShell } from '@/components/support/SupportInboxShell';
 import { TicketStatusTimeline } from '@/components/support/TicketStatusTimeline';
+import {
+  ConfirmToggleDialog,
+  type ConfirmToggleRequest,
+} from '@/components/ConfirmToggleDialog';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { formatAdminDisplayName, formatSupportReferenceId } from '@/lib/support-admin.util';
 import { getSupportSocket, subscribeSupportChatMessage } from '@/lib/support-socket';
+import {
+  subscribeAdminNotifications,
+  subscribeAdminSupportTicketStatus,
+} from '@/lib/admin-notification-socket';
+import { patchSupportInboxTicketList, sortSupportInboxTickets } from '@/lib/support-inbox-list.util';
 import {
   broadcastAdminSupportTabEvent,
   subscribeAdminSupportTabSync,
@@ -58,6 +68,12 @@ import {
   type StatusTimelineEntry,
 } from '@/lib/support-status-timeline.util';
 import type { AssignmentHistoryEntry } from '@/lib/support-assignment.util';
+import {
+  formatSupportTicketCustomerName,
+  getSupportTicketAvatarInitials,
+  getSupportTicketPreviewText,
+  getSupportTicketSubjectTitle,
+} from '@/lib/support-ticket-display.util';
 
 type SupportRequestRow = {
   _id: string;
@@ -65,6 +81,7 @@ type SupportRequestRow = {
   category: string;
   subject: string;
   message: string;
+  lastMessagePreview?: string;
   status: string;
   adminNotes?: string;
   createdAt: string;
@@ -148,6 +165,16 @@ export default function SupportRequestsPage() {
   const { stats, refresh: refreshStats } = useSupportStats();
   const highlightedRowRef = useRef<HTMLButtonElement>(null);
   const resolvedActiveTicketRef = useRef<SupportRequestRow | null>(null);
+  const silentRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectedTicketIdRef = useRef<string | null>(selectedTicketId);
+  useEffect(() => {
+    selectedTicketIdRef.current = selectedTicketId;
+  }, [selectedTicketId]);
+
+  const [ticketCloseConfirm, setTicketCloseConfirm] = useState<{
+    ticket: SupportRequestRow;
+    mode: 'request_confirmation' | 'force_resolve';
+  } | null>(null);
 
   useEffect(() => {
     const ticketFromUrl = searchParams.get('ticket');
@@ -285,8 +312,10 @@ export default function SupportRequestsPage() {
       .catch(() => setAssignableAdmins([]));
   }, [isSuperAdmin]);
 
-  const fetchRequests = useCallback(async () => {
-    setLoading(true);
+  const fetchRequests = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const params = new URLSearchParams({
         page: pagination.page.toString(),
@@ -307,11 +336,25 @@ export default function SupportRequestsPage() {
         setRequests([]);
       }
     } catch {
-      setRequests([]);
+      if (!silent) {
+        setRequests([]);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [pagination.page, pagination.limit, searchTerm, statusFilter, activeOnlyFilter, unassignedOnlyFilter, categoryFilter]);
+
+  const scheduleSilentRefresh = useCallback(() => {
+    if (silentRefreshTimerRef.current) {
+      clearTimeout(silentRefreshTimerRef.current);
+    }
+    silentRefreshTimerRef.current = setTimeout(() => {
+      void fetchRequests(true);
+      void refreshStats();
+    }, 350);
+  }, [fetchRequests, refreshStats]);
 
   const handlePageChange = useCallback((page: number) => {
     setPagination((prev) => ({ ...prev, page }));
@@ -331,8 +374,89 @@ export default function SupportRequestsPage() {
     }
   }, [fetchRequests, refreshStats, selectedTicketId]);
 
+  const patchTicketInLists = useCallback(
+    (
+      ticketId: string,
+      patch: {
+        status?: string;
+        pendingResolutionAt?: string | null;
+        autoResolveAt?: string | null;
+        updatedAt?: string;
+        unreadByAdmin?: number;
+        lastMessagePreview?: string;
+      },
+      options: { reorder?: boolean } = {},
+    ) => {
+      const merge = (row: SupportRequestRow) =>
+        row._id === ticketId ? { ...row, ...patch } : row;
+
+      setRequests((prev) => {
+        const next = prev.map(merge);
+        if (!options.reorder) return next;
+        const updated = next.find((row) => row._id === ticketId);
+        if (!updated) return next;
+        return sortSupportInboxTickets(next);
+      });
+      setOffPageTicket((prev) => (prev?._id === ticketId ? { ...prev, ...patch } : prev));
+      setManageRequest((prev) => (prev?._id === ticketId ? { ...prev, ...patch } : prev));
+      if (selectedTicketId === ticketId) {
+        setChatRefreshKey((key) => key + 1);
+      }
+    },
+    [selectedTicketId],
+  );
+
+  const applyChatEventToInboxList = useCallback(
+    (supportRequestId: string, message: { senderType: string; message: string; createdAt: string }) => {
+      let found = false;
+      setRequests((prev) => {
+        const result = patchSupportInboxTicketList(prev, supportRequestId, message, {
+          selectedTicketId: selectedTicketIdRef.current,
+        });
+        found = result.found;
+        return result.tickets;
+      });
+      if (!found) {
+        scheduleSilentRefresh();
+      } else {
+        void refreshStats();
+      }
+    },
+    [scheduleSilentRefresh, refreshStats],
+  );
+
   useEffect(() => {
     let unsubscribeSocket: (() => void) | undefined;
+
+    const handleTicketStatus = (payload: {
+      supportRequestId: string;
+      status: string;
+      pendingResolutionAt?: string | null;
+      autoResolveAt?: string | null;
+    }) => {
+      patchTicketInLists(
+        payload.supportRequestId,
+        {
+          status: payload.status,
+          pendingResolutionAt: payload.pendingResolutionAt ?? null,
+          autoResolveAt: payload.autoResolveAt ?? null,
+          updatedAt: new Date().toISOString(),
+        },
+        { reorder: true },
+      );
+      scheduleSilentRefresh();
+    };
+
+    const unsubscribeStatus = subscribeAdminSupportTicketStatus(handleTicketStatus);
+
+    const unsubscribeNotifications = subscribeAdminNotifications((notification) => {
+      if (
+        notification.type === ADMIN_NOTIFICATION_TYPES.SUPPORT_REQUEST_CREATED ||
+        notification.type === ADMIN_NOTIFICATION_TYPES.SUPPORT_CHAT_CUSTOMER_MESSAGE
+      ) {
+        scheduleSilentRefresh();
+      }
+    });
 
     void (async () => {
       const activeSocket = await getSupportSocket();
@@ -340,24 +464,28 @@ export default function SupportRequestsPage() {
 
       unsubscribeSocket = subscribeSupportChatMessage(activeSocket, (payload) => {
         if (!payload.message) return;
+        applyChatEventToInboxList(payload.supportRequestId, payload.message);
         broadcastAdminSupportTabEvent({
           type: 'CHAT_MESSAGE',
           supportRequestId: payload.supportRequestId,
           message: payload.message,
         });
-        void fetchRequests();
-        void refreshStats();
+        scheduleSilentRefresh();
       });
     })();
 
     const unsubscribeTab = subscribeAdminSupportTabSync((event) => {
       if (event.type === 'CHAT_MESSAGE') {
-        void fetchRequests();
-        void refreshStats();
+        applyChatEventToInboxList(event.supportRequestId, event.message);
+        scheduleSilentRefresh();
+        return;
+      }
+      if (event.type === 'TICKET_STATUS') {
+        handleTicketStatus(event);
         return;
       }
       if (event.type === 'INVALIDATE_REQUESTS') {
-        void fetchRequests();
+        scheduleSilentRefresh();
         return;
       }
       if (event.type === 'INVALIDATE_STATS') {
@@ -366,22 +494,45 @@ export default function SupportRequestsPage() {
     });
 
     const onInvalidateRequests = () => {
-      void fetchRequests();
+      scheduleSilentRefresh();
     };
     const onInvalidateStats = () => {
       void refreshStats();
     };
+    const onTicketStatus = (event: Event) => {
+      const detail = (event as CustomEvent).detail as {
+        supportRequestId: string;
+        status: string;
+        pendingResolutionAt?: string | null;
+        autoResolveAt?: string | null;
+      };
+      if (detail?.supportRequestId && detail?.status) {
+        handleTicketStatus(detail);
+      }
+    };
 
     window.addEventListener('admin-support:invalidate-requests', onInvalidateRequests);
     window.addEventListener('admin-support:invalidate-stats', onInvalidateStats);
+    window.addEventListener('admin-support:ticket-status', onTicketStatus);
 
     return () => {
       unsubscribeSocket?.();
+      unsubscribeStatus();
+      unsubscribeNotifications();
       unsubscribeTab();
+      if (silentRefreshTimerRef.current) {
+        clearTimeout(silentRefreshTimerRef.current);
+      }
       window.removeEventListener('admin-support:invalidate-requests', onInvalidateRequests);
       window.removeEventListener('admin-support:invalidate-stats', onInvalidateStats);
+      window.removeEventListener('admin-support:ticket-status', onTicketStatus);
     };
-  }, [fetchRequests, refreshStats]);
+  }, [
+    applyChatEventToInboxList,
+    patchTicketInLists,
+    refreshStats,
+    scheduleSilentRefresh,
+  ]);
 
   useEffect(() => {
     fetchRequests();
@@ -406,8 +557,8 @@ export default function SupportRequestsPage() {
   }, [highlightRequestId, requests, selectedTicketId, selectTicket]);
 
   const handleChatActivity = useCallback(() => {
-    refreshStats();
-  }, [refreshStats]);
+    scheduleSilentRefresh();
+  }, [scheduleSilentRefresh]);
 
   const handleTicketUpdated = useCallback(
     (ticketId: string, patch: Partial<SupportRequestRow>) => {
@@ -439,10 +590,51 @@ export default function SupportRequestsPage() {
   const resolvedActiveTicket = activeTicket ?? offPageTicket;
   resolvedActiveTicketRef.current = resolvedActiveTicket;
 
+  const openTicketCloseConfirm = (
+    ticket: SupportRequestRow,
+    mode: 'request_confirmation' | 'force_resolve',
+  ) => {
+    setTicketCloseConfirm({ ticket, mode });
+  };
+
   const handleCloseActiveTicket = () => {
     const ticket = resolvedActiveTicketRef.current;
     if (!ticket) return;
-    void applyManageUpdate(ticket, { status: SUPPORT_REQUEST_STATUS.RESOLVED });
+    openTicketCloseConfirm(ticket, 'request_confirmation');
+  };
+
+  const handleForceResolveActiveTicket = () => {
+    const ticket = resolvedActiveTicketRef.current;
+    if (!ticket || !isSuperAdmin) return;
+    openTicketCloseConfirm(ticket, 'force_resolve');
+  };
+
+  const ticketCloseConfirmCopy = useMemo((): ConfirmToggleRequest | null => {
+    if (!ticketCloseConfirm) return null;
+    const referenceId = getTicketReferenceId(ticketCloseConfirm.ticket);
+    if (ticketCloseConfirm.mode === 'force_resolve') {
+      return {
+        title: 'Resolve without customer confirmation?',
+        description: `Ticket ${referenceId} will be marked resolved immediately. The customer will not be asked to confirm. This cannot be undone.`,
+        confirmLabel: 'Resolve now',
+      };
+    }
+    return {
+      title: 'Close ticket and ask customer to confirm?',
+      description: `Ticket ${referenceId} will move to pending customer confirmation. They can confirm resolution or reopen if they still need help.`,
+      confirmLabel: 'Close ticket',
+    };
+  }, [ticketCloseConfirm]);
+
+  const confirmTicketClose = async () => {
+    if (!ticketCloseConfirm) return;
+    const { ticket, mode } = ticketCloseConfirm;
+    await applyManageUpdate(ticket, {
+      status: SUPPORT_REQUEST_STATUS.RESOLVED,
+      closeDialog: mode === 'request_confirmation',
+      forceResolve: mode === 'force_resolve',
+    });
+    setTicketCloseConfirm(null);
   };
 
   const openManageForActiveTicket = useCallback(() => {
@@ -484,7 +676,12 @@ export default function SupportRequestsPage() {
 
   const applyManageUpdate = async (
     request: SupportRequestRow,
-    options: { status?: string; closeDialog?: boolean; assignToCurrentAdmin?: boolean } = {},
+    options: {
+      status?: string;
+      closeDialog?: boolean;
+      assignToCurrentAdmin?: boolean;
+      forceResolve?: boolean;
+    } = {},
   ) => {
     setUpdatingId(request._id);
     setManageSaveError('');
@@ -501,6 +698,7 @@ export default function SupportRequestsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...(options.status ? { status: options.status } : {}),
+          ...(options.forceResolve ? { forceResolve: true } : {}),
           previousStatus: request.status,
           ...(isSuperAdmin ? { adminNotes: manageNotes } : {}),
           ...(options.assignToCurrentAdmin && currentAdminId
@@ -545,6 +743,16 @@ export default function SupportRequestsPage() {
         }
         setChatRefreshKey((key) => key + 1);
         refreshStats();
+        if (merged.status) {
+          broadcastAdminSupportTabEvent({
+            type: 'TICKET_STATUS',
+            supportRequestId: request._id,
+            status: merged.status,
+            pendingResolutionAt: merged.pendingResolutionAt ?? null,
+            autoResolveAt: merged.autoResolveAt ?? null,
+          });
+        }
+        scheduleSilentRefresh();
         if (options.closeDialog) setManageRequest(null);
       } else {
         const payload = await res.json().catch(() => ({}));
@@ -817,17 +1025,49 @@ export default function SupportRequestsPage() {
                         >
                           <div className="flex items-start gap-2">
                             <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                              {getCompanyName(request).slice(0, 2).toUpperCase()}
+                              {getSupportTicketAvatarInitials(getCompanyName(request))}
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start justify-between gap-2">
-                                <p className="truncate text-sm font-medium">{request.subject}</p>
+                                <p
+                                  className="truncate text-sm font-medium"
+                                  title={getSupportTicketSubjectTitle(
+                                    request.subject,
+                                    formatSupportTicketCustomerName(
+                                      getCompanyName(request),
+                                      formatUser(request.userId),
+                                    ),
+                                  )}
+                                >
+                                  {getSupportTicketSubjectTitle(
+                                    request.subject,
+                                    formatSupportTicketCustomerName(
+                                      getCompanyName(request),
+                                      formatUser(request.userId),
+                                    ),
+                                  )}
+                                </p>
                                 <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">
                                   {formatQueueDate(request.updatedAt || request.createdAt)}
                                 </span>
                               </div>
-                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                {getCompanyName(request)} · {formatUser(request.userId)}
+                              <p
+                                className="mt-0.5 truncate text-xs text-muted-foreground"
+                                title={[
+                                  formatSupportTicketCustomerName(
+                                    getCompanyName(request),
+                                    formatUser(request.userId),
+                                  ),
+                                  getSupportTicketPreviewText(request, { excludeSubject: true }),
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              >
+                                {getSupportTicketPreviewText(request, { excludeSubject: true }) ||
+                                  formatSupportTicketCustomerName(
+                                    getCompanyName(request),
+                                    formatUser(request.userId),
+                                  )}
                               </p>
                               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                                 <span className="font-mono text-[10px] text-muted-foreground">
@@ -962,6 +1202,18 @@ export default function SupportRequestsPage() {
                 onTicketLoaded={handleTicketLoaded}
                 onOpenManage={openManageForActiveTicket}
                 onCloseTicket={handleCloseActiveTicket}
+                onForceResolveTicket={
+                  isSuperAdmin ? handleForceResolveActiveTicket : undefined
+                }
+                isSuperAdmin={isSuperAdmin}
+                onTicketDeleted={() => {
+                  if (selectedTicketId) {
+                    setRequests((prev) => prev.filter((request) => request._id !== selectedTicketId));
+                  }
+                  setSelectedTicketId(null);
+                  scheduleSilentRefresh();
+                  void refreshStats();
+                }}
                 closingTicket={updatingId === selectedTicketId}
                 refreshKey={chatRefreshKey}
                 className="h-full min-h-0"
@@ -989,11 +1241,22 @@ export default function SupportRequestsPage() {
           {manageRequest && (
             <>
               <DialogHeader className="space-y-1 border-b px-6 py-4 text-left">
-                <DialogTitle className="pr-8 leading-snug">{manageRequest.subject}</DialogTitle>
+                <DialogTitle className="pr-8 leading-snug">
+                  {getSupportTicketSubjectTitle(
+                    manageRequest.subject,
+                    formatSupportTicketCustomerName(
+                      getCompanyName(manageRequest),
+                      formatUser(manageRequest.userId),
+                    ),
+                  )}
+                </DialogTitle>
                 <DialogDescription>
                   {getTicketReferenceId(manageRequest)} ·{' '}
                   {SUPPORT_REQUEST_CATEGORY_LABELS[manageRequest.category]} ·{' '}
-                  {getCompanyName(manageRequest)}
+                  {formatSupportTicketCustomerName(
+                    getCompanyName(manageRequest),
+                    formatUser(manageRequest.userId),
+                  )}
                 </DialogDescription>
               </DialogHeader>
 
@@ -1168,34 +1431,60 @@ export default function SupportRequestsPage() {
                       )}
                       {(manageRequest.status === SUPPORT_REQUEST_STATUS.OPEN ||
                         manageRequest.status === SUPPORT_REQUEST_STATUS.IN_PROGRESS) && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={updatingId === manageRequest._id}
-                          onClick={() =>
-                            applyManageUpdate(manageRequest, {
-                              status: SUPPORT_REQUEST_STATUS.RESOLVED,
-                              closeDialog: true,
-                            })
-                          }
-                        >
-                          Close ticket
-                        </Button>
+                        <>
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={updatingId === manageRequest._id}
+                            onClick={() =>
+                              openTicketCloseConfirm(manageRequest, 'request_confirmation')
+                            }
+                          >
+                            Close ticket
+                          </Button>
+                          {isSuperAdmin ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              disabled={updatingId === manageRequest._id}
+                              onClick={() =>
+                                openTicketCloseConfirm(manageRequest, 'force_resolve')
+                              }
+                            >
+                              Resolve without confirmation
+                            </Button>
+                          ) : null}
+                        </>
                       )}
                       {manageRequest.status === SUPPORT_REQUEST_STATUS.PENDING_RESOLUTION && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={updatingId === manageRequest._id}
-                          onClick={() =>
-                            applyManageUpdate(manageRequest, {
-                              status: SUPPORT_REQUEST_STATUS.IN_PROGRESS,
-                            })
-                          }
-                        >
-                          Reopen ticket
-                        </Button>
+                        <>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={updatingId === manageRequest._id}
+                            onClick={() =>
+                              applyManageUpdate(manageRequest, {
+                                status: SUPPORT_REQUEST_STATUS.IN_PROGRESS,
+                              })
+                            }
+                          >
+                            Reopen ticket
+                          </Button>
+                          {isSuperAdmin ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={updatingId === manageRequest._id}
+                              onClick={() =>
+                                openTicketCloseConfirm(manageRequest, 'force_resolve')
+                              }
+                            >
+                              Resolve without confirmation
+                            </Button>
+                          ) : null}
+                        </>
                       )}
                     </div>
                   </div>
@@ -1243,6 +1532,13 @@ export default function SupportRequestsPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <ConfirmToggleDialog
+        request={ticketCloseConfirmCopy}
+        saving={Boolean(ticketCloseConfirm && updatingId === ticketCloseConfirm.ticket._id)}
+        onConfirm={() => void confirmTicketClose()}
+        onCancel={() => setTicketCloseConfirm(null)}
+      />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -66,6 +67,78 @@ function getCustomerDisplayLabel(opts: {
   if (opts.name?.trim()) return opts.name.trim();
   if (opts.companyName?.trim()) return opts.companyName.trim();
   return '—';
+}
+
+function getSessionCustomerLabel(entry: {
+  customerName?: string;
+  companyName?: string;
+  customerEmail?: string;
+}): string | null {
+  const label = getCustomerDisplayLabel({
+    name: entry.customerName,
+    companyName: entry.companyName,
+  });
+  if (label !== '—') return label;
+  if (entry.customerEmail?.trim()) return entry.customerEmail.trim();
+  return null;
+}
+
+function isValidObjectId(value?: string | null): value is string {
+  return Boolean(value && /^[a-f0-9]{24}$/i.test(value));
+}
+
+function resolveSessionCompany(
+  entry: {
+    companyId?: string;
+    companyName?: string;
+  } | null,
+  actions?: UnifiedActivityRow[]
+): { companyId: string; companyName?: string } | null {
+  if (!entry) return null;
+
+  if (isValidObjectId(entry.companyId)) {
+    return { companyId: entry.companyId, companyName: entry.companyName };
+  }
+
+  const fromAction = actions?.find((row) => isValidObjectId(row.companyId));
+  if (fromAction?.companyId) {
+    const metadataCompany =
+      typeof fromAction.metadata?.companyName === 'string'
+        ? fromAction.metadata.companyName
+        : undefined;
+    return {
+      companyId: fromAction.companyId,
+      companyName: entry.companyName ?? metadataCompany,
+    };
+  }
+
+  return null;
+}
+
+function formatSessionMetaLine(entry: {
+  customerName?: string;
+  companyName?: string;
+  customerEmail?: string;
+  actionCount: number;
+}): string | null {
+  const parts: string[] = [];
+  const customer = getSessionCustomerLabel(entry);
+
+  if (customer) parts.push(customer);
+  if (
+    entry.customerName?.trim() &&
+    entry.companyName?.trim() &&
+    entry.companyName.trim() !== customer
+  ) {
+    parts.push(entry.companyName.trim());
+  }
+  if (entry.actionCount > 0) {
+    parts.push(
+      `${entry.actionCount} record${entry.actionCount === 1 ? '' : 's'}`
+    );
+  }
+
+  return parts.length > 0 ? parts.join(' · ') : null;
 }
 
 function sanitizeSummaryForDisplay(summary: string): string {
@@ -452,10 +525,23 @@ export default function AdminActivityGroupedPanel({
         const res = await fetch(`/api/admin-unified-activities?${params}`);
         const json = await res.json();
         if (!res.ok) throw new Error(json?.error);
+        const activities = (json.activities ?? []) as UnifiedActivityRow[];
         setSessionActions((prev) => {
           if (prev[sessionId]) return prev;
-          return { ...prev, [sessionId]: json.activities ?? [] };
+          return { ...prev, [sessionId]: activities };
         });
+        const company = resolveSessionCompany(null, activities);
+        if (company) {
+          setSessionModal((prev) =>
+            prev?.sessionId === sessionId
+              ? {
+                  ...prev,
+                  companyId: prev.companyId ?? company.companyId,
+                  companyName: prev.companyName ?? company.companyName,
+                }
+              : prev
+          );
+        }
       } catch {
         setSessionActions((prev) => ({ ...prev, [sessionId]: [] }));
       } finally {
@@ -496,6 +582,11 @@ export default function AdminActivityGroupedPanel({
   const modalSessionId = sessionModal?.sessionId ?? '';
   const modalActions = modalSessionId ? sessionActions[modalSessionId] : undefined;
   const modalLoading = modalSessionId ? loadingSessions.has(modalSessionId) : false;
+  const sessionMetaLine = sessionModal ? formatSessionMetaLine(sessionModal) : null;
+  const modalCompany = useMemo(
+    () => resolveSessionCompany(sessionModal, modalActions),
+    [sessionModal, modalActions]
+  );
 
   const renderActivityRow = (row: UnifiedActivityRow, nested = false) => (
     <TableRow
@@ -720,15 +811,13 @@ export default function AdminActivityGroupedPanel({
 
                     const recordCount = entry.actionCount;
                     const hasRecords = recordCount > 0;
-                    const customerLabel = getCustomerDisplayLabel({
-                      name: entry.customerName,
-                      companyName: entry.companyName,
-                    });
+                    const customerLabel =
+                      getSessionCustomerLabel(entry) ?? '—';
 
                     return (
                       <TableRow
                         key={entry.id}
-                        className="cursor-pointer bg-muted/40 hover:bg-muted/60"
+                        className="group cursor-pointer bg-muted/40 hover:bg-muted/60"
                         onClick={() => openSessionModal(entry)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
@@ -739,36 +828,28 @@ export default function AdminActivityGroupedPanel({
                         tabIndex={0}
                         role="button"
                         aria-haspopup="dialog"
+                        aria-label={
+                          hasRecords
+                            ? `View login session, ${recordCount} Public Circle action${recordCount === 1 ? '' : 's'}`
+                            : 'View login session, no Public Circle actions'
+                        }
                       >
                         <TableCell className="align-top py-3 pl-6">
                           <WhenCell iso={entry.createdAt} />
                         </TableCell>
                         <TableCell className="align-top whitespace-normal min-w-[280px] py-3">
-                          <div className="flex items-start gap-2">
-                            <span className="mt-0.5 text-muted-foreground">
-                              <ChevronRight className="h-4 w-4" />
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <div className="flex items-center gap-1.5 text-sm font-medium leading-snug min-w-0">
-                                  <LogIn className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                  <span>{sanitizeSummaryForDisplay(entry.loginSummary)}</span>
-                                </div>
-                                <SessionRecordsBadge count={entry.actionCount} />
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {hasRecords
-                                  ? `Click to view ${recordCount} Public Circle record${recordCount === 1 ? '' : 's'}`
-                                  : 'No Public Circle actions in this session'}
-                                {entry.companyName && (
-                                  <>
-                                    {' '}
-                                    · <Building2 className="inline h-3 w-3 -mt-px" />{' '}
-                                    {entry.companyName}
-                                  </>
-                                )}
-                              </p>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-medium leading-snug text-foreground">
+                                {sanitizeSummaryForDisplay(entry.loginSummary)}
+                              </span>
+                              <SessionRecordsBadge count={entry.actionCount} />
                             </div>
+                            <p className="text-xs text-muted-foreground mt-1 group-hover:text-foreground/80">
+                              {hasRecords
+                                ? `View ${recordCount} Public Circle action${recordCount === 1 ? '' : 's'}`
+                                : 'No Public Circle actions in this session'}
+                            </p>
                           </div>
                         </TableCell>
                         <TableCell className="align-top py-3">
@@ -778,20 +859,13 @@ export default function AdminActivityGroupedPanel({
                         </TableCell>
                         <TableCell className="align-top py-3">
                           <span className="text-xs text-foreground/80 truncate block max-w-[200px]">
-                            {customerLabel || '—'}
+                            {customerLabel}
                           </span>
                         </TableCell>
                         <TableCell className="align-top py-3 pr-6">
-                          <div className="flex flex-col gap-1.5 items-start">
-                            <Badge variant="outline" className="text-[10px] font-normal">
-                              Impersonation
-                            </Badge>
-                            {hasRecords && (
-                              <span className="text-[10px] text-muted-foreground">
-                                Open for details
-                              </span>
-                            )}
-                          </div>
+                          <Badge variant="outline" className="text-[10px] font-normal">
+                            Impersonation
+                          </Badge>
                         </TableCell>
                       </TableRow>
                     );
@@ -825,27 +899,27 @@ export default function AdminActivityGroupedPanel({
         }}
       >
         <DialogContent className="flex max-h-[min(90vh,900px)] w-[min(96vw,1100px)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
-          <DialogHeader className="space-y-2 border-b px-6 py-4 text-left">
+          <DialogHeader className="space-y-3 border-b px-6 py-4 pr-14 text-left">
             <DialogTitle>Public Circle session actions</DialogTitle>
             <DialogDescription asChild>
-              <div className="space-y-1 text-sm text-muted-foreground">
+              <div className="space-y-2 text-sm text-muted-foreground">
                 {sessionModal && (
                   <>
                     <p>{sanitizeSummaryForDisplay(sessionModal.loginSummary)}</p>
-                    <p>
-                      {getCustomerDisplayLabel({
-                        name: sessionModal.customerName,
-                        companyName: sessionModal.companyName,
-                      })}
-                      {sessionModal.companyName ? ` · ${sessionModal.companyName}` : ''}
-                      {sessionModal.actionCount > 0
-                        ? ` · ${sessionModal.actionCount} record${sessionModal.actionCount === 1 ? '' : 's'}`
-                        : ''}
-                    </p>
+                    {sessionMetaLine && <p>{sessionMetaLine}</p>}
                   </>
                 )}
               </div>
             </DialogDescription>
+            {modalCompany && (
+              <Button variant="outline" size="sm" className="h-8 w-fit text-xs" asChild>
+                <Link href={`/dashboard/companies/${modalCompany.companyId}`}>
+                  <Building2 className="size-3.5 mr-1.5" />
+                  View company
+                  {modalCompany.companyName ? `: ${modalCompany.companyName}` : ''}
+                </Link>
+              </Button>
+            )}
           </DialogHeader>
 
           <ScrollArea className="h-[min(60vh,640px)]">

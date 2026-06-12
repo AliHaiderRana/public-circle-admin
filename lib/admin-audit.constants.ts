@@ -50,6 +50,7 @@ export const ADMIN_AUDIT_ACTION = {
   SYSTEM_CONFIG_UPDATE: 'system_config.update',
   IMPERSONATE_START: 'impersonation.start',
   SUPPORT_REQUEST_UPDATE: 'support_request.update',
+  SUPPORT_CHAT_DELETE: 'support_chat.delete',
   SUPPORT_SETTINGS_UPDATE: 'support_settings.update',
   SYSTEM_NOTIFICATIONS_UPDATE: 'system_notifications.update',
   SAMPLE_TEMPLATE_TEST_EMAIL: 'sample_template.test_email',
