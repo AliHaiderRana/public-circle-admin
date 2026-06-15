@@ -4,6 +4,7 @@ import {
   filterGhostSupportChatMessages,
   isGhostImagePlaceholderMessage,
   isImageOnlyMessagePlaceholder,
+  mergeSupportChatAttachments,
   messageHasImage,
   sanitizeSupportChatMessage,
 } from '@/lib/support-chat.util';
@@ -38,7 +39,10 @@ export function mergeChatMessages(
     map.set(sanitized._id, {
       ...sanitized,
       clientMessageKey: sanitized.clientMessageKey ?? prior.clientMessageKey,
-      pendingUpload: sanitized.pendingUpload ?? prior.pendingUpload,
+      pendingUpload: sanitized.attachment?.viewUrl
+        ? undefined
+        : (sanitized.pendingUpload ?? prior.pendingUpload),
+      attachment: mergeSupportChatAttachments(sanitized.attachment, prior.attachment),
     });
   });
   return Array.from(map.values()).sort(
@@ -80,14 +84,16 @@ export function clearPendingUploadForMessage(
   messages: AdminChatMessage[],
   messageId: string,
 ): AdminChatMessage[] {
-  return messages.map((message) => {
-    if (message._id !== messageId || !message.pendingUpload) return message;
-    const url = message.pendingUpload.previewUrl;
-    if (url?.startsWith('blob:')) {
-      URL.revokeObjectURL(url);
-    }
-    return { ...message, pendingUpload: undefined };
-  });
+  const target = messages.find((m) => m._id === messageId);
+  if (!target?.pendingUpload) return messages;
+
+  const url = target.pendingUpload.previewUrl;
+  if (url?.startsWith('blob:')) {
+    URL.revokeObjectURL(url);
+  }
+  return messages.map((message) =>
+    message._id === messageId ? { ...message, pendingUpload: undefined } : message,
+  );
 }
 
 export function dedupeOutgoingImagePairs(
@@ -122,7 +128,12 @@ export function dedupeOutgoingImagePairs(
       patch.clientMessageKey =
         pending.clientMessageKey ?? pending.pendingUpload?.clientKey ?? patch.clientMessageKey;
     }
-    if (pending.pendingUpload && !partner.pendingUpload && !patch.pendingUpload) {
+    if (
+      pending.pendingUpload &&
+      !partner.pendingUpload &&
+      !patch.pendingUpload &&
+      !partner.attachment?.viewUrl
+    ) {
       patch.pendingUpload = pending.pendingUpload;
     }
 

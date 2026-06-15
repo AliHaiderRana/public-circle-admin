@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -43,7 +42,6 @@ import {
   SUPPORT_REQUEST_STATUS_LABELS,
 } from '@/lib/constants';
 import {
-  Search,
   Loader2,
   ChevronLeft,
   ChevronRight,
@@ -57,6 +55,7 @@ import { useSupportStats } from '@/hooks/use-support-stats';
 import { SupportCountBadge } from '@/components/SupportCountBadge';
 import { TicketChatPanel } from '@/components/TicketChatPanel';
 import { SupportInboxShell } from '@/components/support/SupportInboxShell';
+import { SupportInboxFilters } from '@/components/support/SupportInboxFilters';
 import { TicketStatusTimeline } from '@/components/support/TicketStatusTimeline';
 import {
   ConfirmToggleDialog,
@@ -176,7 +175,6 @@ export default function SupportRequestsPage() {
   const highlightedRowRef = useRef<HTMLButtonElement>(null);
   const resolvedActiveTicketRef = useRef<SupportRequestRow | null>(null);
   const silentRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasLoadedRequestsRef = useRef(false);
   const highlightHandledRef = useRef<string | null>(null);
   const selectedTicketIdRef = useRef<string | null>(selectedTicketId);
   selectedTicketIdRef.current = selectedTicketId;
@@ -325,8 +323,7 @@ export default function SupportRequestsPage() {
   }, [isSuperAdmin]);
 
   const fetchRequests = useCallback(async (silent = false) => {
-    const showSkeleton = !silent && !hasLoadedRequestsRef.current;
-    if (showSkeleton) {
+    if (!silent) {
       setLoading(true);
     }
     try {
@@ -353,7 +350,6 @@ export default function SupportRequestsPage() {
       if (data.requests) {
         setRequests(data.requests);
         setPagination(data.pagination);
-        hasLoadedRequestsRef.current = true;
       } else {
         setRequests([]);
       }
@@ -362,7 +358,7 @@ export default function SupportRequestsPage() {
         setRequests([]);
       }
     } finally {
-      if (showSkeleton) {
+      if (!silent) {
         setLoading(false);
       }
     }
@@ -585,7 +581,7 @@ export default function SupportRequestsPage() {
   ]);
 
   useEffect(() => {
-    void fetchRequests(hasLoadedRequestsRef.current);
+    void fetchRequests(false);
   }, [fetchRequests]);
 
   useEffect(() => {
@@ -981,6 +977,11 @@ export default function SupportRequestsPage() {
     label: SUPPORT_REQUEST_CATEGORY_LABELS[value] || value,
   }));
 
+  const statusOptions = Object.values(SUPPORT_REQUEST_STATUS).map((value) => ({
+    value,
+    label: SUPPORT_REQUEST_STATUS_LABELS[value] ?? value,
+  }));
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
       <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1024,142 +1025,43 @@ export default function SupportRequestsPage() {
         className="min-h-0 flex-1"
         sidebar={
           <div className="flex h-full min-h-0 flex-col">
-            <div className="shrink-0 space-y-3 border-b p-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search tickets…"
-                  className="h-9 pl-9"
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    setPagination((prev) => ({ ...prev, page: 1 }));
-                  }}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  variant={assigneeFilter === 'unassigned' ? 'default' : 'outline'}
-                  size="sm"
-                  className="h-8 w-full text-xs"
-                  onClick={() => {
-                    setAssigneeFilter((prev) => (prev === 'unassigned' ? 'all' : 'unassigned'));
-                    setPagination((prev) => ({ ...prev, page: 1 }));
-                  }}
-                >
-                  Unassigned
-                </Button>
-                <Button
-                  variant={activeOnlyFilter ? 'default' : 'outline'}
-                  size="sm"
-                  className="h-8 w-full gap-1.5 text-xs"
-                  onClick={() => {
-                    setActiveOnlyFilter((prev) => !prev);
-                    setStatusFilter('');
-                    setPagination((prev) => ({ ...prev, page: 1 }));
-                  }}
-                >
-                  <span>Active</span>
-                  {stats.openSupportRequests > 0 && (
-                    <SupportCountBadge count={stats.openSupportRequests} />
-                  )}
-                </Button>
-                <Select
-                  value={statusFilter || 'all'}
-                  onValueChange={(value) => {
-                    setStatusFilter(value === 'all' ? '' : value);
-                    setActiveOnlyFilter(false);
-                    setPagination((prev) => ({ ...prev, page: 1 }));
-                  }}
-                >
-                  <SelectTrigger className="h-8 w-full text-xs">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All status</SelectItem>
-                    {Object.values(SUPPORT_REQUEST_STATUS).map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {SUPPORT_REQUEST_STATUS_LABELS[s] ?? s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={categoryFilter || 'all'}
-                  onValueChange={(value) => {
-                    setCategoryFilter(value === 'all' ? '' : value);
-                    setPagination((prev) => ({ ...prev, page: 1 }));
-                  }}
-                >
-                  <SelectTrigger className="h-8 w-full text-xs">
-                    <SelectValue placeholder="Category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All categories</SelectItem>
-                    {categoryOptions.map((c) => (
-                      <SelectItem key={c.value} value={c.value}>
-                        {c.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {isSuperAdmin ? (
-                <div className="space-y-2">
-                  <Select
-                    value={assigneeFilter}
-                    onValueChange={(value) => {
-                      setAssigneeFilter(value);
-                      setPagination((prev) => ({ ...prev, page: 1 }));
-                    }}
-                  >
-                    <SelectTrigger className="h-8 w-full text-xs">
-                      <SelectValue placeholder="Assignee" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All assignees</SelectItem>
-                      <SelectItem value="unassigned">Unassigned only</SelectItem>
-                      {currentAdminId ? (
-                        <SelectItem value="me">Assigned to me</SelectItem>
-                      ) : null}
-                      {assignableAdmins.map((admin) => (
-                        <SelectItem key={admin.id} value={admin.id}>
-                          {admin.name}
-                          {admin.isSuperAdmin ? ' (Super admin)' : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-2.5 py-2">
-                    <Checkbox
-                      id="my-tickets-only"
-                      checked={assigneeFilter === 'me'}
-                      onCheckedChange={(checked) => {
-                        setAssigneeFilter(checked === true ? 'me' : 'all');
-                        setPagination((prev) => ({ ...prev, page: 1 }));
-                      }}
-                    />
-                    <Label
-                      htmlFor="my-tickets-only"
-                      className="cursor-pointer text-xs font-normal leading-none"
-                    >
-                      My tickets only
-                    </Label>
-                  </div>
-                </div>
-              ) : null}
-              {hasActiveFilters ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-full text-xs text-muted-foreground"
-                  onClick={clearFilters}
-                >
-                  Clear filters
-                </Button>
-              ) : null}
-            </div>
+            <SupportInboxFilters
+              searchTerm={searchTerm}
+              onSearchChange={(value) => {
+                setSearchTerm(value);
+                setPagination((prev) => ({ ...prev, page: 1 }));
+              }}
+              assigneeFilter={assigneeFilter}
+              onAssigneeFilterChange={(value) => {
+                setAssigneeFilter(value);
+                setPagination((prev) => ({ ...prev, page: 1 }));
+              }}
+              activeOnlyFilter={activeOnlyFilter}
+              onActiveOnlyToggle={() => {
+                setActiveOnlyFilter((prev) => !prev);
+                setStatusFilter('');
+                setPagination((prev) => ({ ...prev, page: 1 }));
+              }}
+              statusFilter={statusFilter}
+              onStatusChange={(value) => {
+                setStatusFilter(value);
+                setActiveOnlyFilter(false);
+                setPagination((prev) => ({ ...prev, page: 1 }));
+              }}
+              statusOptions={statusOptions}
+              categoryFilter={categoryFilter}
+              onCategoryChange={(value) => {
+                setCategoryFilter(value);
+                setPagination((prev) => ({ ...prev, page: 1 }));
+              }}
+              categoryOptions={categoryOptions}
+              isSuperAdmin={isSuperAdmin}
+              assignableAdmins={assignableAdmins}
+              currentAdminId={currentAdminId}
+              openTicketCount={stats.openSupportRequests}
+              hasActiveFilters={hasActiveFilters}
+              onClearFilters={clearFilters}
+            />
 
             <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
               {loading ? (

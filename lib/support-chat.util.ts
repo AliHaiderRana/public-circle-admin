@@ -15,8 +15,70 @@ export type SupportChatMessageLike = {
 type MessageWithImage = {
   message?: string;
   pendingUpload?: { previewUrl?: string; clientKey?: string } | null;
-  attachment?: { viewUrl?: string; s3Path?: string } | null;
+  attachment?: {
+    viewUrl?: string;
+    s3Path?: string;
+    contentType?: string;
+    originalName?: string;
+  } | null;
 };
+
+export function mergeSupportChatAttachments<
+  T extends { viewUrl?: string; s3Path?: string } | null | undefined,
+>(next: T, prev: T): T {
+  if (!next && !prev) return next;
+  if (!next) return prev;
+  if (!prev) return next;
+
+  const nextPath = resolveAttachmentObjectKey(next);
+  const prevPath = resolveAttachmentObjectKey(prev);
+  const sameObject = Boolean(nextPath && prevPath && nextPath === prevPath);
+
+  return {
+    ...prev,
+    ...next,
+    viewUrl: sameObject ? (prev.viewUrl ?? next.viewUrl) : (next.viewUrl ?? prev.viewUrl),
+    s3Path: next.s3Path ?? prev.s3Path,
+  } as T;
+}
+
+/** Stable identity for the same S3 object across refreshed presigned query strings. */
+export function resolveAttachmentObjectKey(attachment?: {
+  viewUrl?: string;
+  s3Path?: string;
+} | null): string | undefined {
+  const s3Path = attachment?.s3Path?.trim();
+  if (s3Path) return s3Path;
+
+  const viewUrl = attachment?.viewUrl?.trim();
+  if (!viewUrl) return undefined;
+
+  try {
+    return decodeURIComponent(new URL(viewUrl).pathname);
+  } catch {
+    return viewUrl.split('?')[0];
+  }
+}
+
+export function getChatImageStableKey(
+  attachment?: { viewUrl?: string; s3Path?: string } | null,
+  pendingPreviewUrl?: string,
+): string | undefined {
+  const objectKey = resolveAttachmentObjectKey(attachment);
+  if (objectKey) return objectKey;
+  if (pendingPreviewUrl?.startsWith('blob:')) return pendingPreviewUrl;
+  return attachment?.viewUrl || pendingPreviewUrl || undefined;
+}
+
+const loadedChatImageKeys = new Set<string>();
+
+export function isChatImageLoaded(stableKey?: string): boolean {
+  return Boolean(stableKey && loadedChatImageKeys.has(stableKey));
+}
+
+export function markChatImageLoaded(stableKey?: string): void {
+  if (stableKey) loadedChatImageKeys.add(stableKey);
+}
 
 export function getSupportChatMessageKey(message: {
   _id: string;
@@ -30,12 +92,14 @@ export function messageHasImage(message: MessageWithImage): boolean {
   return Boolean(
     message.pendingUpload?.previewUrl ||
       message.attachment?.viewUrl ||
-      message.attachment?.s3Path,
+      message.attachment?.s3Path ||
+      (message.attachment?.contentType?.startsWith('image/') &&
+        message.attachment?.originalName),
   );
 }
 
 export function getChatImageSrc(message: MessageWithImage): string | undefined {
-  return message.pendingUpload?.previewUrl || message.attachment?.viewUrl || undefined;
+  return message.attachment?.viewUrl || message.pendingUpload?.previewUrl || undefined;
 }
 
 export function isImageOnlyMessagePlaceholder(message?: string): boolean {
@@ -55,11 +119,8 @@ export function shouldShowChatMessageText(
 }
 
 export function messageHasDisplayableContent(message: MessageWithImage): boolean {
-  if (getChatImageSrc(message)) return true;
-  if (message.attachment?.s3Path) return true;
-  return shouldShowChatMessageText(message.message, {
-    hasImage: messageHasImage(message),
-  });
+  if (messageHasImage(message)) return true;
+  return shouldShowChatMessageText(message.message);
 }
 
 export function sanitizeSupportChatMessage<T extends SupportChatMessageLike>(message: T): T {
@@ -75,6 +136,12 @@ export function isGhostImagePlaceholderMessage(
   if (message._id?.startsWith('pending-')) return false;
   if (getChatImageSrc(message)) return false;
   if (message.attachment?.s3Path) return false;
+  if (
+    message.attachment?.contentType?.startsWith('image/') &&
+    message.attachment?.originalName
+  ) {
+    return false;
+  }
   return isImageOnlyMessagePlaceholder(message.message);
 }
 
@@ -88,7 +155,12 @@ export function formatSupportChatPreview(preview?: string): string {
 
 export function getChatMessageInboxPreview(message: {
   message?: string;
-  attachment?: { viewUrl?: string; s3Path?: string } | null;
+  attachment?: {
+    viewUrl?: string;
+    s3Path?: string;
+    contentType?: string;
+    originalName?: string;
+  } | null;
 }): string {
   const hasImage = Boolean(message.attachment?.viewUrl || message.attachment?.s3Path);
   const formatted = formatSupportChatPreview(message.message);

@@ -77,6 +77,7 @@ import {
   getChatMessageInboxPreview,
   getSupportChatMessageKey,
   messageHasDisplayableContent,
+  messageHasImage,
 } from '@/lib/support-chat.util';
 import {
   createOptimisticAdminChatMessage,
@@ -1123,11 +1124,7 @@ export function TicketChatPanel({
               : msg.senderName?.trim() || userName || 'Customer';
 
             const showBubble = messageHasDisplayableContent(msg);
-            const hasImage = Boolean(
-              msg.pendingUpload?.previewUrl ||
-                msg.attachment?.viewUrl ||
-                msg.attachment?.s3Path,
-            );
+            const hasImage = messageHasImage(msg);
             const showText = shouldShowChatMessageText(msg.message, { hasImage });
 
             if (!showBubble) {
@@ -1166,12 +1163,14 @@ export function TicketChatPanel({
                         message={msg.message}
                         attachment={msg.attachment}
                         pendingUpload={msg.pendingUpload}
-                        imageTone="support"
+                        imageTone={isAdmin ? 'support' : 'user'}
                         onMediaLoad={() => {
                           if (stickToBottomRef.current) scheduleScrollToBottom();
                         }}
                         onRemoteImageReady={() => {
-                          handleClearPendingUpload(msg._id);
+                          if (msg.pendingUpload) {
+                            handleClearPendingUpload(msg._id);
+                          }
                           if (stickToBottomRef.current) scheduleScrollToBottom();
                         }}
                       />
