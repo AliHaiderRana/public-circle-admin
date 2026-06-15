@@ -56,6 +56,11 @@ export async function GET(request: Request) {
         ...(Array.isArray(query.$and) ? query.$and : []),
         { $or: [{ assignedAdminId: null }, { assignedAdminId: { $exists: false } }] },
       ];
+    } else if (session.isSuperAdmin) {
+      const assignedAdminId = searchParams.get('assignedAdminId') || '';
+      if (assignedAdminId) {
+        query.assignedAdminId = assignedAdminId;
+      }
     }
 
     if (search) {

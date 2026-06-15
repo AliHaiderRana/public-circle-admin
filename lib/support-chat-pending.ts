@@ -1,11 +1,18 @@
 export type SupportChatPendingUpload = {
+  /** Stable id for React keys across pending → server message transitions. */
+  clientKey: string;
   previewUrl: string;
   progress: number;
   error?: string;
 };
 
+export function createClientMessageKey(): string {
+  return `cmsg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 export function createPendingUploadState(file: File): SupportChatPendingUpload {
   return {
+    clientKey: createClientMessageKey(),
     previewUrl: URL.createObjectURL(file),
     progress: 0,
   };
@@ -30,12 +37,7 @@ export function patchPendingMessageUpload<
   );
 }
 
-export function shouldShowChatMessageText(message?: string): boolean {
-  const trimmed = (message || '').trim();
-  if (!trimmed) return false;
-  if (trimmed === '[Image]') return false;
-  return true;
-}
+export { shouldShowChatMessageText } from '@/lib/support-chat.util';
 
 export function createOptimisticAdminChatMessage(
   message: string,
@@ -46,6 +48,9 @@ export function createOptimisticAdminChatMessage(
     pendingUpload?: SupportChatPendingUpload;
   },
 ) {
+  const clientMessageKey =
+    options.pendingUpload?.clientKey ??
+    `cmsg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   return {
     _id: `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     senderType: 'ADMIN',
@@ -54,6 +59,7 @@ export function createOptimisticAdminChatMessage(
     message,
     createdAt: new Date().toISOString(),
     visibility: options.visibility ?? 'CUSTOMER',
+    clientMessageKey,
     pendingUpload: options.pendingUpload,
   };
 }

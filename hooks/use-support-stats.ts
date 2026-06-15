@@ -82,10 +82,12 @@ export function useSupportStats(refreshIntervalMs = 30000) {
       void fetchSupportStats(true);
     };
     window.addEventListener('support-stats:refresh', onRefresh);
+    window.addEventListener('admin-support:invalidate-stats', onRefresh);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener('support-stats:refresh', onRefresh);
+      window.removeEventListener('admin-support:invalidate-stats', onRefresh);
     };
   }, [refreshIntervalMs]);
 

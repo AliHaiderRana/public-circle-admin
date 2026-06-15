@@ -5,6 +5,7 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -23,6 +24,16 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Separator } from '@/components/ui/separator';
 import {
   ADMIN_NOTIFICATION_TYPES,
@@ -40,6 +51,7 @@ import {
   Inbox,
   Settings2,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import { useSupportStats } from '@/hooks/use-support-stats';
 import { SupportCountBadge } from '@/components/SupportCountBadge';
@@ -219,7 +231,7 @@ export default function SupportRequestsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [activeOnlyFilter, setActiveOnlyFilter] = useState(false);
-  const [unassignedOnlyFilter, setUnassignedOnlyFilter] = useState(false);
+  const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [highlightFading, setHighlightFading] = useState(false);
@@ -243,6 +255,8 @@ export default function SupportRequestsPage() {
   const [manageOriginalAssigneeId, setManageOriginalAssigneeId] = useState('unassigned');
   const [chatAnchorMessageId, setChatAnchorMessageId] = useState<string | null>(null);
   const [manageSaveError, setManageSaveError] = useState('');
+  const [manageDeleteConfirmOpen, setManageDeleteConfirmOpen] = useState(false);
+  const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null);
 
   const openManage = useCallback((request: SupportRequestRow) => {
     setManageRequest(request);
@@ -322,7 +336,15 @@ export default function SupportRequestsPage() {
         limit: pagination.limit.toString(),
         ...(searchTerm && { search: searchTerm }),
         ...(activeOnlyFilter ? { activeOnly: 'true' } : statusFilter ? { status: statusFilter } : {}),
-        ...(unassignedOnlyFilter ? { unassignedOnly: 'true' } : {}),
+        ...(assigneeFilter === 'unassigned' ? { unassignedOnly: 'true' } : {}),
+        ...(assigneeFilter === 'me' && currentAdminId
+          ? { assignedAdminId: currentAdminId }
+          : {}),
+        ...(assigneeFilter !== 'all' &&
+        assigneeFilter !== 'unassigned' &&
+        assigneeFilter !== 'me'
+          ? { assignedAdminId: assigneeFilter }
+          : {}),
         ...(categoryFilter && { category: categoryFilter }),
       });
 
@@ -344,7 +366,16 @@ export default function SupportRequestsPage() {
         setLoading(false);
       }
     }
-  }, [pagination.page, pagination.limit, searchTerm, statusFilter, activeOnlyFilter, unassignedOnlyFilter, categoryFilter]);
+  }, [
+    pagination.page,
+    pagination.limit,
+    searchTerm,
+    statusFilter,
+    activeOnlyFilter,
+    assigneeFilter,
+    categoryFilter,
+    currentAdminId,
+  ]);
 
   const scheduleSilentRefresh = useCallback(() => {
     if (silentRefreshTimerRef.current) {
@@ -399,15 +430,20 @@ export default function SupportRequestsPage() {
       });
       setOffPageTicket((prev) => (prev?._id === ticketId ? { ...prev, ...patch } : prev));
       setManageRequest((prev) => (prev?._id === ticketId ? { ...prev, ...patch } : prev));
-      if (selectedTicketId === ticketId) {
-        setChatRefreshKey((key) => key + 1);
-      }
     },
-    [selectedTicketId],
+    [],
   );
 
   const applyChatEventToInboxList = useCallback(
-    (supportRequestId: string, message: { senderType: string; message: string; createdAt: string }) => {
+    (
+      supportRequestId: string,
+      message: {
+        senderType: string;
+        message: string;
+        createdAt: string;
+        attachment?: { viewUrl?: string; s3Path?: string } | null;
+      },
+    ) => {
       let found = false;
       setRequests((prev) => {
         const result = patchSupportInboxTicketList(prev, supportRequestId, message, {
@@ -465,19 +501,12 @@ export default function SupportRequestsPage() {
       unsubscribeSocket = subscribeSupportChatMessage(activeSocket, (payload) => {
         if (!payload.message) return;
         applyChatEventToInboxList(payload.supportRequestId, payload.message);
-        broadcastAdminSupportTabEvent({
-          type: 'CHAT_MESSAGE',
-          supportRequestId: payload.supportRequestId,
-          message: payload.message,
-        });
-        scheduleSilentRefresh();
       });
     })();
 
     const unsubscribeTab = subscribeAdminSupportTabSync((event) => {
       if (event.type === 'CHAT_MESSAGE') {
         applyChatEventToInboxList(event.supportRequestId, event.message);
-        scheduleSilentRefresh();
         return;
       }
       if (event.type === 'TICKET_STATUS') {
@@ -510,10 +539,29 @@ export default function SupportRequestsPage() {
         handleTicketStatus(detail);
       }
     };
+    const onChatPurged = (event: Event) => {
+      const detail = (event as CustomEvent).detail as {
+        supportRequestId: string;
+      };
+      if (!detail?.supportRequestId) return;
+      setRequests((prev) => prev.filter((request) => request._id !== detail.supportRequestId));
+      setOffPageTicket((prev) =>
+        prev?._id === detail.supportRequestId ? null : prev,
+      );
+      setManageRequest((prev) =>
+        prev?._id === detail.supportRequestId ? null : prev,
+      );
+      if (selectedTicketIdRef.current === detail.supportRequestId) {
+        setSelectedTicketId(null);
+      }
+      scheduleSilentRefresh();
+      void refreshStats();
+    };
 
     window.addEventListener('admin-support:invalidate-requests', onInvalidateRequests);
     window.addEventListener('admin-support:invalidate-stats', onInvalidateStats);
     window.addEventListener('admin-support:ticket-status', onTicketStatus);
+    window.addEventListener('admin-support:chat-purged', onChatPurged);
 
     return () => {
       unsubscribeSocket?.();
@@ -526,6 +574,7 @@ export default function SupportRequestsPage() {
       window.removeEventListener('admin-support:invalidate-requests', onInvalidateRequests);
       window.removeEventListener('admin-support:invalidate-stats', onInvalidateStats);
       window.removeEventListener('admin-support:ticket-status', onTicketStatus);
+      window.removeEventListener('admin-support:chat-purged', onChatPurged);
     };
   }, [
     applyChatEventToInboxList,
@@ -561,17 +610,13 @@ export default function SupportRequestsPage() {
   }, [scheduleSilentRefresh]);
 
   const handleTicketUpdated = useCallback(
-    (ticketId: string, patch: Partial<SupportRequestRow>) => {
+    (ticketId: string, patch: Partial<SupportRequestRow>, options?: { reorder?: boolean }) => {
       setRequests((prev) => {
         const next = prev.map((request) =>
           request._id === ticketId ? { ...request, ...patch } : request,
         );
-        if (patch.updatedAt) {
-          return [...next].sort(
-            (a, b) =>
-              new Date(b.updatedAt || b.createdAt).getTime() -
-              new Date(a.updatedAt || a.createdAt).getTime(),
-          );
+        if (options?.reorder) {
+          return sortSupportInboxTickets(next);
         }
         return next;
       });
@@ -635,6 +680,46 @@ export default function SupportRequestsPage() {
       forceResolve: mode === 'force_resolve',
     });
     setTicketCloseConfirm(null);
+  };
+
+  const handleDeleteManageTicket = async () => {
+    if (!manageRequest || !isSuperAdmin) return;
+
+    const ticketId = manageRequest._id;
+    const isTerminal =
+      manageRequest.status === SUPPORT_REQUEST_STATUS.RESOLVED ||
+      manageRequest.status === SUPPORT_REQUEST_STATUS.CLOSED;
+    if (!isTerminal) {
+      setManageSaveError('Only resolved or closed tickets can be deleted.');
+      setManageDeleteConfirmOpen(false);
+      return;
+    }
+
+    setDeletingTicketId(ticketId);
+    setManageSaveError('');
+    try {
+      const res = await fetch(`/api/support-requests/${ticketId}/chat`, {
+        method: 'DELETE',
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setManageSaveError(payload?.error || 'Failed to delete support ticket.');
+        return;
+      }
+
+      setManageDeleteConfirmOpen(false);
+      setManageRequest(null);
+      setRequests((prev) => prev.filter((request) => request._id !== ticketId));
+      if (selectedTicketId === ticketId) {
+        setSelectedTicketId(null);
+      }
+      scheduleSilentRefresh();
+      void refreshStats();
+    } catch {
+      setManageSaveError('Failed to delete support ticket. Please try again.');
+    } finally {
+      setDeletingTicketId(null);
+    }
   };
 
   const openManageForActiveTicket = useCallback(() => {
@@ -839,9 +924,6 @@ export default function SupportRequestsPage() {
       }
       if (ticket.subject && ticket.subject !== current?.subject) patch.subject = ticket.subject;
       if (ticket.message && ticket.message !== current?.message) patch.message = ticket.message;
-      if (ticket.updatedAt && ticket.updatedAt !== current?.updatedAt) {
-        patch.updatedAt = ticket.updatedAt;
-      }
 
       if (Object.keys(patch).length > 0) {
         handleTicketUpdated(selectedTicketId, patch);
@@ -918,11 +1000,11 @@ export default function SupportRequestsPage() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <Button
-                  variant={unassignedOnlyFilter ? 'default' : 'outline'}
+                  variant={assigneeFilter === 'unassigned' ? 'default' : 'outline'}
                   size="sm"
                   className="h-8 w-full text-xs"
                   onClick={() => {
-                    setUnassignedOnlyFilter((prev) => !prev);
+                    setAssigneeFilter((prev) => (prev === 'unassigned' ? 'all' : 'unassigned'));
                     setPagination((prev) => ({ ...prev, page: 1 }));
                   }}
                 >
@@ -983,6 +1065,50 @@ export default function SupportRequestsPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {isSuperAdmin ? (
+                <div className="space-y-2">
+                  <Select
+                    value={assigneeFilter}
+                    onValueChange={(value) => {
+                      setAssigneeFilter(value);
+                      setPagination((prev) => ({ ...prev, page: 1 }));
+                    }}
+                  >
+                    <SelectTrigger className="h-8 w-full text-xs">
+                      <SelectValue placeholder="Assignee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All assignees</SelectItem>
+                      <SelectItem value="unassigned">Unassigned only</SelectItem>
+                      {currentAdminId ? (
+                        <SelectItem value="me">Assigned to me</SelectItem>
+                      ) : null}
+                      {assignableAdmins.map((admin) => (
+                        <SelectItem key={admin.id} value={admin.id}>
+                          {admin.name}
+                          {admin.isSuperAdmin ? ' (Super admin)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-2.5 py-2">
+                    <Checkbox
+                      id="my-tickets-only"
+                      checked={assigneeFilter === 'me'}
+                      onCheckedChange={(checked) => {
+                        setAssigneeFilter(checked === true ? 'me' : 'all');
+                        setPagination((prev) => ({ ...prev, page: 1 }));
+                      }}
+                    />
+                    <Label
+                      htmlFor="my-tickets-only"
+                      className="cursor-pointer text-xs font-normal leading-none"
+                    >
+                      My tickets only
+                    </Label>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
@@ -1488,6 +1614,36 @@ export default function SupportRequestsPage() {
                       )}
                     </div>
                   </div>
+
+                  {isSuperAdmin &&
+                  (manageRequest.status === SUPPORT_REQUEST_STATUS.RESOLVED ||
+                    manageRequest.status === SUPPORT_REQUEST_STATUS.CLOSED) ? (
+                    <>
+                      <Separator />
+                      <div className="space-y-2">
+                        <Label className="text-destructive">Danger zone</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Permanently deletes this ticket, all messages, and attachments. This
+                          cannot be undone.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          disabled={deletingTicketId === manageRequest._id}
+                          onClick={() => setManageDeleteConfirmOpen(true)}
+                        >
+                          {deletingTicketId === manageRequest._id ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="size-3.5" />
+                          )}
+                          Delete ticket
+                        </Button>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               </div>
 
@@ -1539,6 +1695,38 @@ export default function SupportRequestsPage() {
         onConfirm={() => void confirmTicketClose()}
         onCancel={() => setTicketCloseConfirm(null)}
       />
+
+      <AlertDialog open={manageDeleteConfirmOpen} onOpenChange={setManageDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently delete this ticket?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the ticket, all chat messages, and any image
+              attachments. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={Boolean(deletingTicketId)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={Boolean(deletingTicketId)}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleDeleteManageTicket();
+              }}
+            >
+              {deletingTicketId ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                'Delete ticket'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

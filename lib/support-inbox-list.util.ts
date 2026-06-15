@@ -1,4 +1,5 @@
 import { SUPPORT_REQUEST_STATUS } from '@/lib/constants';
+import { getChatMessageInboxPreview } from '@/lib/support-chat.util';
 
 export type SupportInboxTicketRow = {
   _id: string;
@@ -13,6 +14,7 @@ type ChatMessagePatch = {
   senderType: string;
   message: string;
   createdAt: string;
+  attachment?: { viewUrl?: string; s3Path?: string } | null;
 };
 
 export function sortSupportInboxTickets<T extends SupportInboxTicketRow>(tickets: T[]): T[] {
@@ -49,7 +51,7 @@ export function applyChatMessageToInboxTicket<T extends SupportInboxTicketRow>(
     status,
     updatedAt: message.createdAt,
     unreadByAdmin,
-    lastMessagePreview: message.message.slice(0, 200),
+    lastMessagePreview: getChatMessageInboxPreview(message),
   };
 }
 

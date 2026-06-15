@@ -129,13 +129,21 @@ export default function NotificationDropdown() {
         void fetchNotifications(1, false);
       }
     };
+    const onIncomingFromTab = (event: Event) => {
+      const notification = (event as CustomEvent<AdminNotification>).detail;
+      if (notification) {
+        handleIncomingNotification(notification);
+      }
+    };
     window.addEventListener('admin-notifications:refresh', onRefresh);
+    window.addEventListener('admin-notifications:incoming', onIncomingFromTab);
 
     return () => {
       unsubscribeNotifications();
       unsubscribeChat();
       unsubscribeConnection();
       window.removeEventListener('admin-notifications:refresh', onRefresh);
+      window.removeEventListener('admin-notifications:incoming', onIncomingFromTab);
     };
   }, [fetchUnreadCount, fetchNotifications, handleIncomingNotification]);
 

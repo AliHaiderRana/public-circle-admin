@@ -41,6 +41,7 @@ import { leaveSupportChatRoom } from "@/lib/support-socket";
 import { SupportCountBadge } from "@/components/SupportCountBadge";
 import { useSupportStats } from "@/hooks/use-support-stats";
 import { formatAdminDisplayName } from "@/lib/support-admin.util";
+import { useAdminSupportRealtimeSync } from "@/hooks/use-admin-support-realtime-sync";
 
 type SidebarItem = {
   name: string;
@@ -128,6 +129,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { stats } = useSupportStats();
+  useAdminSupportRealtimeSync();
   const isSupportInboxPage =
     pathname === "/dashboard/support-requests" ||
     pathname.startsWith("/dashboard/support-requests/");

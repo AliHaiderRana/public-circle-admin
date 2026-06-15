@@ -13,6 +13,7 @@ function normalizePreviewText(text: string): string {
   return text
     .replace(SYSTEM_MESSAGE_RE, '')
     .replace(/\[Image\]/gi, '')
+    .replace(/^[.·•]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
