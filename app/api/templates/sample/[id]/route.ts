@@ -15,11 +15,16 @@ import TemplateCategory, {
   TEMPLATE_CATEGORY_STATUS,
 } from '@/lib/models/TemplateCategory';
 import { generateTemplateThumbnailUrl } from '@/lib/template-thumbnail';
+import { resolveCategoryIds } from '@/lib/template-categories.util';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const objectIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ObjectId');
+
+const categoryIdsSchema = z
+  .array(objectIdSchema)
+  .min(1, 'At least one template category is required');
 
 const updateTemplateSchema = z
   .object({
@@ -27,11 +32,30 @@ const updateTemplateSchema = z
     description: z.string().trim().optional(),
     body: z.string().min(1).optional(),
     jsonTemplate: z.record(z.any()).optional(),
+    categoryIds: categoryIdsSchema.optional(),
     categoryId: objectIdSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required for update',
   });
+
+const categoryPopulate = [
+  { path: 'category', select: 'name slug isPopular status' },
+  { path: 'categories', select: 'name slug isPopular status' },
+] as const;
+
+async function validateCategoryIds(categoryIds: string[]) {
+  const categories = await TemplateCategory.find({
+    _id: { $in: categoryIds },
+    status: TEMPLATE_CATEGORY_STATUS.ACTIVE,
+  }).lean();
+
+  if (categories.length !== categoryIds.length) {
+    return null;
+  }
+
+  return categories;
+}
 
 export async function GET(
   request: Request,
@@ -62,7 +86,7 @@ export async function GET(
     }
 
     const template = await Template.findOne(query)
-      .populate({ path: 'category', select: 'name slug isPopular status' })
+      .populate(categoryPopulate)
       .lean();
 
     if (!template) {
@@ -130,14 +154,14 @@ export async function PATCH(
       }
     }
 
-    if (payload.categoryId) {
-      const category = await TemplateCategory.findOne({
-        _id: payload.categoryId,
-        status: TEMPLATE_CATEGORY_STATUS.ACTIVE,
-      }).lean();
-
-      if (!category) {
-        return NextResponse.json({ error: 'Template category not found' }, { status: 404 });
+    const categoryIds = resolveCategoryIds(payload);
+    if (categoryIds.length > 0) {
+      const categories = await validateCategoryIds(categoryIds);
+      if (!categories) {
+        return NextResponse.json(
+          { error: 'One or more template categories were not found' },
+          { status: 404 }
+        );
       }
     }
 
@@ -147,8 +171,13 @@ export async function PATCH(
       updatedAt: new Date(),
     };
 
-    if (payload.categoryId) {
-      updateDoc.category = payload.categoryId;
+    if (categoryIds.length > 0) {
+      updateDoc.categories = categoryIds;
+      updateDoc.category = categoryIds[0];
+      delete updateDoc.categoryIds;
+      delete updateDoc.categoryId;
+    } else {
+      delete updateDoc.categoryIds;
       delete updateDoc.categoryId;
     }
 
@@ -163,7 +192,7 @@ export async function PATCH(
     const template = await Template.findByIdAndUpdate(id, updateDoc, {
       new: true,
     })
-      .populate({ path: 'category', select: 'name slug isPopular status' })
+      .populate(categoryPopulate)
       .lean();
 
     const auditSession = toAdminAuditSession(session);

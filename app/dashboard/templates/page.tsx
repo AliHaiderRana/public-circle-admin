@@ -50,6 +50,10 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
+import {
+  getTemplateCategoryNames,
+  templateMatchesCategories,
+} from '@/lib/template-categories.util';
 import AdminEmailTemplateEditor from '@/components/templates/AdminEmailTemplateEditor';
 
 type TemplateCategory = {
@@ -70,6 +74,10 @@ type TemplateRecord = {
     _id: string;
     name: string;
   };
+  categories?: Array<{
+    _id: string;
+    name: string;
+  }>;
 };
 
 const IMPORTED_DRAFT_STORAGE_KEY = 'admin-template-import-draft';
@@ -148,10 +156,7 @@ export default function TemplatesPage() {
         || template.name?.toLowerCase().includes(searchValue)
         || template.description?.toLowerCase().includes(searchValue);
 
-      const templateCategoryId = template.category?._id || '';
-      const matchesCategory =
-        selectedCategories.length === 0
-        || (templateCategoryId && selectedCategories.includes(templateCategoryId));
+      const matchesCategory = templateMatchesCategories(template, selectedCategories);
 
       return matchesSearch && matchesCategory;
     });
@@ -498,6 +503,8 @@ export default function TemplatesPage() {
                   const isDeleting = pendingAction?.templateId === template._id && pendingAction.type === 'delete';
                   const isActionPending = isArchiving || isUnarchiving || isDeleting;
 
+                  const categoryNames = getTemplateCategoryNames(template);
+
                   return (
                 <Card
                   key={template._id}
@@ -538,10 +545,20 @@ export default function TemplatesPage() {
                       </p>
                     </div>
 
-                    <div className="flex min-h-6 items-center justify-between gap-2">
-                      <Badge variant="secondary" className="truncate">
-                        {template.category?.name || 'Uncategorized'}
-                      </Badge>
+                    <div className="flex min-h-6 flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap gap-1">
+                        {categoryNames.length > 0 ? (
+                          categoryNames.map((categoryName) => (
+                            <Badge key={categoryName} variant="secondary" className="truncate">
+                              {categoryName}
+                            </Badge>
+                          ))
+                        ) : (
+                          <Badge variant="secondary" className="truncate">
+                            Uncategorized
+                          </Badge>
+                        )}
+                      </div>
                       <span className="text-xs text-muted-foreground">
                         Updated {new Date(template.updatedAt).toLocaleDateString()}
                       </span>

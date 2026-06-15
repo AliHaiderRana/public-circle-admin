@@ -71,7 +71,12 @@ export async function GET() {
               $match: {
                 $expr: {
                   $and: [
-                    { $eq: ['$category', '$$categoryId'] },
+                    {
+                      $or: [
+                        { $in: ['$$categoryId', { $ifNull: ['$categories', []] }] },
+                        { $eq: ['$category', '$$categoryId'] },
+                      ],
+                    },
                     { $eq: ['$kind', TEMPLATE_KINDS.SAMPLE] },
                     { $eq: ['$status', TEMPLATE_STATUS.ACTIVE] },
                   ],

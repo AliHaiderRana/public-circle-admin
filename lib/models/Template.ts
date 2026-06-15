@@ -66,6 +66,11 @@ const schema = new mongoose.Schema(
       ref: MODELS.TEMPLATE_CATEGORY,
       default: null,
     },
+    categories: {
+      type: [ObjectId],
+      ref: MODELS.TEMPLATE_CATEGORY,
+      default: [],
+    },
     jsonTemplate: {
       type: Object,
       required: false,
