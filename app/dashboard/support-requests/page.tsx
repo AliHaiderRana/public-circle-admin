@@ -1556,8 +1556,8 @@ export default function SupportRequestsPage() {
                     </div>
                     {manageRequest.status === SUPPORT_REQUEST_STATUS.PENDING_RESOLUTION && (
                       <p className="text-xs text-muted-foreground rounded-md border bg-blue-50 px-3 py-2 dark:bg-blue-950/20">
-                        Waiting for the customer to confirm resolution. Auto-closes after 7 days
-                        without a response.
+                        Waiting for the customer to confirm resolution. The ticket stays
+                        open until they confirm or reopen it.
                       </p>
                     )}
                     {(manageRequest.status === SUPPORT_REQUEST_STATUS.RESOLVED ||
