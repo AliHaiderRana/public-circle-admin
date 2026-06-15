@@ -40,8 +40,6 @@ export function useAdminSupportRealtimeSync() {
         supportRequestId: payload.supportRequestId,
         message: payload.message,
       });
-      broadcastAdminSupportTabEvent({ type: 'INVALIDATE_REQUESTS' });
-      broadcastAdminSupportTabEvent({ type: 'INVALIDATE_STATS' });
     });
 
     const unsubscribeStatus = subscribeAdminSupportTicketStatus((payload) => {
@@ -52,8 +50,6 @@ export function useAdminSupportRealtimeSync() {
         pendingResolutionAt: payload.pendingResolutionAt,
         autoResolveAt: payload.autoResolveAt,
       });
-      broadcastAdminSupportTabEvent({ type: 'INVALIDATE_REQUESTS' });
-      broadcastAdminSupportTabEvent({ type: 'INVALIDATE_STATS' });
     });
 
     const unsubscribePurged = subscribeAdminSupportChatPurged((payload) => {

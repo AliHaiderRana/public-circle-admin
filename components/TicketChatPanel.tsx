@@ -29,12 +29,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import {
@@ -1008,30 +1002,16 @@ export function TicketChatPanel({
               </Button>
             )}
             {onOpenManage && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="outline" size="sm" className="h-8 gap-1 text-xs">
-                    <Settings2 className="size-3" />
-                    Manage
-                    <ChevronDown className="size-3 opacity-60" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={onOpenManage}>
-                    <Settings2 className="size-3.5" />
-                    Manage ticket
-                  </DropdownMenuItem>
-                  {canDeleteChat ? (
-                    <DropdownMenuItem
-                      variant="destructive"
-                      onClick={() => setDeleteConfirmOpen(true)}
-                    >
-                      <Trash2 className="size-3.5" />
-                      Delete ticket
-                    </DropdownMenuItem>
-                  ) : null}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={onOpenManage}
+              >
+                <Settings2 className="size-3 mr-1.5" />
+                Manage
+              </Button>
             )}
             {showRefresh && (
               <Button

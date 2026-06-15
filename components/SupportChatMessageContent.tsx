@@ -21,10 +21,13 @@ type SupportChatMessageContentProps = {
 };
 
 const imageClass =
-  'block max-h-48 max-w-full bg-transparent object-contain';
+  'block h-auto w-auto max-h-48 max-w-full bg-transparent object-contain';
 
 const IMAGE_FRAME_CLASS =
-  'relative inline-block min-h-[9rem] min-w-[11rem] max-w-full overflow-hidden rounded-lg';
+  'relative inline-block max-w-full overflow-hidden rounded-lg';
+
+/** Stable footprint while URL is pending or bytes are still loading. */
+const IMAGE_PLACEHOLDER_SIZE_CLASS = 'min-h-[9rem] w-[min(100%,12rem)]';
 
 function preloadImage(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -39,43 +42,15 @@ function preloadImage(url: string): Promise<void> {
   });
 }
 
-function SupportChatImageSkeleton({
-  tone,
-  visible,
-}: {
-  tone: 'user' | 'support';
-  visible: boolean;
-}) {
+function SupportChatImageSkeleton({ tone }: { tone: 'user' | 'support' }) {
   return (
-    <div
+    <Skeleton
       className={cn(
-        'absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-lg transition-opacity duration-300',
-        tone === 'user' ? 'bg-white/10' : 'bg-muted/80',
-        visible ? 'opacity-100' : 'pointer-events-none opacity-0',
+        'absolute inset-0 rounded-lg',
+        tone === 'user' ? 'bg-primary-foreground/20' : 'bg-muted',
       )}
-      aria-hidden={!visible}
-    >
-      <Skeleton
-        className={cn(
-          'absolute inset-0 rounded-lg',
-          tone === 'user' ? 'bg-white/15' : 'bg-muted',
-        )}
-      />
-      <Loader2
-        className={cn(
-          'relative z-[1] size-5 animate-spin',
-          tone === 'user' ? 'text-white/70' : 'text-muted-foreground',
-        )}
-      />
-      <span
-        className={cn(
-          'relative z-[1] text-[10px] font-medium',
-          tone === 'user' ? 'text-white/60' : 'text-muted-foreground',
-        )}
-      >
-        Loading image…
-      </span>
-    </div>
+      aria-label="Loading image"
+    />
   );
 }
 
@@ -111,14 +86,17 @@ const SupportChatMessageImage = memo(function SupportChatMessageImage({
     pendingUpload && pendingUpload.progress < 100 && !pendingUpload.error,
   );
 
-  const contentReady =
-    loadError ||
-    Boolean(localUrl && localSized) ||
-    Boolean(!localUrl && remoteUrl && remoteVisible);
+  const hasLayoutSize =
+    loadError || localSized || remoteVisible;
 
   const showSkeleton = Boolean(
-    (awaitingRemote || sizingUrl) && !contentReady && !showUploadOverlay && !loadError,
+    (awaitingRemote || sizingUrl) &&
+      !hasLayoutSize &&
+      !showUploadOverlay &&
+      !loadError,
   );
+
+  const usePlaceholderSize = showSkeleton || (awaitingRemote && !sizingUrl);
 
   useEffect(() => {
     setLoadError(false);
@@ -157,53 +135,56 @@ const SupportChatMessageImage = memo(function SupportChatMessageImage({
   if (!sizingUrl && !awaitingRemote) return null;
 
   return (
-    <div className={IMAGE_FRAME_CLASS}>
-      <SupportChatImageSkeleton tone={imageTone} visible={showSkeleton} />
+    <div
+      className={cn(
+        IMAGE_FRAME_CLASS,
+        usePlaceholderSize && IMAGE_PLACEHOLDER_SIZE_CLASS,
+      )}
+    >
+      {localUrl ? (
+        <img
+          src={localUrl}
+          alt={alt}
+          onLoad={() => {
+            setLocalSized(true);
+            if (!remoteUrl) onMediaLoad?.();
+          }}
+          onError={() => setLoadError(true)}
+          className={cn(
+            imageClass,
+            imageClassName,
+            'transition-opacity duration-300 ease-out',
+            !localSized && 'opacity-0',
+            remoteVisible && remoteUrl && 'invisible',
+          )}
+        />
+      ) : null}
+      {remoteUrl ? (
+        <img
+          src={remoteUrl}
+          alt={alt}
+          onLoad={() => {
+            if (remoteVisible) onMediaLoad?.();
+          }}
+          onError={() => setLoadError(true)}
+          className={cn(
+            imageClass,
+            imageClassName,
+            'transition-opacity duration-300 ease-out',
+            !remoteVisible && !localSized && 'opacity-0',
+            localUrl
+              ? cn(
+                  'absolute left-0 top-0 max-h-48 max-w-full',
+                  remoteVisible ? 'opacity-100' : 'opacity-0',
+                )
+              : remoteVisible
+                ? 'opacity-100'
+                : 'opacity-0',
+          )}
+        />
+      ) : null}
 
-      <div
-        className={cn(
-          'relative transition-opacity duration-300 ease-out',
-          contentReady ? 'opacity-100' : 'opacity-0',
-        )}
-      >
-        {localUrl ? (
-          <img
-            src={localUrl}
-            alt={alt}
-            onLoad={() => {
-              setLocalSized(true);
-              if (!remoteUrl) onMediaLoad?.();
-            }}
-            onError={() => setLoadError(true)}
-            className={cn(
-              imageClass,
-              imageClassName,
-              remoteVisible && remoteUrl && 'invisible',
-            )}
-          />
-        ) : null}
-        {remoteUrl ? (
-          <img
-            src={remoteUrl}
-            alt={alt}
-            onLoad={() => {
-              if (remoteVisible) onMediaLoad?.();
-            }}
-            onError={() => setLoadError(true)}
-            className={cn(
-              imageClass,
-              imageClassName,
-              'transition-opacity duration-300 ease-out',
-              localUrl
-                ? cn(
-                    'absolute left-0 top-0',
-                    remoteVisible ? 'opacity-100' : 'opacity-0',
-                  )
-                : 'opacity-100',
-            )}
-          />
-        ) : null}
-      </div>
+      {showSkeleton ? <SupportChatImageSkeleton tone={imageTone} /> : null}
 
       <div
         className={cn(
@@ -230,7 +211,8 @@ const SupportChatMessageImage = memo(function SupportChatMessageImage({
       {pendingUpload?.error || loadError ? (
         <div
           className={cn(
-            'absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-3 text-center',
+            'flex flex-col items-center justify-center gap-1.5 px-3 py-6 text-center',
+            hasLayoutSize ? 'absolute inset-0' : cn('relative', IMAGE_PLACEHOLDER_SIZE_CLASS),
             pendingUpload?.error
               ? 'bg-destructive/85 text-white'
               : imageTone === 'user'
@@ -280,9 +262,10 @@ export function SupportChatMessageContent({
             disabled={!localUrl && !remoteUrl}
             className={cn(
               'group relative block max-w-full text-left',
-              'ring-1 ring-border/50 transition hover:ring-2 hover:ring-primary/35',
-              'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
               'rounded-lg overflow-hidden disabled:pointer-events-none',
+              localUrl || remoteUrl
+                ? 'ring-1 ring-border/50 transition hover:ring-2 hover:ring-primary/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary'
+                : 'focus:outline-none',
             )}
             aria-label="View chat image"
           >

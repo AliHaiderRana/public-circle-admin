@@ -171,60 +171,58 @@ export default function SupportRequestsPage() {
   const currentAdminName = formatAdminDisplayName(user?.name, user?.email);
   const isSuperAdmin = Boolean(user?.isSuperAdmin);
   const highlightRequestId = searchParams.get('highlight');
-  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(
-    () => searchParams.get('ticket'),
-  );
+  const selectedTicketId = searchParams.get('ticket');
   const { stats, refresh: refreshStats } = useSupportStats();
   const highlightedRowRef = useRef<HTMLButtonElement>(null);
   const resolvedActiveTicketRef = useRef<SupportRequestRow | null>(null);
   const silentRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasLoadedRequestsRef = useRef(false);
+  const highlightHandledRef = useRef<string | null>(null);
   const selectedTicketIdRef = useRef<string | null>(selectedTicketId);
-  useEffect(() => {
-    selectedTicketIdRef.current = selectedTicketId;
-  }, [selectedTicketId]);
+  selectedTicketIdRef.current = selectedTicketId;
 
   const [ticketCloseConfirm, setTicketCloseConfirm] = useState<{
     ticket: SupportRequestRow;
     mode: 'request_confirmation' | 'force_resolve';
   } | null>(null);
 
-  useEffect(() => {
-    const ticketFromUrl = searchParams.get('ticket');
-    setSelectedTicketId((current) => (current === ticketFromUrl ? current : ticketFromUrl));
-  }, [searchParams]);
+  const updateTicketInUrl = useCallback(
+    (ticketId: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (ticketId) {
+        params.set('ticket', ticketId);
+      } else {
+        params.delete('ticket');
+      }
+      const qs = params.toString();
+      const nextUrl = qs ? `${pathname}?${qs}` : pathname;
+      const currentTicket = searchParams.get('ticket');
+      if ((currentTicket || null) === (ticketId || null)) return;
+      router.replace(nextUrl, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
 
-  const selectTicket = useCallback((ticketId: string | null) => {
-    if (ticketId) {
-      setRequests((prev) => {
-        const target = prev.find((request) => request._id === ticketId);
-        if (!target || (target.unreadByAdmin ?? 0) === 0) return prev;
-        return prev.map((request) =>
-          request._id === ticketId ? { ...request, unreadByAdmin: 0 } : request,
+  const selectTicket = useCallback(
+    (ticketId: string | null) => {
+      if (ticketId) {
+        setRequests((prev) => {
+          const target = prev.find((request) => request._id === ticketId);
+          if (!target || (target.unreadByAdmin ?? 0) === 0) return prev;
+          return prev.map((request) =>
+            request._id === ticketId ? { ...request, unreadByAdmin: 0 } : request,
+          );
+        });
+        setOffPageTicket((prev) =>
+          prev?._id === ticketId && (prev.unreadByAdmin ?? 0) > 0
+            ? { ...prev, unreadByAdmin: 0 }
+            : prev,
         );
-      });
-      setOffPageTicket((prev) =>
-        prev?._id === ticketId && (prev.unreadByAdmin ?? 0) > 0
-          ? { ...prev, unreadByAdmin: 0 }
-          : prev,
-      );
-    }
-    setSelectedTicketId(ticketId || null);
-  }, []);
-
-  useEffect(() => {
-    const ticketFromUrl = searchParams.get('ticket');
-    if (ticketFromUrl === selectedTicketId) return;
-
-    const params = new URLSearchParams(searchParams.toString());
-    if (selectedTicketId) {
-      params.set('ticket', selectedTicketId);
-    } else {
-      params.delete('ticket');
-    }
-    const qs = params.toString();
-    const nextUrl = qs ? `${pathname}?${qs}` : pathname;
-    router.replace(nextUrl, { scroll: false });
-  }, [selectedTicketId, searchParams, pathname, router]);
+      }
+      updateTicketInUrl(ticketId);
+    },
+    [updateTicketInUrl],
+  );
 
   const [requests, setRequests] = useState<SupportRequestRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -327,7 +325,8 @@ export default function SupportRequestsPage() {
   }, [isSuperAdmin]);
 
   const fetchRequests = useCallback(async (silent = false) => {
-    if (!silent) {
+    const showSkeleton = !silent && !hasLoadedRequestsRef.current;
+    if (showSkeleton) {
       setLoading(true);
     }
     try {
@@ -354,6 +353,7 @@ export default function SupportRequestsPage() {
       if (data.requests) {
         setRequests(data.requests);
         setPagination(data.pagination);
+        hasLoadedRequestsRef.current = true;
       } else {
         setRequests([]);
       }
@@ -362,7 +362,7 @@ export default function SupportRequestsPage() {
         setRequests([]);
       }
     } finally {
-      if (!silent) {
+      if (showSkeleton) {
         setLoading(false);
       }
     }
@@ -480,7 +480,7 @@ export default function SupportRequestsPage() {
         },
         { reorder: true },
       );
-      scheduleSilentRefresh();
+      void refreshStats();
     };
 
     const unsubscribeStatus = subscribeAdminSupportTicketStatus(handleTicketStatus);
@@ -552,7 +552,7 @@ export default function SupportRequestsPage() {
         prev?._id === detail.supportRequestId ? null : prev,
       );
       if (selectedTicketIdRef.current === detail.supportRequestId) {
-        setSelectedTicketId(null);
+        updateTicketInUrl(null);
       }
       scheduleSilentRefresh();
       void refreshStats();
@@ -581,29 +581,68 @@ export default function SupportRequestsPage() {
     patchTicketInLists,
     refreshStats,
     scheduleSilentRefresh,
+    updateTicketInUrl,
   ]);
 
   useEffect(() => {
-    fetchRequests();
+    void fetchRequests(hasLoadedRequestsRef.current);
   }, [fetchRequests]);
 
   useEffect(() => {
-    if (highlightRequestId && !loading && highlightedRowRef.current) {
-      highlightedRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      const timer = setTimeout(() => setHighlightFading(true), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [highlightRequestId, loading, requests]);
+    if (!highlightRequestId || loading) return;
+    if (highlightHandledRef.current === highlightRequestId) return;
 
-  useEffect(() => {
-    if (
-      highlightRequestId &&
-      requests.some((request) => request._id === highlightRequestId) &&
-      selectedTicketId !== highlightRequestId
-    ) {
+    const row = requests.find((request) => request._id === highlightRequestId);
+    if (!row) return;
+
+    highlightHandledRef.current = highlightRequestId;
+    setHighlightFading(false);
+
+    if (selectedTicketId !== highlightRequestId) {
       selectTicket(highlightRequestId);
     }
-  }, [highlightRequestId, requests, selectedTicketId, selectTicket]);
+
+    requestAnimationFrame(() => {
+      highlightedRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    const fadeTimer = window.setTimeout(() => setHighlightFading(true), 2000);
+
+    const params = new URLSearchParams(searchParams.toString());
+    if (params.has('highlight')) {
+      params.delete('highlight');
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    }
+
+    return () => window.clearTimeout(fadeTimer);
+  }, [
+    highlightRequestId,
+    loading,
+    requests,
+    pathname,
+    router,
+    searchParams,
+    selectTicket,
+    selectedTicketId,
+  ]);
+
+  const hasActiveFilters = Boolean(
+    searchTerm ||
+      statusFilter ||
+      activeOnlyFilter ||
+      categoryFilter ||
+      assigneeFilter !== 'all',
+  );
+
+  const clearFilters = useCallback(() => {
+    setSearchTerm('');
+    setStatusFilter('');
+    setActiveOnlyFilter(false);
+    setAssigneeFilter('all');
+    setCategoryFilter('');
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  }, []);
 
   const handleChatActivity = useCallback(() => {
     scheduleSilentRefresh();
@@ -711,7 +750,7 @@ export default function SupportRequestsPage() {
       setManageRequest(null);
       setRequests((prev) => prev.filter((request) => request._id !== ticketId));
       if (selectedTicketId === ticketId) {
-        setSelectedTicketId(null);
+        updateTicketInUrl(null);
       }
       scheduleSilentRefresh();
       void refreshStats();
@@ -1109,6 +1148,17 @@ export default function SupportRequestsPage() {
                   </div>
                 </div>
               ) : null}
+              {hasActiveFilters ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-full text-xs text-muted-foreground"
+                  onClick={clearFilters}
+                >
+                  Clear filters
+                </Button>
+              ) : null}
             </div>
 
             <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
@@ -1302,11 +1352,6 @@ export default function SupportRequestsPage() {
         }
         main={
           <>
-            {selectedTicketId && !activeTicket && !loading && (
-              <div className="shrink-0 border-b bg-amber-50/80 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-                This ticket is not on the current page — conversation is still available below.
-              </div>
-            )}
             {selectedTicketId ? (
               <TicketChatPanel
                 key={selectedTicketId}
@@ -1336,7 +1381,7 @@ export default function SupportRequestsPage() {
                   if (selectedTicketId) {
                     setRequests((prev) => prev.filter((request) => request._id !== selectedTicketId));
                   }
-                  setSelectedTicketId(null);
+                  updateTicketInUrl(null);
                   scheduleSilentRefresh();
                   void refreshStats();
                 }}
