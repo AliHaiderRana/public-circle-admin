@@ -344,14 +344,18 @@ function SessionRecordsBadge({ count }: { count: number }) {
 
 type GroupedTimelineSessionEntry = Extract<GroupedTimelineEntry, { kind: 'session' }>;
 
-function ActivityTableHeader() {
+function ActivityTableHeader({ hideSourceAndCustomer = false }: { hideSourceAndCustomer?: boolean }) {
   return (
     <TableHeader>
       <TableRow className="hover:bg-transparent">
         <TableHead className="w-[150px] pl-6">When</TableHead>
         <TableHead>Action</TableHead>
-        <TableHead className="w-[130px]">Source</TableHead>
-        <TableHead className="w-[160px]">Customer</TableHead>
+        {!hideSourceAndCustomer && (
+          <>
+            <TableHead className="w-[130px]">Source</TableHead>
+            <TableHead className="w-[160px]">Customer</TableHead>
+          </>
+        )}
         <TableHead className="w-[140px] pr-6">Category</TableHead>
       </TableRow>
     </TableHeader>
@@ -588,46 +592,57 @@ export default function AdminActivityGroupedPanel({
     [sessionModal, modalActions]
   );
 
-  const renderActivityRow = (row: UnifiedActivityRow, nested = false) => (
-    <TableRow
-      key={row.id}
-      className={cn('group transition-colors', nested && 'bg-muted/30')}
-    >
-      <TableCell className={cn('align-top py-3', !nested && 'pl-6')}>
-        <WhenCell iso={row.createdAt} nested={nested} />
-      </TableCell>
-      <TableCell className="align-top whitespace-normal min-w-[280px] py-3">
-        <p className="text-sm leading-snug text-foreground">
-          {sanitizeSummaryForDisplay(row.summary)}
-        </p>
-        <ActivityDetailCell row={row} />
-      </TableCell>
-      <TableCell className="align-top py-3">
-        <SourceBadge source={row.source} />
-      </TableCell>
-      <TableCell className="align-top whitespace-normal py-3">
-        <span className="text-xs text-foreground/80 truncate block max-w-[200px]">
-          {getCustomerDisplayLabel({
-            name:
-              typeof row.details?.impersonatedUserName === 'string'
-                ? row.details.impersonatedUserName
-                : undefined,
-            companyName:
-              typeof row.metadata?.companyName === 'string'
-                ? row.metadata.companyName
-                : typeof row.details?.companyName === 'string'
-                  ? row.details.companyName
-                  : undefined,
-          })}
-        </span>
-      </TableCell>
-      <TableCell className="align-top py-3 pr-6">
-        <Badge variant="outline" className="text-[10px] font-normal">
-          {row.categoryLabel}
-        </Badge>
-      </TableCell>
-    </TableRow>
-  );
+  const renderActivityRow = (
+    row: UnifiedActivityRow,
+    opts: { nested?: boolean; hideSourceAndCustomer?: boolean } = {}
+  ) => {
+    const { nested = false, hideSourceAndCustomer = false } = opts;
+
+    return (
+      <TableRow
+        key={row.id}
+        className={cn('group transition-colors', nested && 'bg-muted/30')}
+      >
+        <TableCell className={cn('align-top py-3', !nested && 'pl-6')}>
+          <WhenCell iso={row.createdAt} nested={nested} />
+        </TableCell>
+        <TableCell className="align-top whitespace-normal min-w-[280px] py-3">
+          <p className="text-sm leading-snug text-foreground">
+            {sanitizeSummaryForDisplay(row.summary)}
+          </p>
+          <ActivityDetailCell row={row} />
+        </TableCell>
+        {!hideSourceAndCustomer && (
+          <>
+            <TableCell className="align-top py-3">
+              <SourceBadge source={row.source} />
+            </TableCell>
+            <TableCell className="align-top whitespace-normal py-3">
+              <span className="text-xs text-foreground/80 truncate block max-w-[200px]">
+                {getCustomerDisplayLabel({
+                  name:
+                    typeof row.details?.impersonatedUserName === 'string'
+                      ? row.details.impersonatedUserName
+                      : undefined,
+                  companyName:
+                    typeof row.metadata?.companyName === 'string'
+                      ? row.metadata.companyName
+                      : typeof row.details?.companyName === 'string'
+                        ? row.details.companyName
+                        : undefined,
+                })}
+              </span>
+            </TableCell>
+          </>
+        )}
+        <TableCell className="align-top py-3 pr-6">
+          <Badge variant="outline" className="text-[10px] font-normal">
+            {row.categoryLabel}
+          </Badge>
+        </TableCell>
+      </TableRow>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -913,7 +928,11 @@ export default function AdminActivityGroupedPanel({
             </DialogDescription>
             {modalCompany && (
               <Button variant="outline" size="sm" className="h-8 w-fit text-xs" asChild>
-                <Link href={`/dashboard/companies/${modalCompany.companyId}`}>
+                <Link
+                  href={`/dashboard/companies/${modalCompany.companyId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   <Building2 className="size-3.5 mr-1.5" />
                   View company
                   {modalCompany.companyName ? `: ${modalCompany.companyName}` : ''}
@@ -924,21 +943,21 @@ export default function AdminActivityGroupedPanel({
 
           <ScrollArea className="h-[min(60vh,640px)]">
             <Table>
-              <ActivityTableHeader />
+              <ActivityTableHeader hideSourceAndCustomer />
               <TableBody>
                 {modalLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell colSpan={5} className="py-3">
+                      <TableCell colSpan={3} className="py-3">
                         <Skeleton className="h-12 w-full" />
                       </TableCell>
                     </TableRow>
                   ))
                 ) : modalActions && modalActions.length > 0 ? (
-                  modalActions.map((row) => renderActivityRow(row))
+                  modalActions.map((row) => renderActivityRow(row, { hideSourceAndCustomer: true }))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-12 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={3} className="py-12 text-center text-sm text-muted-foreground">
                       No Public Circle actions recorded for this session.
                     </TableCell>
                   </TableRow>
