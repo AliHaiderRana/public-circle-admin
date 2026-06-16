@@ -12,6 +12,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -50,9 +51,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  Archive,
   Building2,
   ChevronRight,
   LayoutDashboard,
+  Loader2,
   LogIn,
   ScrollText,
   ShieldAlert,
@@ -173,7 +176,14 @@ function formatWhen(iso: string): { primary: string; full: string } {
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
   if (diffDays < 7) {
     return {
-      primary: date.toLocaleDateString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }),
+      primary: date.toLocaleDateString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      }),
       full,
     };
   }
@@ -182,7 +192,7 @@ function formatWhen(iso: string): { primary: string; full: string } {
     primary: date.toLocaleDateString(undefined, {
       month: 'short',
       day: 'numeric',
-      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+      year: 'numeric',
     }),
     full: `${full}`,
   };
@@ -343,6 +353,13 @@ function SessionRecordsBadge({ count }: { count: number }) {
 }
 
 type GroupedTimelineSessionEntry = Extract<GroupedTimelineEntry, { kind: 'session' }>;
+type ArchivedWarehouseSummary = {
+  totalStored: number;
+  panelStored: number;
+  publicCircleStored: number;
+  panelArchivedAt: string | null;
+  publicCircleArchivedAt: string | null;
+};
 
 function ActivityTableHeader({ hideSourceAndCustomer = false }: { hideSourceAndCustomer?: boolean }) {
   return (
@@ -385,12 +402,12 @@ function StatCard({
 }) {
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1.5">
         <CardTitle className="text-sm font-medium">{label}</CardTitle>
         <span className="text-muted-foreground">{icon}</span>
       </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold tabular-nums">
+      <CardContent className="p-3 pt-0">
+        <div className="text-xl font-bold tabular-nums">
           {loading ? '—' : value.toLocaleString()}
         </div>
       </CardContent>
@@ -406,11 +423,13 @@ type AdminActivityGroupedPanelProps = {
 export default function AdminActivityGroupedPanel({
   adminEmail,
 }: AdminActivityGroupedPanelProps) {
+  const [controlsOpen, setControlsOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'live' | 'archived'>('live');
   const [timeline, setTimeline] = useState<GroupedTimelineEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
+  const [limit, setLimit] = useState(15);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [panelTotal, setPanelTotal] = useState(0);
@@ -427,6 +446,13 @@ export default function AdminActivityGroupedPanel({
   const [sessionModal, setSessionModal] = useState<GroupedTimelineSessionEntry | null>(null);
   const [sessionActions, setSessionActions] = useState<Record<string, UnifiedActivityRow[]>>({});
   const [loadingSessions, setLoadingSessions] = useState<Set<string>>(new Set());
+  const [archiveMonth, setArchiveMonth] = useState('');
+  const [archivedRows, setArchivedRows] = useState<UnifiedActivityRow[]>([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  const [archivedError, setArchivedError] = useState<string | null>(null);
+  const [archivedLoadedOnce, setArchivedLoadedOnce] = useState(false);
+  const [archivedSummary, setArchivedSummary] = useState<ArchivedWarehouseSummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
 
   const categoryOptions = useMemo(() => buildUnifiedCategoryOptions(source), [source]);
 
@@ -515,6 +541,13 @@ export default function AdminActivityGroupedPanel({
     void fetchTimeline();
   }, [fetchTimeline]);
 
+  useEffect(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    setArchiveMonth(month);
+  }, []);
+
   const loadSessionActions = useCallback(
     async (sessionId: string) => {
       setLoadingSessions((prev) => {
@@ -576,6 +609,68 @@ export default function AdminActivityGroupedPanel({
     setCategory('all');
     setSort('desc');
   };
+
+  const loadArchivedRows = useCallback(async (monthOverride?: string) => {
+    const monthToLoad = monthOverride ?? archiveMonth;
+    if (!monthToLoad) {
+      setArchivedError('Select a month first (YYYY-MM).');
+      return;
+    }
+    setArchivedLoading(true);
+    setArchivedError(null);
+    setArchivedLoadedOnce(true);
+    try {
+      const params = new URLSearchParams({
+        month: monthToLoad,
+        source,
+        category,
+      });
+      if (adminEmail) params.set('adminEmail', adminEmail);
+      const res = await fetch(`/api/admin-unified-activities/archived?${params.toString()}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || 'Failed to load archived activity');
+      setArchivedRows((json.activities ?? []) as UnifiedActivityRow[]);
+    } catch (err) {
+      setArchivedRows([]);
+      setArchivedError(err instanceof Error ? err.message : 'Failed to load archived activity');
+    } finally {
+      setArchivedLoading(false);
+    }
+  }, [archiveMonth, source, category, adminEmail]);
+
+  const fetchArchivedSummary = useCallback(async (monthOverride?: string) => {
+    const monthToLoad = monthOverride ?? archiveMonth;
+    if (!monthToLoad) {
+      setArchivedSummary(null);
+      return;
+    }
+    setSummaryLoading(true);
+    try {
+      const params = new URLSearchParams({
+        month: monthToLoad,
+        source,
+        category,
+        summaryOnly: '1',
+      });
+      if (adminEmail) params.set('adminEmail', adminEmail);
+      const res = await fetch(`/api/admin-unified-activities/archived?${params.toString()}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || 'Failed to load archive summary');
+      setArchivedSummary((json.summary ?? null) as ArchivedWarehouseSummary | null);
+    } catch {
+      setArchivedSummary(null);
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, [archiveMonth, source, category, adminEmail]);
+
+  useEffect(() => {
+    if (!archiveMonth) {
+      setArchivedSummary(null);
+      return;
+    }
+    void fetchArchivedSummary();
+  }, [archiveMonth, source, category, adminEmail, fetchArchivedSummary]);
 
   const handleRefresh = () => {
     setSessionModal(null);
@@ -645,8 +740,8 @@ export default function AdminActivityGroupedPanel({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <StatCard
           label="Admin panel actions"
           value={panelTotal}
@@ -667,117 +762,247 @@ export default function AdminActivityGroupedPanel({
         />
       </div>
 
-      <AuditLogFilters
-        showAdminEmail={false}
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-        onDateFromChange={setDateFrom}
-        onDateToChange={setDateTo}
-        sort={sort}
-        onSortChange={setSort}
-        onRefresh={handleRefresh}
-        refreshing={loading}
-        title="Filters"
-        description="Narrow the timeline by source, date, and category."
-      >
-        <div className="space-y-2">
-          <Label htmlFor="timeline-source-filter">Source</Label>
-          <Select value={source} onValueChange={setSource}>
-            <SelectTrigger id="timeline-source-filter">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {UNIFIED_SOURCE_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="timeline-category-filter">Category</Label>
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger id="timeline-category-filter">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Array.from(groupedCategoryOptions.entries()).map(([group, opts]) => (
-                <SelectGroup key={group}>
-                  <SelectLabel>{group}</SelectLabel>
-                  {opts.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </AuditLogFilters>
+      <Collapsible open={controlsOpen} onOpenChange={setControlsOpen}>
+        <Card>
+          <CardHeader className="py-1.5 px-3">
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="w-full h-8 justify-between px-1 text-sm">
+                <span className="font-medium">Filters & Archived Data</span>
+                <ChevronRight className={cn('h-4 w-4 transition-transform', controlsOpen && 'rotate-90')} />
+              </Button>
+            </CollapsibleTrigger>
+          </CardHeader>
+          <CollapsibleContent>
+            <CardContent className="space-y-4 pt-0">
+              <AuditLogFilters
+                showAdminEmail={false}
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                onDateFromChange={setDateFrom}
+                onDateToChange={setDateTo}
+                sort={sort}
+                onSortChange={setSort}
+                onRefresh={handleRefresh}
+                refreshing={loading}
+                title="Filters"
+                description="Narrow the timeline by source, date, and category."
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="timeline-source-filter">Source</Label>
+                  <Select value={source} onValueChange={setSource}>
+                    <SelectTrigger id="timeline-source-filter">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {UNIFIED_SOURCE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="timeline-category-filter">Category</Label>
+                  <Select value={category} onValueChange={setCategory}>
+                    <SelectTrigger id="timeline-category-filter">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from(groupedCategoryOptions.entries()).map(([group, opts]) => (
+                        <SelectGroup key={group}>
+                          <SelectLabel>{group}</SelectLabel>
+                          {opts.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </AuditLogFilters>
 
-      {hasActiveFilters && (
-        <Alert>
-          <AlertDescription className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium text-foreground">Active filters</span>
-            <Separator orientation="vertical" className="hidden h-4 sm:block" />
-          {dateFrom && (
-            <Badge variant="secondary" className="gap-1 font-normal">
-              From {dateFrom}
-              <button type="button" onClick={() => setDateFrom('')} aria-label="Clear from date">
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          )}
-          {dateTo && (
-            <Badge variant="secondary" className="gap-1 font-normal">
-              To {dateTo}
-              <button type="button" onClick={() => setDateTo('')} aria-label="Clear to date">
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          )}
-          {source !== 'all' && sourceLabel && (
-            <Badge variant="secondary" className="gap-1 font-normal">
-              Source: {sourceLabel}
-              <button type="button" onClick={() => setSource('all')} aria-label="Clear source">
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          )}
-          {category !== 'all' && categoryLabel && (
-            <Badge variant="secondary" className="gap-1 font-normal">
-              {categoryLabel}
-              <button type="button" onClick={() => setCategory('all')} aria-label="Clear category">
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          )}
-          {sort !== 'desc' && (
-            <Badge variant="secondary" className="gap-1 font-normal">
-              Oldest first
-              <button type="button" onClick={() => setSort('desc')} aria-label="Reset sort">
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          )}
-          <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={clearFilters}>
-            Clear all
-          </Button>
-          </AlertDescription>
-        </Alert>
-      )}
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start gap-2">
+                    <Archive className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                    <div>
+                      <CardTitle className="text-base">Archived Data Explorer</CardTitle>
+                      <CardDescription>
+                        Records older than 6 months move to warehouse storage by month and may take a few seconds to load.
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="space-y-2 min-w-0">
+                      <Label htmlFor="timeline-archive-month">Archived month</Label>
+                      <Input
+                        id="timeline-archive-month"
+                        type="month"
+                        value={archiveMonth}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          setArchiveMonth(next);
+                          setArchivedError(null);
+                          if (!next) {
+                            setArchivedRows([]);
+                            setArchivedLoadedOnce(false);
+                            setArchivedSummary(null);
+                            setViewMode('live');
+                            return;
+                          }
+                          void fetchArchivedSummary(next);
+                          void loadArchivedRows(next);
+                          setViewMode('archived');
+                        }}
+                        className="h-9 w-full sm:w-[240px]"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void loadArchivedRows()}
+                      disabled={archivedLoading || !archiveMonth}
+                      className="shrink-0"
+                    >
+                      {archivedLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        'Reload archived data'
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => setViewMode((prev) => (prev === 'live' ? 'archived' : 'live'))}
+                      disabled={!archivedLoadedOnce && viewMode === 'live'}
+                    >
+                      {viewMode === 'live' ? 'View archived data' : 'View live timeline'}
+                    </Button>
+                  </div>
+
+                  <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                    {summaryLoading ? (
+                      <span>Checking warehouse summary...</span>
+                    ) : archivedSummary ? (
+                      <span>
+                        Stored for {archiveMonth}: {archivedSummary.totalStored.toLocaleString()} rows
+                        {' '}({archivedSummary.panelStored.toLocaleString()} admin panel,{' '}
+                        {archivedSummary.publicCircleStored.toLocaleString()} Public Circle)
+                      </span>
+                    ) : (
+                      <span>Select a month to see what is stored in warehouse.</span>
+                    )}
+                  </div>
+
+                  {archivedError && (
+                    <p className="text-xs text-red-600">{archivedError}</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {hasActiveFilters && (
+                <Alert>
+                  <AlertDescription className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-foreground">Active filters</span>
+                    <Separator orientation="vertical" className="hidden h-4 sm:block" />
+                    {dateFrom && (
+                      <Badge variant="secondary" className="gap-1 font-normal">
+                        From {dateFrom}
+                        <button type="button" onClick={() => setDateFrom('')} aria-label="Clear from date">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    )}
+                    {dateTo && (
+                      <Badge variant="secondary" className="gap-1 font-normal">
+                        To {dateTo}
+                        <button type="button" onClick={() => setDateTo('')} aria-label="Clear to date">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    )}
+                    {source !== 'all' && sourceLabel && (
+                      <Badge variant="secondary" className="gap-1 font-normal">
+                        Source: {sourceLabel}
+                        <button type="button" onClick={() => setSource('all')} aria-label="Clear source">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    )}
+                    {category !== 'all' && categoryLabel && (
+                      <Badge variant="secondary" className="gap-1 font-normal">
+                        {categoryLabel}
+                        <button type="button" onClick={() => setCategory('all')} aria-label="Clear category">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    )}
+                    {sort !== 'desc' && (
+                      <Badge variant="secondary" className="gap-1 font-normal">
+                        Oldest first
+                        <button type="button" onClick={() => setSort('desc')} aria-label="Reset sort">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    )}
+                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={clearFilters}>
+                      Clear all
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
       <Card>
         <CardHeader className="border-b">
-          <div>
-            <CardTitle className="text-lg">Activity timeline</CardTitle>
-            <CardDescription>
-              {loading
-                ? 'Loading activity…'
-                : `${total.toLocaleString()} entries · open a login session to view Public Circle actions`}
-            </CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="text-lg">
+                {viewMode === 'live' ? 'Activity timeline' : `Archived activity (${archiveMonth || 'Select month'})`}
+              </CardTitle>
+              <CardDescription>
+                {viewMode === 'live'
+                  ? (loading
+                      ? 'Loading activity…'
+                      : `${total.toLocaleString()} entries · open a login session to view Public Circle actions`)
+                  : (archivedLoading
+                      ? 'Loading archived rows...'
+                      : `${archivedRows.length.toLocaleString()} row${archivedRows.length === 1 ? '' : 's'} loaded from warehouse`)}
+              </CardDescription>
+            </div>
+            <div className="inline-flex rounded-md border bg-muted/30 p-1 w-fit">
+              <Button
+                size="sm"
+                variant={viewMode === 'live' ? 'secondary' : 'ghost'}
+                className="h-7"
+                onClick={() => setViewMode('live')}
+              >
+                Live timeline
+              </Button>
+              <Button
+                size="sm"
+                variant={viewMode === 'archived' ? 'secondary' : 'ghost'}
+                className="h-7"
+                onClick={() => setViewMode('archived')}
+                disabled={!archiveMonth}
+              >
+                Archived data
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -785,125 +1010,151 @@ export default function AdminActivityGroupedPanel({
             <Table>
               <ActivityTableHeader />
               <TableBody>
-                {loading ? (
-                  Array.from({ length: 8 }).map((_, i) => (
-                    <TableRow key={i}>
+                {viewMode === 'live' ? (
+                  loading ? (
+                    Array.from({ length: 8 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell colSpan={5} className="py-3">
+                          <Skeleton className="h-12 w-full" />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : timeline.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-16">
+                        <div className="flex flex-col items-center justify-center text-center gap-2">
+                          <ScrollText className="h-10 w-10 text-muted-foreground/50" />
+                          <p className="text-sm font-medium">No activity found</p>
+                          <p className="text-xs text-muted-foreground max-w-sm">
+                            {hasActiveFilters
+                              ? 'Try clearing filters or widening the date range.'
+                              : 'This admin has not recorded any actions yet.'}
+                          </p>
+                          {hasActiveFilters && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="mt-2 h-8"
+                              onClick={clearFilters}
+                            >
+                              Clear filters
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    timeline.map((entry) => {
+                      if (entry.kind === 'activity') {
+                        return renderActivityRow(entry.row);
+                      }
+
+                      const recordCount = entry.actionCount;
+                      const hasRecords = recordCount > 0;
+                      const customerLabel = getSessionCustomerLabel(entry) ?? '—';
+
+                      return (
+                        <TableRow
+                          key={entry.id}
+                          className="group cursor-pointer bg-muted/40 hover:bg-muted/60"
+                          onClick={() => openSessionModal(entry)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              openSessionModal(entry);
+                            }
+                          }}
+                          tabIndex={0}
+                          role="button"
+                          aria-haspopup="dialog"
+                          aria-label={
+                            hasRecords
+                              ? `View login session, ${recordCount} Public Circle action${recordCount === 1 ? '' : 's'}`
+                              : 'View login session, no Public Circle actions'
+                          }
+                        >
+                          <TableCell className="align-top py-3 pl-6">
+                            <WhenCell iso={entry.createdAt} />
+                          </TableCell>
+                          <TableCell className="align-top whitespace-normal min-w-[280px] py-3">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm font-medium leading-snug text-foreground">
+                                  {sanitizeSummaryForDisplay(entry.loginSummary)}
+                                </span>
+                                <SessionRecordsBadge count={entry.actionCount} />
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1 group-hover:text-foreground/80">
+                                {hasRecords
+                                  ? `View ${recordCount} Public Circle action${recordCount === 1 ? '' : 's'}`
+                                  : 'No Public Circle actions in this session'}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="align-top py-3">
+                            <Badge variant="secondary" className="font-normal">
+                              Login session
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="align-top py-3">
+                            <span className="text-xs text-foreground/80 truncate block max-w-[200px]">
+                              {customerLabel}
+                            </span>
+                          </TableCell>
+                          <TableCell className="align-top py-3 pr-6">
+                            <Badge variant="outline" className="text-[10px] font-normal">
+                              Impersonation
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )
+                ) : archivedLoading ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <TableRow key={`archived-skeleton-${i}`}>
                       <TableCell colSpan={5} className="py-3">
                         <Skeleton className="h-12 w-full" />
                       </TableCell>
                     </TableRow>
                   ))
-                ) : timeline.length === 0 ? (
+                ) : !archivedLoadedOnce ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-16">
-                      <div className="flex flex-col items-center justify-center text-center gap-2">
-                        <ScrollText className="h-10 w-10 text-muted-foreground/50" />
-                        <p className="text-sm font-medium">No activity found</p>
-                        <p className="text-xs text-muted-foreground max-w-sm">
-                          {hasActiveFilters
-                            ? 'Try clearing filters or widening the date range.'
-                            : 'This admin has not recorded any actions yet.'}
-                        </p>
-                        {hasActiveFilters && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="mt-2 h-8"
-                            onClick={clearFilters}
-                          >
-                            Clear filters
-                          </Button>
-                        )}
-                      </div>
+                    <TableCell colSpan={5} className="py-12 text-center text-sm text-muted-foreground">
+                      Select a month in Archived Data Explorer to load warehouse records.
+                    </TableCell>
+                  </TableRow>
+                ) : archivedRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                      No archived rows found for this month and filter.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  timeline.map((entry) => {
-                    if (entry.kind === 'activity') {
-                      return renderActivityRow(entry.row);
-                    }
-
-                    const recordCount = entry.actionCount;
-                    const hasRecords = recordCount > 0;
-                    const customerLabel =
-                      getSessionCustomerLabel(entry) ?? '—';
-
-                    return (
-                      <TableRow
-                        key={entry.id}
-                        className="group cursor-pointer bg-muted/40 hover:bg-muted/60"
-                        onClick={() => openSessionModal(entry)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            openSessionModal(entry);
-                          }
-                        }}
-                        tabIndex={0}
-                        role="button"
-                        aria-haspopup="dialog"
-                        aria-label={
-                          hasRecords
-                            ? `View login session, ${recordCount} Public Circle action${recordCount === 1 ? '' : 's'}`
-                            : 'View login session, no Public Circle actions'
-                        }
-                      >
-                        <TableCell className="align-top py-3 pl-6">
-                          <WhenCell iso={entry.createdAt} />
-                        </TableCell>
-                        <TableCell className="align-top whitespace-normal min-w-[280px] py-3">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-medium leading-snug text-foreground">
-                                {sanitizeSummaryForDisplay(entry.loginSummary)}
-                              </span>
-                              <SessionRecordsBadge count={entry.actionCount} />
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1 group-hover:text-foreground/80">
-                              {hasRecords
-                                ? `View ${recordCount} Public Circle action${recordCount === 1 ? '' : 's'}`
-                                : 'No Public Circle actions in this session'}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell className="align-top py-3">
-                          <Badge variant="secondary" className="font-normal">
-                            Login session
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="align-top py-3">
-                          <span className="text-xs text-foreground/80 truncate block max-w-[200px]">
-                            {customerLabel}
-                          </span>
-                        </TableCell>
-                        <TableCell className="align-top py-3 pr-6">
-                          <Badge variant="outline" className="text-[10px] font-normal">
-                            Impersonation
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
+                  archivedRows.map((row) => renderActivityRow(row))
                 )}
               </TableBody>
             </Table>
           </ScrollArea>
 
-          <Separator />
-
-          <div className="px-6 py-3">
-            <AdminActivityPagination
-              page={page}
-              totalPages={totalPages}
-              total={total}
-              limit={limit}
-              loading={loading}
-              compact={false}
-              onPageChange={setPage}
-              onLimitChange={setLimit}
-            />
-          </div>
+          {viewMode === 'live' && (
+            <>
+              <Separator />
+              <div className="px-6 py-3">
+                <AdminActivityPagination
+                  page={page}
+                  totalPages={totalPages}
+                  total={total}
+                  limit={limit}
+                  loading={loading}
+                  compact={false}
+                  onPageChange={setPage}
+                  onLimitChange={setLimit}
+                />
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
