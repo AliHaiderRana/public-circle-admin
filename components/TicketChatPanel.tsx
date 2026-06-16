@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { SupportChatSendButton } from '@/components/SupportChatSendButton';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
   Loader2,
-  Send,
   RefreshCw,
   Lock,
   ImagePlus,
@@ -1311,24 +1311,18 @@ export function TicketChatPanel({
                   }
                 }}
               />
-              <Button
+              <SupportChatSendButton
                 onClick={handleSend}
                 disabled={sending || (!reply.trim() && !imageFile)}
-                size="icon"
+                loading={sending}
+                title={replyInternal ? 'Save internal note' : 'Send reply'}
                 className={cn(
-                  'mb-0.5 size-9 shrink-0 rounded-full',
+                  'mb-0.5 size-9',
                   replyInternal
                     ? 'bg-amber-600 text-white hover:bg-amber-700'
                     : 'bg-primary text-primary-foreground hover:bg-primary/90',
                 )}
-                title={replyInternal ? 'Save internal note' : 'Send reply'}
-              >
-                {sending ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Send className="size-4" />
-                )}
-              </Button>
+              />
             </div>
           </div>
         )}

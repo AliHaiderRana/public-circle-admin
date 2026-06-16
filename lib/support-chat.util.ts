@@ -109,9 +109,8 @@ export function isImageOnlyMessagePlaceholder(message?: string): boolean {
 
 export function shouldShowChatMessageText(
   message?: string,
-  options?: { hasImage?: boolean },
+  _options?: { hasImage?: boolean },
 ): boolean {
-  if (options?.hasImage) return false;
   const trimmed = (message || '').trim();
   if (!trimmed) return false;
   if (IMAGE_ONLY_MESSAGE_PLACEHOLDERS.has(trimmed)) return false;
