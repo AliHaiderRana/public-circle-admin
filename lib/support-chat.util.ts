@@ -175,3 +175,18 @@ export function filterGhostSupportChatMessages<T extends SupportChatMessageLike>
     .map(sanitizeSupportChatMessage)
     .filter((msg) => !isGhostImagePlaceholderMessage(msg));
 }
+
+export function formatMessageTime(value: string) {
+  const date = new Date(value);
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  if (isToday) {
+    return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  }
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}

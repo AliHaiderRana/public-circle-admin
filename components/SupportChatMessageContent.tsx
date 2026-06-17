@@ -8,6 +8,7 @@ import {
   isChatImageLoaded,
   markChatImageLoaded,
   shouldShowChatMessageText,
+  formatMessageTime,
 } from '@/lib/support-chat.util';
 import { cn } from '@/lib/utils';
 import { SupportChatImagePreview } from '@/components/SupportChatImagePreview';
@@ -22,14 +23,17 @@ type SupportChatMessageContentProps = {
   imageTone?: 'user' | 'support';
   onMediaLoad?: () => void;
   onRemoteImageReady?: () => void;
+  createdAt?: string;
+  isConsecutivePrev?: boolean;
+  isConsecutiveNext?: boolean;
+  isInternal?: boolean;
 };
 
-const IMAGE_FRAME_CLASS = 'relative inline-block max-w-full shrink-0 overflow-hidden rounded-lg';
+const IMAGE_FRAME_CLASS = 'relative block w-full max-w-[220px] sm:max-w-[280px] max-h-[240px] sm:max-h-[320px] shrink-0 overflow-hidden';
 
-/** Fixed footprint only while waiting — expands to image once decoded. */
 const IMAGE_LOADING_SIZE_CLASS = 'h-36 w-48';
 
-const IMAGE_CLASS = 'block h-auto w-auto max-h-48 max-w-full object-contain';
+const IMAGE_CLASS = 'block w-full h-full object-cover';
 
 function attachmentHasImage(attachment?: SupportChatAttachment): boolean {
   if (!attachment) return false;
@@ -45,7 +49,7 @@ function ImageLoadingSlot({ tone }: { tone: 'user' | 'support' }) {
       className={cn(
         IMAGE_FRAME_CLASS,
         IMAGE_LOADING_SIZE_CLASS,
-        'flex items-center justify-center',
+        'flex items-center justify-center rounded-[16px]',
         tone === 'user' ? 'bg-black/10' : 'bg-black/[0.05] dark:bg-white/[0.06]',
       )}
       aria-label="Loading image"
@@ -72,7 +76,7 @@ function ImageErrorSlot({
       className={cn(
         IMAGE_FRAME_CLASS,
         IMAGE_LOADING_SIZE_CLASS,
-        'flex flex-col items-center justify-center gap-1 px-2 text-center',
+        'flex flex-col items-center justify-center gap-1 px-2 text-center rounded-[16px]',
         tone === 'user'
           ? 'bg-black/15 text-white/70'
           : 'bg-muted/80 text-muted-foreground',
@@ -84,8 +88,35 @@ function ImageErrorSlot({
   );
 }
 
+function getBubbleBorderRadiusClasses(
+  tone: 'user' | 'support',
+  isConsecutivePrev: boolean,
+  isConsecutiveNext: boolean,
+) {
+  if (tone === 'support') {
+    if (isConsecutivePrev && isConsecutiveNext) {
+      return 'rounded-[16px] rounded-tr-[4px] rounded-br-[4px]';
+    } else if (isConsecutivePrev) {
+      return 'rounded-[16px] rounded-tr-[4px]';
+    } else if (isConsecutiveNext) {
+      return 'rounded-[16px] rounded-br-[4px]';
+    }
+    return 'rounded-[16px]';
+  } else {
+    if (isConsecutivePrev && isConsecutiveNext) {
+      return 'rounded-[16px] rounded-tl-[4px] rounded-bl-[4px]';
+    } else if (isConsecutivePrev) {
+      return 'rounded-[16px] rounded-tl-[4px]';
+    } else if (isConsecutiveNext) {
+      return 'rounded-[16px] rounded-bl-[4px]';
+    }
+    return 'rounded-[16px]';
+  }
+}
+
 function SupportChatMessageImage({
   src,
+  previewSrc,
   stableKey,
   alt,
   imageClassName,
@@ -95,6 +126,7 @@ function SupportChatMessageImage({
   onReady,
 }: {
   src?: string;
+  previewSrc?: string;
   stableKey?: string;
   alt: string;
   imageClassName?: string;
@@ -103,22 +135,30 @@ function SupportChatMessageImage({
   awaitingUrl?: boolean;
   onReady?: () => void;
 }) {
-  const [decoded, setDecoded] = useState(() => isChatImageLoaded(stableKey));
+  const isCached = stableKey ? isChatImageLoaded(stableKey) : false;
+  const isPreviewCached = previewSrc ? isChatImageLoaded(previewSrc) : false;
+
+  const [decoded, setDecoded] = useState(isCached);
+  const [remoteLoaded, setRemoteLoaded] = useState(isCached);
+  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
   const [error, setError] = useState(false);
-  const notifiedRef = useRef(isChatImageLoaded(stableKey));
+  const notifiedRef = useRef(isCached);
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
+
+  const imgRef = useRef<HTMLImageElement>(null);
 
   const showUploadOverlay = Boolean(
     pendingUpload && pendingUpload.progress < 100 && !pendingUpload.error,
   );
 
-  const ready = isChatImageLoaded(stableKey) || decoded;
-
   useEffect(() => {
     if (!stableKey) return;
 
-    if (isChatImageLoaded(stableKey)) {
+    const cached = isChatImageLoaded(stableKey);
+    setRemoteLoaded(cached);
+
+    if (cached) {
       setDecoded(true);
       setError(false);
       if (!notifiedRef.current) {
@@ -128,10 +168,13 @@ function SupportChatMessageImage({
       return;
     }
 
-    setDecoded(false);
+    // Keep the image visible if we already have dimensions (i.e. transitioning from blob)
+    if (!dimensions) {
+      setDecoded(false);
+    }
     setError(false);
     notifiedRef.current = false;
-  }, [stableKey]);
+  }, [stableKey, dimensions]);
 
   const notifyReady = () => {
     if (stableKey) markChatImageLoaded(stableKey);
@@ -141,11 +184,37 @@ function SupportChatMessageImage({
     onReadyRef.current?.();
   };
 
+  const handleImageLoad = (naturalWidth: number, naturalHeight: number) => {
+    if (naturalWidth < 1) {
+      setError(true);
+      return;
+    }
+
+    setDimensions({ width: naturalWidth, height: naturalHeight });
+
+    if (src) {
+      notifyReady();
+    } else {
+      if (previewSrc) markChatImageLoaded(previewSrc);
+      setDecoded(true);
+    }
+  };
+
+  useEffect(() => {
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalWidth > 0) {
+      handleImageLoad(img.naturalWidth, img.naturalHeight);
+    }
+  }, [src, previewSrc]);
+
   if (pendingUpload?.error) {
     return <ImageErrorSlot tone={imageTone} message={pendingUpload.error} />;
   }
 
-  if (!src) {
+  // Display S3 remote URL if available, else fall back to local preview blob URL
+  const displaySrc = src || previewSrc;
+
+  if (!displaySrc) {
     if (awaitingUrl || showUploadOverlay) {
       return <ImageLoadingSlot tone={imageTone} />;
     }
@@ -156,6 +225,12 @@ function SupportChatMessageImage({
     return <ImageErrorSlot tone={imageTone} />;
   }
 
+  const ready =
+    (stableKey ? isChatImageLoaded(stableKey) : false) ||
+    decoded ||
+    (previewSrc ? isChatImageLoaded(previewSrc) : false) ||
+    isPreviewCached;
+
   return (
     <div
       className={cn(
@@ -163,25 +238,33 @@ function SupportChatMessageImage({
         !ready && IMAGE_LOADING_SIZE_CLASS,
         !ready && 'bg-black/[0.03] dark:bg-white/[0.04]',
       )}
+      style={
+        ready && dimensions
+          ? {
+              aspectRatio: `${dimensions.width} / ${dimensions.height}`,
+            }
+          : undefined
+      }
     >
       <img
-        src={src}
+        ref={imgRef}
+        src={displaySrc}
         alt={alt}
         decoding="async"
-        loading="lazy"
         onLoad={(event) => {
-          if (event.currentTarget.naturalWidth < 1) {
-            setError(true);
-            return;
-          }
-          notifyReady();
+          handleImageLoad(event.currentTarget.naturalWidth, event.currentTarget.naturalHeight);
         }}
         onError={() => setError(true)}
-        className={cn(IMAGE_CLASS, imageClassName, 'rounded-lg')}
+        className={cn(
+          IMAGE_CLASS,
+          imageClassName,
+          'rounded-t-[inherit] rounded-b-[inherit] transition-opacity duration-200',
+          ready ? 'opacity-100' : 'opacity-0',
+        )}
       />
 
       {showUploadOverlay ? (
-        <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center gap-1.5 bg-black/50 px-3">
+        <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center gap-1.5 bg-black/50 px-3 rounded-[inherit]">
           <Loader2 className="size-5 animate-spin text-white" />
           <span className="text-[10px] font-medium text-white tabular-nums">
             {pendingUpload?.progress ?? 0}%
@@ -201,6 +284,10 @@ export function SupportChatMessageContent({
   imageTone = 'support',
   onMediaLoad,
   onRemoteImageReady,
+  createdAt,
+  isConsecutivePrev = false,
+  isConsecutiveNext = false,
+  isInternal = false,
 }: SupportChatMessageContentProps) {
   const imageStableKey = getChatImageStableKey(
     attachment,
@@ -210,25 +297,31 @@ export function SupportChatMessageContent({
   );
 
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
-  const [imageReady, setImageReady] = useState(() => isChatImageLoaded(imageStableKey));
-  const imageReadyNotifiedRef = useRef(isChatImageLoaded(imageStableKey));
 
   const remoteUrl = attachment?.viewUrl;
-  const localUrl =
-    pendingUpload?.previewUrl && !remoteUrl ? pendingUpload.previewUrl : undefined;
+  const localUrl = pendingUpload?.previewUrl;
   const imageSrc = remoteUrl || localUrl;
   const awaitingUrl = attachmentHasImage(attachment) && !imageSrc;
   const hasImage = Boolean(imageSrc || awaitingUrl);
   const showText = shouldShowChatMessageText(message, { hasImage });
 
+  const isImageOrPreviewLoaded = () => {
+    if (imageStableKey && isChatImageLoaded(imageStableKey)) return true;
+    if (localUrl && isChatImageLoaded(localUrl)) return true;
+    return false;
+  };
+
+  const [imageReady, setImageReady] = useState(isImageOrPreviewLoaded);
+  const imageReadyNotifiedRef = useRef(isImageOrPreviewLoaded());
+
   useEffect(() => {
-    if (imageStableKey && isChatImageLoaded(imageStableKey)) {
+    if (isImageOrPreviewLoaded()) {
       setImageReady(true);
       return;
     }
     imageReadyNotifiedRef.current = false;
     setImageReady(false);
-  }, [imageStableKey]);
+  }, [imageStableKey, localUrl]);
 
   if (!showText && !hasImage) {
     return null;
@@ -242,44 +335,145 @@ export function SupportChatMessageContent({
     if (remoteUrl) onRemoteImageReady?.();
   };
 
-  return (
-    <div className={cn(showText && hasImage ? 'space-y-2' : '', className)}>
-      {hasImage ? (
-        <>
-          <button
-            type="button"
-            onClick={() => imageReady && setFullscreenOpen(true)}
-            disabled={!imageReady}
-            className={cn(
-              'inline-block max-w-full rounded-lg text-left focus:outline-none',
-              imageReady &&
-                'ring-1 ring-border/40 transition hover:ring-2 hover:ring-primary/30 focus-visible:ring-2 focus-visible:ring-primary',
-              !imageReady && 'cursor-default',
-            )}
-            aria-label={imageReady ? 'View chat image' : 'Loading chat image'}
-          >
-            <SupportChatMessageImage
-              src={imageSrc}
-              stableKey={imageStableKey}
-              alt={attachment?.originalName || 'Chat image'}
-              imageClassName={imageClassName}
-              imageTone={imageTone}
-              pendingUpload={pendingUpload}
-              awaitingUrl={awaitingUrl}
-              onReady={handleImageReady}
-            />
-          </button>
-          <SupportChatImagePreview
-            src={imageReady && imageSrc ? imageSrc : null}
+  if (!hasImage) {
+    return (
+      <p className={cn('whitespace-pre-wrap leading-relaxed', className)}>
+        {(message || '').trim()}
+      </p>
+    );
+  }
+
+  const borderRadiusClass = getBubbleBorderRadiusClasses(
+    imageTone,
+    isConsecutivePrev,
+    isConsecutiveNext,
+  );
+
+  // Note: For admin view, imageTone === 'support' is aligned right, tone === 'user' is aligned left.
+  const isRightAligned = imageTone === 'support';
+
+  if (!showText) {
+    // Image-only message
+    return (
+      <div className={cn('flex flex-col', isRightAligned ? 'items-end' : 'items-start', className)}>
+        <button
+          type="button"
+          onClick={() => imageReady && setFullscreenOpen(true)}
+          disabled={!imageReady}
+          className={cn(
+            'flex w-fit max-w-full text-left focus:outline-none items-start justify-start overflow-hidden border',
+            borderRadiusClass,
+            isInternal
+              ? 'border-dashed border-amber-200/80 dark:border-amber-900/50'
+              : 'border-transparent',
+            imageReady && 'focus-visible:ring-2 focus-visible:ring-primary',
+            !imageReady && 'cursor-default',
+          )}
+          aria-label={imageReady ? 'View chat image' : 'Loading chat image'}
+        >
+          <SupportChatMessageImage
+            src={imageSrc}
+            previewSrc={localUrl}
+            stableKey={imageStableKey}
             alt={attachment?.originalName || 'Chat image'}
-            open={fullscreenOpen}
-            onOpenChange={setFullscreenOpen}
+            imageClassName={imageClassName}
+            imageTone={imageTone}
+            pendingUpload={pendingUpload}
+            awaitingUrl={awaitingUrl}
+            onReady={handleImageReady}
           />
-        </>
-      ) : null}
-      {showText ? (
-        <p className="whitespace-pre-wrap leading-relaxed">{(message || '').trim()}</p>
-      ) : null}
+        </button>
+
+        {createdAt && (
+          <p className={cn(
+            'text-[10px] text-muted-foreground mt-1 px-1.5 tabular-nums flex items-center gap-1.5',
+            isRightAligned ? 'justify-end text-right' : 'justify-start text-left'
+          )}>
+            {formatMessageTime(createdAt)}
+            {isInternal && (
+              <span className="font-normal text-amber-700 dark:text-amber-300">
+                · Internal
+              </span>
+            )}
+          </p>
+        )}
+
+        <SupportChatImagePreview
+          src={imageReady && imageSrc ? imageSrc : null}
+          alt={attachment?.originalName || 'Chat image'}
+          open={fullscreenOpen}
+          onOpenChange={setFullscreenOpen}
+        />
+      </div>
+    );
+  }
+
+  // Image with Caption
+  return (
+    <div className={cn('flex flex-col', isRightAligned ? 'items-end' : 'items-start', className)}>
+      <div
+        className={cn(
+          'w-fit max-w-[220px] sm:max-w-[280px] flex flex-col shadow-sm overflow-hidden border',
+          borderRadiusClass,
+          isRightAligned
+            ? isInternal
+              ? 'bg-amber-50/90 text-foreground border-amber-200/80 border-dashed dark:bg-amber-950/25 dark:border-amber-900/50'
+              : 'bg-muted text-foreground border-border/80'
+            : 'bg-background text-foreground border-border/50',
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => imageReady && setFullscreenOpen(true)}
+          disabled={!imageReady}
+          className={cn(
+            'flex w-full text-left focus:outline-none items-start justify-start overflow-hidden rounded-t-[inherit]',
+            !imageReady && 'cursor-default',
+          )}
+          aria-label={imageReady ? 'View chat image' : 'Loading chat image'}
+        >
+          <SupportChatMessageImage
+            src={imageSrc}
+            previewSrc={localUrl}
+            stableKey={imageStableKey}
+            alt={attachment?.originalName || 'Chat image'}
+            imageClassName={imageClassName}
+            imageTone={imageTone}
+            pendingUpload={pendingUpload}
+            awaitingUrl={awaitingUrl}
+            onReady={handleImageReady}
+          />
+        </button>
+
+        <div className="flex flex-col px-3.5 pt-2.5 pb-2 text-left">
+          <p className="text-sm whitespace-pre-wrap leading-relaxed break-words">
+            {(message || '').trim()}
+          </p>
+          {createdAt && (
+            <p
+              className={cn(
+                'text-[10px] mt-1 tabular-nums flex items-center gap-1.5',
+                isRightAligned ? 'justify-end text-right' : 'justify-start text-left',
+                'text-muted-foreground',
+              )}
+            >
+              {formatMessageTime(createdAt)}
+              {isInternal && (
+                <span className="font-normal text-amber-700 dark:text-amber-300">
+                  · Internal
+                </span>
+              )}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <SupportChatImagePreview
+        src={imageReady && imageSrc ? imageSrc : null}
+        alt={attachment?.originalName || 'Chat image'}
+        open={fullscreenOpen}
+        onOpenChange={setFullscreenOpen}
+      />
     </div>
   );
 }

@@ -1097,7 +1097,7 @@ export function TicketChatPanel({
         ) : messages.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-16">No messages yet.</p>
         ) : (
-          displayMessages.map((msg) => {
+          displayMessages.map((msg, index) => {
             const messageKey = getSupportChatMessageKey(msg);
             const system = isSystemMessage(msg.message);
             if (system) {
@@ -1111,6 +1111,27 @@ export function TicketChatPanel({
                 </div>
               );
             }
+
+            const prevMsg = index > 0 ? displayMessages[index - 1] : null;
+            const nextMsg = index < displayMessages.length - 1 ? displayMessages[index + 1] : null;
+
+            const isConsecutivePrev = Boolean(
+              prevMsg &&
+                prevMsg.senderType === msg.senderType &&
+                !isSystemMessage(prevMsg.message) &&
+                (msg.senderType === SUPPORT_CHAT_SENDER_TYPE.ADMIN
+                  ? prevMsg.senderAdminId === msg.senderAdminId && prevMsg.visibility === msg.visibility
+                  : prevMsg.senderName === msg.senderName)
+            );
+
+            const isConsecutiveNext = Boolean(
+              nextMsg &&
+                nextMsg.senderType === msg.senderType &&
+                !isSystemMessage(nextMsg.message) &&
+                (msg.senderType === SUPPORT_CHAT_SENDER_TYPE.ADMIN
+                  ? nextMsg.senderAdminId === msg.senderAdminId && nextMsg.visibility === msg.visibility
+                  : nextMsg.senderName === msg.senderName)
+            );
 
             const isAdmin = msg.senderType === SUPPORT_CHAT_SENDER_TYPE.ADMIN;
             const isInternal = msg.visibility === 'INTERNAL';
@@ -1132,38 +1153,34 @@ export function TicketChatPanel({
             }
 
             return (
-              <div key={messageKey} className={cn('flex', isAdmin ? 'justify-end' : 'justify-start')}>
-                <div className={cn('max-w-[82%] space-y-1', isAdmin ? 'items-end' : 'items-start')}>
-                  <p
-                    className={cn(
-                      'text-[11px] font-medium text-muted-foreground px-1',
-                      isAdmin && 'text-right',
-                    )}
-                  >
-                    {label}
-                    {isInternal ? (
-                      <span className="ml-1.5 font-normal text-amber-700 dark:text-amber-300">
-                        · Internal
-                      </span>
-                    ) : null}
-                  </p>
-                  {(showText || hasImage) ? (
-                    <div
+              <div key={messageKey} className={cn('flex w-full', isAdmin ? 'justify-end' : 'justify-start', isConsecutivePrev && '!mt-1.5')}>
+                <div className={cn('max-w-[82%] space-y-1 flex flex-col', isAdmin ? 'items-end' : 'items-start')}>
+                  {!isConsecutivePrev && (
+                    <p
                       className={cn(
-                        'rounded-2xl text-sm shadow-sm',
-                        showText ? 'px-3.5 py-2.5' : 'p-1.5',
-                        isAdmin
-                          ? isInternal
-                            ? 'bg-amber-50/90 text-foreground border border-amber-200/80 border-dashed rounded-br-md dark:bg-amber-950/25 dark:border-amber-900/50'
-                            : 'bg-muted text-foreground border border-border/80 rounded-br-md'
-                          : 'bg-background border rounded-bl-md',
+                        'text-[11px] font-medium text-muted-foreground px-1',
+                        isAdmin && 'text-right',
                       )}
                     >
+                      {label}
+                      {isInternal ? (
+                        <span className="ml-1.5 font-normal text-amber-700 dark:text-amber-300">
+                          · Internal
+                        </span>
+                      ) : null}
+                    </p>
+                  )}
+                  {(showText || hasImage) ? (
+                    hasImage ? (
                       <SupportChatMessageContent
                         message={msg.message}
                         attachment={msg.attachment}
                         pendingUpload={msg.pendingUpload}
                         imageTone={isAdmin ? 'support' : 'user'}
+                        createdAt={msg.createdAt}
+                        isConsecutivePrev={isConsecutivePrev}
+                        isConsecutiveNext={isConsecutiveNext}
+                        isInternal={isInternal}
                         onMediaLoad={() => {
                           if (stickToBottomRef.current) scheduleScrollToBottom();
                         }}
@@ -1174,16 +1191,72 @@ export function TicketChatPanel({
                           if (stickToBottomRef.current) scheduleScrollToBottom();
                         }}
                       />
-                    </div>
+                    ) : (
+                      <>
+                        <div
+                          className={cn(
+                            'rounded-2xl text-sm shadow-sm px-3.5 py-2.5',
+                            isAdmin
+                              ? isInternal
+                                ? cn(
+                                    'bg-amber-50/90 text-foreground border border-amber-200/80 border-dashed dark:bg-amber-950/25 dark:border-amber-900/50',
+                                    isConsecutivePrev && isConsecutiveNext
+                                      ? 'rounded-r-md'
+                                      : isConsecutivePrev
+                                      ? 'rounded-br-md'
+                                      : isConsecutiveNext
+                                      ? 'rounded-tr-md'
+                                      : 'rounded-br-md',
+                                  )
+                                : cn(
+                                    'bg-muted text-foreground border border-border/80',
+                                    isConsecutivePrev && isConsecutiveNext
+                                      ? 'rounded-r-md'
+                                      : isConsecutivePrev
+                                      ? 'rounded-br-md'
+                                      : isConsecutiveNext
+                                      ? 'rounded-tr-md'
+                                      : 'rounded-br-md',
+                                  )
+                              : cn(
+                                  'bg-background border',
+                                  isConsecutivePrev && isConsecutiveNext
+                                    ? 'rounded-l-md'
+                                    : isConsecutivePrev
+                                    ? 'rounded-bl-md'
+                                    : isConsecutiveNext
+                                    ? 'rounded-tl-md'
+                                    : 'rounded-bl-md',
+                                )
+                          )}
+                        >
+                          <SupportChatMessageContent
+                            message={msg.message}
+                            attachment={msg.attachment}
+                            pendingUpload={msg.pendingUpload}
+                            imageTone={isAdmin ? 'support' : 'user'}
+                            onMediaLoad={() => {
+                              if (stickToBottomRef.current) scheduleScrollToBottom();
+                            }}
+                            onRemoteImageReady={() => {
+                              if (msg.pendingUpload) {
+                                handleClearPendingUpload(msg._id);
+                              }
+                              if (stickToBottomRef.current) scheduleScrollToBottom();
+                            }}
+                          />
+                        </div>
+                        <p
+                          className={cn(
+                            'text-[10px] tabular-nums text-muted-foreground px-1',
+                            isAdmin ? 'text-right' : 'text-left',
+                          )}
+                        >
+                          {formatMessageTime(msg.createdAt)}
+                        </p>
+                      </>
+                    )
                   ) : null}
-                  <p
-                    className={cn(
-                      'text-[10px] tabular-nums text-muted-foreground px-1',
-                      isAdmin ? 'text-right' : 'text-left',
-                    )}
-                  >
-                    {formatMessageTime(msg.createdAt)}
-                  </p>
                 </div>
               </div>
             );
