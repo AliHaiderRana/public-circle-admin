@@ -1,12 +1,72 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import mongoose from 'mongoose';
 import dbConnect from '@/lib/db';
 import CustomerRequest from '@/lib/models/CustomerRequest';
 import Company from '@/lib/models/Company';
 import { CUSTOMER_REQUEST_STATUS, CUSTOMER_REQUEST_TYPE } from '@/lib/constants';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+
+const CONTACT_UNLOCK_FIELDS: Partial<
+  Record<
+    (typeof CUSTOMER_REQUEST_TYPE)[keyof typeof CUSTOMER_REQUEST_TYPE],
+    Record<string, boolean>
+  >
+> = {
+  [CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_PRIMARY_KEY]: {
+    isContactPrimaryKeyLocked: false,
+  },
+  [CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_EMAIL_KEY]: {
+    isContactEmailLocked: false,
+  },
+  [CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_FILTERS]: {
+    isContactFilterLocked: false,
+  },
+};
+
+async function unlockContactConfigForCompany(
+  companyId: mongoose.Types.ObjectId | string,
+  type: string,
+  projectId?: string | null,
+) {
+  const unlockFields = CONTACT_UNLOCK_FIELDS[type as keyof typeof CONTACT_UNLOCK_FIELDS];
+  if (!unlockFields) return;
+
+  const companyObjectId =
+    companyId instanceof mongoose.Types.ObjectId
+      ? companyId
+      : new mongoose.Types.ObjectId(String(companyId));
+
+  const projectsCollection = mongoose.connection.collection('projects');
+
+  if (projectId && mongoose.Types.ObjectId.isValid(projectId)) {
+    await projectsCollection.updateOne(
+      { _id: new mongoose.Types.ObjectId(projectId), companyId: companyObjectId },
+      { $set: unlockFields },
+    );
+  }
+
+  const projectResult = await projectsCollection.updateMany(
+    { companyId: companyObjectId },
+    { $set: unlockFields },
+  );
+
+  if (projectResult.matchedCount === 0) {
+    console.warn(
+      `[customer-requests] No projects matched unlock for company ${String(companyId)} (${type})`,
+    );
+  }
+
+  // Legacy company-level fields (pre project migration); project rows are canonical.
+  await Company.updateOne({ _id: companyObjectId }, { $set: unlockFields });
+}
 
 export async function PATCH(
   request: Request,
@@ -34,21 +94,27 @@ export async function PATCH(
       return NextResponse.json({ error: 'Request not found' }, { status: 404 });
     }
 
+    const previousStatus = custRequest.requestStatus;
     custRequest.requestStatus = status;
     await custRequest.save();
 
     if (status === CUSTOMER_REQUEST_STATUS.COMPLETED) {
       const company = await Company.findById(custRequest.companyId);
       if (company) {
+        const requestProjectId =
+          typeof custRequest.metadata?.projectId === 'string'
+            ? custRequest.metadata.projectId
+            : null;
+
         switch (custRequest.type) {
           case CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_PRIMARY_KEY:
-            company.isContactPrimaryKeyLocked = false;
-            break;
           case CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_EMAIL_KEY:
-            company.isContactEmailLocked = false;
-            break;
           case CUSTOMER_REQUEST_TYPE.EDIT_CONTACTS_FILTERS:
-            company.isContactFilterLocked = false;
+            await unlockContactConfigForCompany(
+              company._id,
+              custRequest.type,
+              requestProjectId,
+            );
             break;
           case CUSTOMER_REQUEST_TYPE.DEDICATED_IP_ENABLED:
             company.hasDedicatedIp = true;
@@ -139,6 +205,31 @@ export async function PATCH(
 
         await company.save();
       }
+    }
+
+    const companyForAudit = await Company.findById(custRequest.companyId)
+      .select('name')
+      .lean();
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.CUSTOMER_REQUEST_STATUS,
+        category: ADMIN_AUDIT_CATEGORY.CUSTOMER_REQUEST,
+        resourceType: 'customer_request',
+        resourceId: id,
+        details: {
+          previousStatus,
+          status,
+          type: custRequest.type,
+          companyId: String(custRequest.companyId ?? ''),
+          companyName: companyForAudit?.name ?? '',
+          projectId:
+            typeof custRequest.metadata?.projectId === 'string'
+              ? custRequest.metadata.projectId
+              : null,
+        },
+      });
     }
 
     return NextResponse.json(custRequest);

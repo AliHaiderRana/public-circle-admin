@@ -3,7 +3,12 @@ import { z } from 'zod';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import dbConnect from '@/lib/db';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 import EditorAsset, { EDITOR_ASSET_STATUS } from '@/lib/models/EditorAsset';
 
 export const runtime = 'nodejs';
@@ -82,6 +87,17 @@ export async function POST(request: Request) {
       status: EDITOR_ASSET_STATUS.INACTIVE,
       createdBy: session.id || null,
     });
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.EDITOR_ASSET_UPLOAD,
+        category: ADMIN_AUDIT_CATEGORY.TEMPLATE,
+        resourceType: 'editor_asset',
+        resourceId: String(asset._id),
+        details: { name: parsed.data.fileName },
+      });
+    }
 
     return NextResponse.json({
       data: {

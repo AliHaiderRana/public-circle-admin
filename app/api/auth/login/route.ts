@@ -3,8 +3,7 @@ import dbConnect from '@/lib/db';
 import AdminUser from '@/lib/models/AdminUser';
 import jwt from 'jsonwebtoken';
 import { serialize } from 'cookie';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
+import { ADMIN_JWT_SECRET } from '@/lib/admin-jwt';
 
 export async function POST(request: Request) {
   await dbConnect();
@@ -17,8 +16,13 @@ export async function POST(request: Request) {
     }
 
     const token = jwt.sign(
-      { userId: user._id, email: user.email, name: user.name || '', isSuperAdmin: user.isSuperAdmin || false },
-      JWT_SECRET,
+      {
+        userId: user._id.toString(),
+        email: user.email,
+        name: user.name || '',
+        isSuperAdmin: user.isSuperAdmin || false,
+      },
+      ADMIN_JWT_SECRET,
       { expiresIn: '1d' }
     );
 

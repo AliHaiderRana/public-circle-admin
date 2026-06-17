@@ -1,21 +1,45 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
-
-const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:3001";
-const INTERNAL_API_KEY =
-  process.env.INTERNAL_API_KEY || "internal_admin_cron_key_2024";
+import { getServerSession, toAdminAuditSession } from "@/lib/auth";
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from "@/lib/admin-audit";
+import {
+  createImpersonationSession,
+  ImpersonationError,
+} from "@/lib/impersonation.server";
+import { createImpersonationViaApi } from "@/lib/impersonation-api.server";
 
 /**
  * Base URL of the deployed public-circle web app (no trailing slash).
- * Used to build the redirect URL after minting an impersonation JWT on the API server.
  */
 const PUBLIC_CIRCLE_APP_URL =
   process.env.PUBLIC_CIRCLE_APP_URL || process.env.NEXT_PUBLIC_PUBLIC_CIRCLE_APP_URL;
 
+function buildRedirectUrl(data: {
+  token: string;
+  sessionId: string;
+  impersonatedBy: { email: string; name: string };
+}) {
+  const base = PUBLIC_CIRCLE_APP_URL!.replace(/\/$/, "");
+  const redirectUrl = new URL(`${base}/auth/jwt/admin-impersonate`);
+  redirectUrl.searchParams.set("token", data.token);
+  redirectUrl.searchParams.set("adminEmail", data.impersonatedBy.email);
+  redirectUrl.searchParams.set("adminName", data.impersonatedBy.name);
+  if (data.sessionId) {
+    redirectUrl.searchParams.set("sessionId", data.sessionId);
+  }
+  return redirectUrl.toString();
+}
+
 export async function POST(request: Request) {
-  const session = await getServerSession();
+  const session = await getServerSession(request);
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      { error: "Admin session expired — please sign in again and retry." },
+      { status: 401 }
+    );
   }
 
   if (!PUBLIC_CIRCLE_APP_URL) {
@@ -43,74 +67,60 @@ export async function POST(request: Request) {
     );
   }
 
+  const adminEmail = session.email ?? "";
+  const adminName = session.name ?? "";
+
   try {
-    const res = await fetch(`${API_BASE_URL}/internal/impersonate`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-internal-api-key": INTERNAL_API_KEY,
-      },
-      body: JSON.stringify({
+    // Prefer API server so the JWT is signed with the live ACCESS_TOKEN_SECRET.
+    let data =
+      (await createImpersonationViaApi({
         userId,
         companyId,
-        adminEmail: session.email ?? "",
-        adminName: session.name ?? "",
-      }),
-    });
+        adminEmail,
+        adminName,
+      })) ?? null;
 
-    const rawBody = await res.text();
-    let payload: any = {};
-    try {
-      payload = rawBody ? JSON.parse(rawBody) : {};
-    } catch {
-      payload = {};
+    if (!data) {
+      data = await createImpersonationSession({
+        userId,
+        companyId,
+        adminEmail,
+        adminName,
+      });
     }
 
-    if (!res.ok) {
-      const upstreamMessage =
-        typeof payload?.message === "string"
-          ? payload.message
-          : typeof payload?.error === "string"
-            ? payload.error
-            : rawBody?.slice(0, 300);
+    const redirectUrl = buildRedirectUrl(data);
 
-      return NextResponse.json(
-        {
-          error: upstreamMessage || "Failed to create impersonation session",
-          upstreamStatus: res.status,
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.IMPERSONATE_START,
+        category: ADMIN_AUDIT_CATEGORY.IMPERSONATION,
+        resourceType: "user",
+        resourceId: userId,
+        details: {
+          userId,
+          companyId,
+          impersonatedUserEmail: data.impersonatedUser.email,
+          impersonatedUserName: data.impersonatedUser.name,
+          companyName: data.company.name,
+          sessionId: data.sessionId,
         },
-        { status: res.status }
-      );
+      });
     }
 
-    const token = payload?.data?.token as string | undefined;
-    const impersonatedBy = payload?.data?.impersonatedBy as
-      | { email?: string; name?: string }
-      | undefined;
-
-    if (!token) {
-      return NextResponse.json(
-        { error: "Invalid response from server" },
-        { status: 502 }
-      );
+    return NextResponse.json({ redirectUrl });
+  } catch (e) {
+    if (e instanceof ImpersonationError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
     }
-
-    const base = PUBLIC_CIRCLE_APP_URL.replace(/\/$/, "");
-    const redirectUrl = new URL(`${base}/auth/jwt/admin-impersonate`);
-    redirectUrl.searchParams.set("token", token);
-    redirectUrl.searchParams.set("adminEmail", impersonatedBy?.email ?? session.email ?? "");
-    redirectUrl.searchParams.set("adminName", impersonatedBy?.name ?? session.name ?? "");
-
-    return NextResponse.json({ redirectUrl: redirectUrl.toString() });
-  } catch (e: any) {
     console.error("[impersonate]", e);
     return NextResponse.json(
       {
-        error: "Failed to reach API server",
-        details:
-          typeof e?.message === "string" ? e.message : "Unknown network error",
+        error: "Failed to start impersonation session",
+        details: e instanceof Error ? e.message : "Unknown error",
       },
-      { status: 502 }
+      { status: 500 }
     );
   }
 }

@@ -43,8 +43,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useAuth } from "@/context/AuthContext";
+import { startImpersonation } from "@/lib/impersonate-client";
 
 export default function UsersPage() {
+  const { token: adminToken } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [companies, setCompanies] = useState<Array<{ _id: string; name: string; logo?: string }>>([]);
   const [loading, setLoading] = useState(true);
@@ -178,24 +181,12 @@ export default function UsersPage() {
 
     setImpersonateUserId(user._id);
     try {
-      const response = await fetch('/api/impersonate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user._id,
-          companyId,
-        }),
+      const redirectUrl = await startImpersonation({
+        userId: user._id,
+        companyId,
+        adminToken,
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(
-          typeof data?.error === 'string' ? data.error : 'Failed to start impersonation'
-        );
-      }
-      if (typeof data.redirectUrl !== 'string' || !data.redirectUrl) {
-        throw new Error('Invalid redirect URL from server');
-      }
-      window.open(data.redirectUrl, '_blank', 'noopener,noreferrer');
+      window.open(redirectUrl, '_blank', 'noopener,noreferrer');
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to login as user');
     } finally {
@@ -462,20 +453,22 @@ export default function UsersPage() {
                       </div>
                     </TableCell>
                     <TableCell className="pl-6">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1"
-                        disabled={impersonateUserId !== null || !user.company?._id}
-                        onClick={() => handleLoginAsUser(user)}
-                      >
-                        {impersonateUserId === user._id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <LogIn className="h-4 w-4" />
-                        )}
-                        Login as this user
-                      </Button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                          disabled={impersonateUserId !== null || !user.company?._id}
+                          onClick={() => handleLoginAsUser(user)}
+                        >
+                          {impersonateUserId === user._id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <LogIn className="h-4 w-4" />
+                          )}
+                          Login as this user
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

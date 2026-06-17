@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -48,6 +48,7 @@ export default function CompaniesPage() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [companySizeFilter, setCompanySizeFilter] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
   const [cityFilter, setCityFilter] = useState("");
@@ -67,20 +68,11 @@ export default function CompaniesPage() {
   });
 
   useEffect(() => {
-    fetchCompanies();
-  }, [
-    pagination.page,
-    pagination.limit,
-    searchTerm,
-    companySizeFilter,
-    countryFilter,
-    cityFilter,
-    statusFilter,
-    sortOrder,
-    sortBy,
-  ]);
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
-  const fetchCompanies = async () => {
+  const fetchCompanies = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -88,7 +80,7 @@ export default function CompaniesPage() {
         limit: pagination.limit.toString(),
         sort: sortOrder,
         sortBy: sortBy,
-        ...(searchTerm && { search: searchTerm }),
+        ...(debouncedSearch && { search: debouncedSearch }),
         ...(companySizeFilter && { companySize: companySizeFilter }),
         ...(countryFilter && { country: countryFilter }),
         ...(cityFilter && { city: cityFilter }),
@@ -107,13 +99,26 @@ export default function CompaniesPage() {
       } else {
         setCompanies([]);
       }
-    } catch (err) {
-      console.error("Failed to load companies");
+    } catch {
       setCompanies([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    pagination.page,
+    pagination.limit,
+    debouncedSearch,
+    companySizeFilter,
+    countryFilter,
+    cityFilter,
+    statusFilter,
+    sortOrder,
+    sortBy,
+  ]);
+
+  useEffect(() => {
+    fetchCompanies();
+  }, [fetchCompanies]);
 
   const handlePageChange = (newPage: number) => {
     setPagination((prev) => ({ ...prev, page: newPage }));
@@ -489,7 +494,7 @@ export default function CompaniesPage() {
             </TableBody>
           </Table>
 
-          {pagination.pages > 1 && (
+          {pagination.total > 0 && (
             <div className="flex items-center justify-between px-6 py-4 border-t">
               <div className="text-sm text-neutral-500">
                 Page {pagination.page} of {pagination.pages} ({pagination.total}{" "}

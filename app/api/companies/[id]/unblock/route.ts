@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
+import dbConnect from '@/lib/db';
 import Company from '@/lib/models/Company';
 import User from '@/lib/models/User';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
+import { runWithOptionalTransaction } from '@/lib/run-with-optional-transaction';
 import { USER_STATUS } from '@/lib/constants';
 
 /**
@@ -31,10 +38,7 @@ export async function POST(
       );
     }
 
-    // Connect to database if not already connected
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/circles');
-    }
+    await dbConnect();
 
     const company = await Company.findById(id);
     if (!company) {
@@ -51,43 +55,52 @@ export async function POST(
       );
     }
 
-    // Start a session for transaction
-    const dbSession = await mongoose.startSession();
-    dbSession.startTransaction();
+    const companyObjectId = new mongoose.Types.ObjectId(id);
 
-    try {
-      // 1. Unblock the company
+    const { usersUnblocked } = await runWithOptionalTransaction(async (dbSession) => {
+      const sessionOpts = dbSession ? { session: dbSession } : {};
+
       await Company.findByIdAndUpdate(
         id,
         { status: USER_STATUS.ACTIVE },
-        { session: dbSession }
+        sessionOpts
       );
 
-      // 2. Unblock all blocked users of this company
       const usersUpdateResult = await User.updateMany(
-        { 
-          company: new mongoose.Types.ObjectId(id),
-          status: USER_STATUS.BLOCKED 
+        {
+          company: companyObjectId,
+          status: USER_STATUS.BLOCKED,
         },
         { status: USER_STATUS.ACTIVE },
-        { session: dbSession }
+        sessionOpts
       );
 
-      await dbSession.commitTransaction();
+      return { usersUnblocked: usersUpdateResult.modifiedCount };
+    });
 
-      return NextResponse.json({
-        message: 'Company unblocked successfully',
-        data: {
-          companyId: id,
-          usersUnblocked: usersUpdateResult.modifiedCount,
+    const auditSession = toAdminAuditSession(session);
+    if (!auditSession) {
+      console.warn('[admin-audit] Skipped company unblock audit — missing admin session identity');
+    } else {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.COMPANY_UNBLOCK,
+        category: ADMIN_AUDIT_CATEGORY.COMPANY,
+        resourceType: 'company',
+        resourceId: id,
+        details: {
+          companyName: company.name,
+          usersUnblocked,
         },
       });
-    } catch (error) {
-      await dbSession.abortTransaction();
-      throw error;
-    } finally {
-      dbSession.endSession();
     }
+
+    return NextResponse.json({
+      message: 'Company unblocked successfully',
+      data: {
+        companyId: id,
+        usersUnblocked,
+      },
+    });
   } catch (error) {
     console.error('Error unblocking company:', error);
     return NextResponse.json(

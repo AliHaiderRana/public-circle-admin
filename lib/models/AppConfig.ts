@@ -18,6 +18,48 @@ const schema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    supportRequestsEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    supportNotificationEmail: {
+      type: String,
+      default: null,
+    },
+    supportSendAlertEmail: {
+      type: Boolean,
+      default: true,
+    },
+    supportSendDetailEmail: {
+      type: Boolean,
+      default: true,
+    },
+    supportSendCustomerConfirmation: {
+      type: Boolean,
+      default: false,
+    },
+    supportNotifySuperAdmins: {
+      type: Boolean,
+      default: true,
+    },
+    supportNotifyAdmins: {
+      type: Boolean,
+      default: true,
+    },
+    supportAlertEmails: {
+      type: [String],
+      default: [],
+    },
+    supportDetailEmails: {
+      type: [String],
+      default: [],
+    },
+    /** Shared with API server for admin-panel impersonation auth */
+    adminJwtSecret: { type: String, default: null },
+    /** Optional override for internal API routes (crons, impersonate) */
+    internalApiKey: { type: String, default: null },
+    /** Optional — must match API ACCESS_TOKEN_SECRET for local token minting */
+    accessTokenSecret: { type: String, default: null },
   },
   { timestamps: true }
 );

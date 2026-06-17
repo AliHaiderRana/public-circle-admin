@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import AdminNotification from '@/lib/models/AdminNotification';
 import { getServerSession } from '@/lib/auth';
+const DROPDOWN_NOTIFICATION_LIMIT = 5;
 
 export async function GET(request: Request) {
   const session = await getServerSession();
@@ -14,7 +15,10 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const limit = Math.min(
+      Math.max(parseInt(searchParams.get('limit') || String(DROPDOWN_NOTIFICATION_LIMIT), 10), 1),
+      20,
+    );
     const isRead = searchParams.get('isRead');
 
     const skip = (page - 1) * limit;
@@ -35,8 +39,10 @@ export async function GET(request: Request) {
       AdminNotification.countDocuments({ isRead: false }),
     ]);
 
+    const displayItems = notifications;
+
     return NextResponse.json({
-      items: notifications,
+      items: displayItems,
       pagination: {
         page,
         limit,

@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import AdminUser from '@/lib/models/AdminUser';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 
 export async function GET(request: Request) {
   const session = await getServerSession();
@@ -49,6 +54,17 @@ export async function POST(request: Request) {
       name, 
       isSuperAdmin: isSuperAdmin || false 
     });
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.ADMIN_USER_CREATE,
+        category: ADMIN_AUDIT_CATEGORY.ADMIN_USER,
+        resourceType: 'admin_user',
+        resourceId: String(admin._id),
+        details: { email: admin.email, isSuperAdmin: Boolean(isSuperAdmin) },
+      });
+    }
+
     return NextResponse.json({ message: 'Admin created', admin: { email: admin.email } });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to create admin' }, { status: 500 });
@@ -83,7 +99,17 @@ export async function DELETE(request: Request) {
       );
     }
 
-    await AdminUser.findByIdAndDelete(id);
+    const deleted = await AdminUser.findByIdAndDelete(id).select('email');
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.ADMIN_USER_DELETE,
+        category: ADMIN_AUDIT_CATEGORY.ADMIN_USER,
+        resourceType: 'admin_user',
+        resourceId: id,
+        details: { email: deleted?.email },
+      });
+    }
     return NextResponse.json({ message: 'Admin deleted' });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to delete admin' }, { status: 500 });

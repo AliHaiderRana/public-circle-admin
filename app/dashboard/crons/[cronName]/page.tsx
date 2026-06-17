@@ -249,20 +249,20 @@ export default function CronDetailPage() {
     <>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:justify-between xl:items-center">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4 min-w-0">
             <Button variant="outline" onClick={() => router.back()}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back
             </Button>
-            <div>
-              <h2 className="text-3xl font-bold tracking-tight">
+            <div className="min-w-0">
+              <h2 className="text-2xl xl:text-3xl font-bold tracking-tight break-words">
                 {cron.displayName}
               </h2>
-              <p className="text-neutral-500">{cron.description}</p>
+              <p className="text-neutral-500 break-words">{cron.description}</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => {
                 fetchCronDetails();
@@ -320,11 +320,11 @@ export default function CronDetailPage() {
             <CardContent>
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-neutral-400" />
-                <div>
-                  <div className="font-mono text-sm font-bold">
+                <div className="min-w-0">
+                  <div className="font-mono text-sm font-bold break-all">
                     {cron.schedule || "Not scheduled"}
                   </div>
-                  <div className="text-xs text-neutral-500">
+                  <div className="text-xs text-neutral-500 break-words">
                     {getScheduleDescription(cron.schedule)}
                   </div>
                 </div>
@@ -475,20 +475,20 @@ export default function CronDetailPage() {
               </div>
             ) : (
               <>
-                <Table>
+                <Table className="table-fixed">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Start Time</TableHead>
-                      <TableHead>Duration</TableHead>
-                      <TableHead>Records</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead className="w-[32%]">Start Time</TableHead>
+                      <TableHead className="w-[16%]">Duration</TableHead>
+                      <TableHead className="w-[12%]">Records</TableHead>
+                      <TableHead className="w-[18%]">Status</TableHead>
+                      <TableHead className="w-[22%]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {history.map((item) => (
                       <TableRow key={item._id}>
-                        <TableCell>
+                        <TableCell className="whitespace-normal">
                           <div className="flex items-center gap-2">
                             <Clock className="h-4 w-4 text-neutral-400" />
                             <span className="text-sm">
@@ -525,15 +525,15 @@ export default function CronDetailPage() {
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="whitespace-normal">
                           {item.error && (
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => setSelectedError(item)}
                             >
-                              <AlertCircle className="mr-1 h-3 w-3" />
-                              View Error
+                              <AlertCircle className="h-3 w-3 xl:mr-1" />
+                              <span className="hidden xl:inline">View Error</span>
                             </Button>
                           )}
                         </TableCell>

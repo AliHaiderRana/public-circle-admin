@@ -5,26 +5,28 @@ import { useRouter } from 'next/navigation';
 import { Bell, Check, Trash2, CheckCheck, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ADMIN_NOTIFICATION_TYPES, SOCKET_CHANNELS } from '@/lib/constants';
-import { io, Socket } from 'socket.io-client';
+import { getAdminNotificationDisplay } from '@/lib/support-notifications';
+import { ADMIN_NOTIFICATION_TYPES } from '@/lib/constants';
+import {
+  subscribeAdminNotificationConnection,
+  subscribeAdminNotifications,
+  subscribeAdminSupportChatMessages,
+  type AdminNotificationPayload,
+} from '@/lib/admin-notification-socket';
+import { SUPPORT_CHAT_SENDER_TYPE } from '@/lib/constants';
 
-interface AdminNotification {
-  _id: string;
-  type: string;
-  title: string;
-  description: string;
-  isRead: boolean;
-  readAt: string | null;
+const PAGE_SIZE = 10;
+
+type AdminNotification = AdminNotificationPayload & {
   metadata: {
     customerRequestId?: string;
+    supportRequestId?: string;
     companyId?: string;
     companyName?: string;
     requestType?: string;
     requestTypeLabel?: string;
   };
-  createdAt: string;
-  updatedAt: string;
-}
+};
 
 export default function NotificationDropdown() {
   const router = useRouter();
@@ -32,23 +34,54 @@ export default function NotificationDropdown() {
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
   const [marking, setMarking] = useState<string | null>(null);
   const [socketConnected, setSocketConnected] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const socketRef = useRef<Socket | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
 
-  // Fetch notifications
-  const fetchNotifications = useCallback(async () => {
+  const fetchNotifications = useCallback(async (pageNum = 1, append = false) => {
     try {
-      const res = await fetch('/api/notifications?limit=10');
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.items) {
-        setNotifications(data.items);
-        setUnreadCount(data.unreadCount || 0);
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
       }
+
+      const res = await fetch(
+        `/api/notifications?limit=${PAGE_SIZE}&page=${pageNum}`,
+      );
+      if (!res.ok) return;
+
+      const data = await res.json();
+      if (!data.items) return;
+
+      const items = data.items as AdminNotification[];
+
+      if (append) {
+        setNotifications((prev) => {
+          const seen = new Set(prev.map((item) => item._id));
+          return [...prev, ...items.filter((item) => !seen.has(item._id))];
+        });
+      } else {
+        setNotifications(items);
+      }
+
+      setUnreadCount(data.unreadCount || 0);
+      setPage(pageNum);
+
+      const totalPages = data.pagination?.pages ?? 1;
+      setHasMore(pageNum < totalPages);
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
     }
   }, []);
 
@@ -64,90 +97,81 @@ export default function NotificationDropdown() {
     }
   }, []);
 
-  // Initial load and setup socket connection
+  const handleIncomingNotification = useCallback(
+    (notification: AdminNotification) => {
+      setNotifications((prev) => {
+        const without = prev.filter((item) => item._id !== notification._id);
+        return [notification, ...without];
+      });
+      void fetchUnreadCount();
+    },
+    [fetchUnreadCount],
+  );
+
   useEffect(() => {
-    fetchUnreadCount();
+    void fetchUnreadCount();
 
-    // Setup socket connection
-    const setupSocket = async () => {
-      try {
-        // Get the admin token from cookie (we'll get it from the API)
-        const res = await fetch('/api/auth/me');
-        if (!res.ok) {
-          console.log('Not authenticated, skipping socket connection');
-          return;
-        }
-        
-        const data = await res.json();
-        if (!data.token) {
-          console.log('No token available, skipping socket connection');
-          return;
-        }
+    const unsubscribeNotifications = subscribeAdminNotifications((notification) => {
+      handleIncomingNotification(notification as AdminNotification);
+    });
 
-        const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL;
-        if (!serverUrl) {
-          console.warn('NEXT_PUBLIC_SERVER_URL not configured, real-time notifications disabled');
-          return;
-        }
+    const unsubscribeChat = subscribeAdminSupportChatMessages((payload) => {
+      if (payload.message?.senderType !== SUPPORT_CHAT_SENDER_TYPE.USER) return;
 
-        console.log('Connecting to socket server:', serverUrl);
-        
-        socketRef.current = io(serverUrl, {
-          query: {
-            token: data.token,
-            isAdmin: 'true',
-          },
-          transports: ['websocket', 'polling'],
-          timeout: 20000,
-          reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 3000,
-        });
+      void fetchUnreadCount();
+    });
 
-        socketRef.current.on('connect', () => {
-          console.log('✅ Admin socket connected successfully');
-          setSocketConnected(true);
-        });
+    const unsubscribeConnection = subscribeAdminNotificationConnection(setSocketConnected);
 
-        socketRef.current.on(SOCKET_CHANNELS.ADMIN_NOTIFICATION_CREATED, (notification: AdminNotification) => {
-          console.log('📬 Received admin notification:', notification);
-          setNotifications((prev) => [notification, ...prev.slice(0, 9)]);
-          setUnreadCount((prev) => prev + 1);
-          // Also refresh the full list
-          fetchNotifications();
-        });
-
-        socketRef.current.on('disconnect', (reason) => {
-          console.log('Admin socket disconnected:', reason);
-          setSocketConnected(false);
-        });
-
-        socketRef.current.on('connect_error', (error: Error) => {
-          console.warn('Socket connection error:', error.message);
-          setSocketConnected(false);
-        });
-      } catch (err) {
-        console.warn('Failed to setup socket:', err);
+    const onRefresh = () => {
+      void fetchUnreadCount();
+      if (isOpenRef.current) {
+        void fetchNotifications(1, false);
       }
     };
-
-    setupSocket();
+    const onIncomingFromTab = (event: Event) => {
+      const notification = (event as CustomEvent<AdminNotification>).detail;
+      if (notification) {
+        handleIncomingNotification(notification);
+      }
+    };
+    window.addEventListener('admin-notifications:refresh', onRefresh);
+    window.addEventListener('admin-notifications:incoming', onIncomingFromTab);
 
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
+      unsubscribeNotifications();
+      unsubscribeChat();
+      unsubscribeConnection();
+      window.removeEventListener('admin-notifications:refresh', onRefresh);
+      window.removeEventListener('admin-notifications:incoming', onIncomingFromTab);
     };
-  }, [fetchUnreadCount, fetchNotifications]);
+  }, [fetchUnreadCount, fetchNotifications, handleIncomingNotification]);
 
-  // Fetch notifications when dropdown opens
   useEffect(() => {
     if (isOpen) {
-      setLoading(true);
-      fetchNotifications().finally(() => setLoading(false));
+      setPage(1);
+      void fetchNotifications(1, false);
     }
   }, [isOpen, fetchNotifications]);
+
+  useEffect(() => {
+    if (!isOpen || !loadMoreRef.current) return;
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
+          void fetchNotifications(page + 1, true);
+        }
+      },
+      { threshold: 0.1 },
+    );
+
+    observerRef.current.observe(loadMoreRef.current);
+
+    return () => {
+      observerRef.current?.disconnect();
+    };
+  }, [isOpen, hasMore, loadingMore, loading, page, fetchNotifications]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -203,8 +227,12 @@ export default function NotificationDropdown() {
 
   // Handle notification click - navigate to customer request
   const handleNotificationClick = async (notification: AdminNotification) => {
-    // Mark as read first
-    if (!notification.isRead) {
+    const isSupportThreadNotification =
+      notification.type === ADMIN_NOTIFICATION_TYPES.SUPPORT_REQUEST_CREATED ||
+      notification.type === ADMIN_NOTIFICATION_TYPES.SUPPORT_CHAT_CUSTOMER_MESSAGE;
+
+    // Support ticket notifications are marked read only when the chat panel is open.
+    if (!notification.isRead && !isSupportThreadNotification) {
       await markAsRead(notification._id);
     }
 
@@ -214,6 +242,20 @@ export default function NotificationDropdown() {
       if (customerRequestId) {
         setIsOpen(false);
         router.push(`/dashboard/customer-requests?highlight=${customerRequestId}`);
+      }
+    } else if (notification.type === ADMIN_NOTIFICATION_TYPES.SUPPORT_REQUEST_CREATED) {
+      const supportRequestId = notification.metadata?.supportRequestId;
+      if (supportRequestId) {
+        setIsOpen(false);
+        router.push(`/dashboard/support-requests?highlight=${supportRequestId}`);
+      }
+    } else if (notification.type === ADMIN_NOTIFICATION_TYPES.SUPPORT_CHAT_CUSTOMER_MESSAGE) {
+      const supportRequestId = notification.metadata?.supportRequestId;
+      setIsOpen(false);
+      if (supportRequestId) {
+        router.push(`/dashboard/support-requests?ticket=${supportRequestId}`);
+      } else {
+        router.push('/dashboard/support-requests');
       }
     }
   };
@@ -293,7 +335,9 @@ export default function NotificationDropdown() {
                 <p className="text-sm">No notifications yet</p>
               </div>
             ) : (
-              notifications.map((notification) => (
+              notifications.map((notification) => {
+                const display = getAdminNotificationDisplay(notification);
+                return (
                 <div
                   key={notification._id}
                   className={`px-4 py-3 border-b border-neutral-100 dark:border-neutral-700 last:border-0 cursor-pointer transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-700/50 ${
@@ -307,11 +351,13 @@ export default function NotificationDropdown() {
                     }`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
-                        {notification.title}
+                        {display.title}
                       </p>
-                      <p className="text-sm text-neutral-600 dark:text-neutral-400 line-clamp-2">
-                        {notification.description}
-                      </p>
+                      {display.description ? (
+                        <p className="text-sm text-neutral-600 dark:text-neutral-400 line-clamp-2">
+                          {display.description}
+                        </p>
+                      ) : null}
                       {notification.metadata?.requestTypeLabel && (
                         <Badge variant="outline" className="mt-1 text-xs">
                           {notification.metadata.requestTypeLabel}
@@ -339,7 +385,15 @@ export default function NotificationDropdown() {
                     )}
                   </div>
                 </div>
-              ))
+                );
+              })
+            )}
+            {!loading && notifications.length > 0 && (
+              <div ref={loadMoreRef} className="py-3 flex justify-center">
+                {loadingMore && (
+                  <Loader2 className="h-4 w-4 animate-spin text-neutral-400" />
+                )}
+              </div>
             )}
           </div>
 

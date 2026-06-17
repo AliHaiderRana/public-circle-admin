@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import dbConnect from '@/lib/db';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 import Template, { TEMPLATE_KINDS, TEMPLATE_STATUS } from '@/lib/models/Template';
 import TemplateCategory, {
   TEMPLATE_CATEGORY_STATUS,
@@ -111,6 +116,17 @@ export async function PATCH(
       return NextResponse.json({ error: 'Category not found' }, { status: 404 });
     }
 
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.TEMPLATE_CATEGORY_UPDATE,
+        category: ADMIN_AUDIT_CATEGORY.TEMPLATE_CATEGORY,
+        resourceType: 'template_category',
+        resourceId: id,
+        details: { name: category.name, fieldsChanged: Object.keys(payload) },
+      });
+    }
+
     return NextResponse.json({ category });
   } catch (error) {
     console.error('Failed to update category:', error);
@@ -166,6 +182,17 @@ export async function DELETE(
 
     if (!category) {
       return NextResponse.json({ error: 'Category not found' }, { status: 404 });
+    }
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.TEMPLATE_CATEGORY_DELETE,
+        category: ADMIN_AUDIT_CATEGORY.TEMPLATE_CATEGORY,
+        resourceType: 'template_category',
+        resourceId: id,
+        details: { name: category.name },
+      });
     }
 
     return NextResponse.json({ success: true });

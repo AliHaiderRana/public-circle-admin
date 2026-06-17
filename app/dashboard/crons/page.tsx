@@ -295,36 +295,36 @@ export default function CronsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
+              <Table className="table-fixed">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Cron Name</TableHead>
-                    <TableHead>Schedule</TableHead>
-                    <TableHead>Last Run</TableHead>
-                    <TableHead>Duration</TableHead>
-                    <TableHead>Records</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead className="w-[26%]">Cron Name</TableHead>
+                    <TableHead className="w-[18%]">Schedule</TableHead>
+                    <TableHead className="w-[16%]">Last Run</TableHead>
+                    <TableHead className="w-[8%]">Duration</TableHead>
+                    <TableHead className="w-[6%]">Records</TableHead>
+                    <TableHead className="w-[10%]">Status</TableHead>
+                    <TableHead className="w-[16%]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {crons.map((cron) => (
                     <TableRow key={cron._id || cron.name}>
-                      <TableCell>
+                      <TableCell className="align-top whitespace-normal break-words">
                         <div>
                           <div className="font-medium">{cron.displayName}</div>
-                          <div className="text-xs text-neutral-500">
+                          <div className="text-xs text-neutral-500 hidden xl:block">
                             {cron.description}
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="align-top whitespace-normal break-words">
                         {hasSchedule(cron) ? (
                           <div>
-                            <div className="font-mono text-xs">
+                            <div className="font-mono text-xs break-all">
                               {cron.schedule}
                             </div>
-                            <div className="text-xs text-neutral-500">
+                            <div className="text-xs text-neutral-500 hidden xl:block">
                               {getScheduleDescription(cron.schedule)}
                             </div>
                           </div>
@@ -334,7 +334,7 @@ export default function CronsPage() {
                           </span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-normal">
                         <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4 text-neutral-400" />
                           <span className="text-sm">
@@ -391,7 +391,7 @@ export default function CronsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 xl:gap-2">
                           <Button
                             size="sm"
                             variant="outline"
@@ -399,8 +399,8 @@ export default function CronsPage() {
                               router.push(`/dashboard/crons/${cron.name}`)
                             }
                           >
-                            <History className="mr-2 h-4 w-4" />
-                            View History
+                            <History className="h-4 w-4 xl:mr-2" />
+                            <span className="hidden xl:inline">View History</span>
                           </Button>
                           <Button
                             size="sm"
@@ -408,11 +408,13 @@ export default function CronsPage() {
                             disabled={triggering === cron.name}
                           >
                             {triggering === cron.name ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              <Loader2 className="h-4 w-4 xl:mr-2 animate-spin" />
                             ) : (
-                              <Play className="mr-2 h-4 w-4" />
+                              <Play className="h-4 w-4 xl:mr-2" />
                             )}
-                            {triggering === cron.name ? "Running..." : "Trigger"}
+                            <span className="hidden xl:inline">
+                              {triggering === cron.name ? "Running..." : "Trigger"}
+                            </span>
                           </Button>
                         </div>
                       </TableCell>

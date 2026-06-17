@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { User, Lock, Mail, CheckCircle, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { formatAdminDisplayName } from '@/lib/support-admin.util';
 
 export default function ProfilePage() {
   const [email, setEmail] = useState('');
@@ -22,13 +23,17 @@ export default function ProfilePage() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [suggestedName, setSuggestedName] = useState('');
 
   useEffect(() => {
     fetch('/api/auth/me')
       .then((res) => res.json())
       .then((data) => {
-        setEmail(data.user?.email || '');
-        setName(data.user?.name || '');
+        const emailValue = data.user?.email || '';
+        const nameValue = data.user?.name || '';
+        setEmail(emailValue);
+        setName(nameValue);
+        setSuggestedName(formatAdminDisplayName(nameValue, emailValue));
       });
   }, []);
 
@@ -147,8 +152,20 @@ export default function ProfilePage() {
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter your name"
+                    placeholder={suggestedName || 'Enter your name'}
                   />
+                  {suggestedName && suggestedName !== name.trim() && (
+                    <p className="text-xs text-muted-foreground">
+                      Suggested display name:{' '}
+                      <button
+                        type="button"
+                        className="font-medium text-primary underline-offset-2 hover:underline"
+                        onClick={() => setName(suggestedName)}
+                      >
+                        {suggestedName}
+                      </button>
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">

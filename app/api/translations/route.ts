@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
 
@@ -67,6 +72,20 @@ export async function POST(request: Request) {
       );
     }
 
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.TRANSLATION_CREATE,
+        category: ADMIN_AUDIT_CATEGORY.TRANSLATION,
+        resourceType: 'translation',
+        resourceId: body.data?.key ?? payload?.key,
+        details: {
+          key: payload?.key ?? body.data?.key,
+          locale: payload?.locale,
+        },
+      });
+    }
+
     return NextResponse.json(
       { translation: body.data },
       { status: res.status }
@@ -98,6 +117,17 @@ export async function PATCH(request: Request) {
       );
     }
 
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.TRANSLATION_UPDATE,
+        category: ADMIN_AUDIT_CATEGORY.TRANSLATION,
+        resourceType: 'translation',
+        resourceId: payload?.key ?? body.data?.key,
+        details: { key: payload?.key ?? body.data?.key, locale: payload?.locale },
+      });
+    }
+
     return NextResponse.json({ translation: body.data });
   } catch {
     return NextResponse.json({ error: 'Failed to connect to backend' }, { status: 502 });
@@ -127,6 +157,17 @@ export async function DELETE(request: Request) {
         { error: body.message || 'Failed to delete' },
         { status: res.status }
       );
+    }
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.TRANSLATION_DELETE,
+        category: ADMIN_AUDIT_CATEGORY.TRANSLATION,
+        resourceType: 'translation',
+        resourceId: body.data?.key ?? key,
+        details: { key: body.data?.key ?? key },
+      });
     }
 
     return NextResponse.json({ message: 'Deleted', key: body.data?.key ?? key });

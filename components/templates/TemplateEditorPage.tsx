@@ -9,13 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -25,6 +18,8 @@ import {
 } from '@/components/ui/dialog';
 import AdminEmailTemplateEditor from '@/components/templates/AdminEmailTemplateEditor';
 import UnsavedChangesDialog from '@/components/templates/UnsavedChangesDialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import { getTemplateCategoryIds } from '@/lib/template-categories.util';
 
 const IMPORTED_DRAFT_STORAGE_KEY = 'admin-template-import-draft';
 
@@ -44,6 +39,10 @@ type TemplateRecord = {
     _id: string;
     name: string;
   };
+  categories?: Array<{
+    _id: string;
+    name: string;
+  }>;
 };
 
 type TemplateEditorPageProps = {
@@ -53,7 +52,7 @@ type TemplateEditorPageProps = {
 type EditorSnapshot = {
   name: string;
   description: string;
-  categoryId: string;
+  categoryIds: string[];
   htmlBody: string;
 };
 
@@ -67,7 +66,7 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [categoryId, setCategoryId] = useState('');
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [htmlBody, setHtmlBody] = useState('');
   const [editorInitialHtml, setEditorInitialHtml] = useState('');
   const [editorHtmlEpoch, setEditorHtmlEpoch] = useState(0);
@@ -129,12 +128,13 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
           setHtmlBody(loadedHtml);
           setEditorInitialHtml(loadedHtml);
           setEditorHtmlEpoch((n) => n + 1);
-          setCategoryId(template.category?._id || '');
+          const loadedCategoryIds = getTemplateCategoryIds(template);
+          setCategoryIds(loadedCategoryIds);
           setInitialSnapshot({
             name: template.name || '',
             description: template.description || '',
             htmlBody: loadedHtml,
-            categoryId: template.category?._id || '',
+            categoryIds: loadedCategoryIds,
           });
         }
       } catch (error: any) {
@@ -173,7 +173,7 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
         setInitialSnapshot({
           name: '',
           description: '',
-          categoryId: '',
+          categoryIds: [],
           htmlBody: importedHtml,
         });
         return;
@@ -184,8 +184,7 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
       setInitialSnapshot({
         name: '',
         description: '',
-        categoryId: '',
-        htmlBody: '',
+        categoryIds: [],
       });
     } catch {
       // ignore invalid draft payload
@@ -194,25 +193,40 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
       setInitialSnapshot({
         name: '',
         description: '',
-        categoryId: '',
+        categoryIds: [],
         htmlBody: '',
       });
     }
   }, [templateId]);
 
+  const toggleCategory = (id: string) => {
+    setCategoryIds((prev) => (
+      prev.includes(id)
+        ? prev.filter((categoryId) => categoryId !== id)
+        : [...prev, id]
+    ));
+  };
+
+  const categoriesEqual = (left: string[], right: string[]) => {
+    if (left.length !== right.length) return false;
+    const sortedLeft = [...left].sort();
+    const sortedRight = [...right].sort();
+    return sortedLeft.every((value, index) => value === sortedRight[index]);
+  };
+
   const canSubmit = useMemo(() => {
-    return Boolean(name.trim() && categoryId && htmlBody.trim() && !saving);
-  }, [name, categoryId, htmlBody, saving]);
+    return Boolean(name.trim() && categoryIds.length > 0 && htmlBody.trim() && !saving);
+  }, [name, categoryIds, htmlBody, saving]);
 
   const hasUnsavedChanges = useMemo(() => {
     if (!initialSnapshot) return false;
     return (
       name !== initialSnapshot.name
       || description !== initialSnapshot.description
-      || categoryId !== initialSnapshot.categoryId
+      || !categoriesEqual(categoryIds, initialSnapshot.categoryIds)
       || htmlBody !== initialSnapshot.htmlBody
     );
-  }, [initialSnapshot, name, description, categoryId, htmlBody]);
+  }, [initialSnapshot, name, description, categoryIds, htmlBody]);
 
   useEffect(() => {
     if (!testEmailSubject.trim() && name.trim()) {
@@ -248,8 +262,8 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
       setErrorMessage('Template name is required');
       return;
     }
-    if (!categoryId) {
-      setErrorMessage('Template category is required');
+    if (categoryIds.length === 0) {
+      setErrorMessage('At least one template category is required');
       return;
     }
     if (!htmlBody.trim()) {
@@ -264,7 +278,7 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
         name: name.trim(),
         description: description.trim(),
         body: htmlBody,
-        categoryId,
+        categoryIds,
       };
 
       const endpoint = isEditMode
@@ -296,7 +310,7 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
       setInitialSnapshot({
         name: payload.name,
         description: payload.description,
-        categoryId: payload.categoryId,
+        categoryIds: payload.categoryIds,
         htmlBody: payload.body,
       });
 
@@ -518,7 +532,11 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
       await fetchCategories();
       const createdCategoryId = data?.category?._id;
       if (createdCategoryId) {
-        setCategoryId(createdCategoryId);
+        setCategoryIds((prev) => (
+          prev.includes(createdCategoryId)
+            ? prev
+            : [...prev, createdCategoryId]
+        ));
       }
       setSuccessMessage(`Category "${trimmedName}" created successfully.`);
       setCreateCategoryDialogOpen(false);
@@ -600,7 +618,7 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
               Template Details
             </CardTitle>
             <CardDescription>
-              Configure name, category, and short context for this template.
+              Configure name, categories, and short context for this template.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 px-3 pb-3">
@@ -616,7 +634,7 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
 
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="template-category">Template Category</Label>
+                <Label>Template Categories</Label>
                 <Button
                   type="button"
                   size="sm"
@@ -627,36 +645,42 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
                   + Create new
                 </Button>
               </div>
-              <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger id="template-category">
-                  <SelectValue
-                    placeholder={
-                      loadingCategories
-                        ? 'Loading categories...'
-                        : 'Select a template category'
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category._id} value={category._id}>
-                      <span className="flex w-full items-center justify-between gap-4">
-                        <span className="truncate">{category.name}</span>
-                        <span className="text-xs text-muted-foreground">{category.templateCount || 0}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {!loadingCategories && categories.length === 0 && (
-                <p className="text-sm text-amber-600">
-                  No categories found.
-                  {' '}
-                  <Link href="/dashboard/template-categories" className="font-medium underline">
-                    Create one first
-                  </Link>
-                  .
-                </p>
+              <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-3">
+                {loadingCategories ? (
+                  <p className="text-sm text-muted-foreground">Loading categories...</p>
+                ) : categories.length === 0 ? (
+                  <p className="text-sm text-amber-600">
+                    No categories found.
+                    {' '}
+                    <Link href="/dashboard/template-categories" className="font-medium underline">
+                      Create one first
+                    </Link>
+                    .
+                  </p>
+                ) : (
+                  categories.map((category) => (
+                    <label
+                      key={category._id}
+                      htmlFor={`template-category-${category._id}`}
+                      className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm transition hover:bg-muted"
+                    >
+                      <Checkbox
+                        id={`template-category-${category._id}`}
+                        checked={categoryIds.includes(category._id)}
+                        onCheckedChange={() => toggleCategory(category._id)}
+                      />
+                      <div className="flex w-full items-center justify-between gap-2">
+                        <span className="truncate font-medium">{category.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {category.templateCount || 0}
+                        </span>
+                      </div>
+                    </label>
+                  ))
+                )}
+              </div>
+              {categoryIds.length === 0 && !loadingCategories && categories.length > 0 && (
+                <p className="text-sm text-amber-600">Select at least one category.</p>
               )}
             </div>
 

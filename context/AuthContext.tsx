@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 
 interface AuthContextType {
   user: any;
+  token: string | null;
   loading: boolean;
   login: (userData: any) => void;
   logout: () => Promise<void>;
@@ -15,6 +16,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
@@ -26,6 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Ignore errors when clearing session
     }
     setUser(null);
+    setToken(null);
     // Only redirect if not already on login page
     if (pathname !== '/login' && pathname !== '/signup') {
       router.push('/login');
@@ -40,6 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // If user was deleted, authenticated will be false
         if (data.authenticated && data.user) {
           setUser(data.user);
+          setToken(typeof data.token === 'string' ? data.token : null);
         } else {
           // User was deleted or session invalid, clear session
           await clearSession();
@@ -51,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Auth check failed:', error);
       setUser(null);
+      setToken(null);
     } finally {
       setLoading(false);
     }
@@ -80,6 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = (userData: any) => {
     setUser(userData);
     router.push('/dashboard');
+    void checkAuth();
   };
 
   const logout = async () => {
@@ -87,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, checkAuth }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout, checkAuth }}>
       {children}
     </AuthContext.Provider>
   );

@@ -17,6 +17,8 @@ An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that 
 | `search_code` | Search for patterns with optional glob filtering |
 | `read_file` | Read file contents |
 | `list_directory` | List directory contents |
+| `get_system_notifications` | Read support email notification settings from the admin panel |
+| `update_system_notifications` | Update support email settings and per-admin email preferences |
 
 ### Security
 
@@ -58,6 +60,8 @@ npm run dev
 |----------|-------------|---------|
 | `MCP_REPO_ROOT` | Path to the repository root | Parent directory of mcp-server |
 | `MCP_LOG_FILE` | Path to the log file | `mcp-server/mcp-server.log` |
+| `MCP_ADMIN_API_URL` | Admin panel base URL for notification tools | `http://localhost:3000` |
+| `INTERNAL_API_KEY` | Internal API key for `/api/mcp/system-notifications` | `internal_admin_cron_key_2024` |
 
 ## Registering with Claude Code
 

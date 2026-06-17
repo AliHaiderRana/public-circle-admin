@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
-
-const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:3001";
-const INTERNAL_API_KEY =
-  process.env.INTERNAL_API_KEY || "internal_admin_cron_key_2024";
+import { getServerSession, toAdminAuditSession } from "@/lib/auth";
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from "@/lib/admin-audit";
+import { getAdminLocalCronsForApi } from "@/lib/admin-cron-status.server";
+import {
+  getBackendApiUrl,
+  getBackendAuthHeaders,
+} from "@/lib/backend-api.server";
 
 /**
  * GET /api/crons
@@ -16,12 +22,10 @@ export async function GET() {
   }
 
   try {
-    console.log("[API] Fetching crons from:", API_BASE_URL);
-    const res = await fetch(`${API_BASE_URL}/crons`, {
-      headers: {
-        "x-internal-api-key": INTERNAL_API_KEY,
-      },
-    });
+    const apiBaseUrl = getBackendApiUrl();
+    const headers = await getBackendAuthHeaders();
+    console.log("[API] Fetching crons from:", apiBaseUrl);
+    const res = await fetch(`${apiBaseUrl}/crons`, { headers });
 
     console.log("[API] Backend response status:", res.status);
 
@@ -32,22 +36,37 @@ export async function GET() {
         {
           error: "Failed to fetch crons from backend",
           details: errorBody?.error || errorBody?.message || `Backend returned ${res.status}`,
-          backendUrl: API_BASE_URL,
+          backendUrl: apiBaseUrl,
         },
         { status: res.status }
       );
     }
 
     const data = await res.json();
-    console.log("[API] Successfully fetched", data.crons?.length || 0, "crons");
-    return NextResponse.json(data);
+    const localCrons = await getAdminLocalCronsForApi();
+    const localCronNames = new Set(localCrons.map((cron) => cron.name));
+    const mergedCrons = [
+      ...(data.crons || []).filter((cron: { name: string }) => !localCronNames.has(cron.name)),
+      ...localCrons,
+    ].sort((a, b) =>
+      String(a.displayName || a.name).localeCompare(String(b.displayName || b.name))
+    );
+
+    console.log(
+      "[API] Successfully fetched",
+      mergedCrons.length,
+      "crons (",
+      localCrons.length,
+      "local )"
+    );
+    return NextResponse.json({ ...data, crons: mergedCrons });
   } catch (error: any) {
     console.error("[API] Error fetching crons via backend:", error);
     return NextResponse.json(
       { 
         error: "Failed to connect to backend", 
         details: error.message,
-        backendUrl: API_BASE_URL 
+        backendUrl: getBackendApiUrl(),
       },
       { status: 500 }
     );
@@ -73,12 +92,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    const res = await fetch(`${API_BASE_URL}/crons/seed`, {
+    const res = await fetch(`${getBackendApiUrl()}/crons/seed`, {
       method: "POST",
-      headers: {
-        "x-internal-api-key": INTERNAL_API_KEY,
+      headers: await getBackendAuthHeaders({
         "Content-Type": "application/json",
-      },
+      }),
       body: JSON.stringify({}),
     });
 
@@ -94,6 +112,17 @@ export async function POST(request: Request) {
     }
 
     const data = await res.json();
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.CRON_SEED,
+        category: ADMIN_AUDIT_CATEGORY.CRON,
+        resourceType: 'cron',
+        details: { action: 'seed' },
+      });
+    }
+
     return NextResponse.json(data);
   } catch (error: any) {
     console.error("[API] Error in crons POST proxy:", error);

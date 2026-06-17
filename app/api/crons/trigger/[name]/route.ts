@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from '@/lib/auth';
-
-const SERVER_API_URL = process.env.SERVER_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || 'internal_admin_cron_key_2024';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
+import { getAdminLocalCronDefinition } from '@/lib/admin-cron-definitions';
+import { runAdminLocalCronInBackground } from '@/lib/admin-cron-runner.server';
+import { getBackendApiUrl, getBackendAuthHeaders } from '@/lib/backend-api.server';
 
 /**
  * POST /api/crons/trigger/[name]
@@ -23,14 +28,34 @@ export async function POST(
     return NextResponse.json({ error: 'Cron name is required' }, { status: 400 });
   }
 
+  const localCron = getAdminLocalCronDefinition(name);
+  if (localCron) {
+    runAdminLocalCronInBackground(name);
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.CRON_TRIGGER,
+        category: ADMIN_AUDIT_CATEGORY.CRON,
+        resourceType: 'cron',
+        resourceId: name,
+        details: { cronName: name, source: 'admin' },
+      });
+    }
+
+    return NextResponse.json({
+      message: `Cron '${name}' triggered successfully. It will run in the background.`,
+      data: { name, triggered: true, source: 'admin' },
+    });
+  }
+
   try {
     // Call the server API to trigger the cron using internal API key
-    const response = await fetch(`${SERVER_API_URL}/crons/trigger/${name}`, {
+    const response = await fetch(`${getBackendApiUrl()}/crons/trigger/${name}`, {
       method: 'POST',
-      headers: {
+      headers: await getBackendAuthHeaders({
         'Content-Type': 'application/json',
-        'X-Internal-API-Key': INTERNAL_API_KEY,
-      },
+      }),
     });
 
     const data = await response.json();
@@ -40,6 +65,17 @@ export async function POST(
         { error: data.message || data.error || 'Failed to trigger cron' },
         { status: response.status }
       );
+    }
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.CRON_TRIGGER,
+        category: ADMIN_AUDIT_CATEGORY.CRON,
+        resourceType: 'cron',
+        resourceId: name,
+        details: { cronName: name },
+      });
     }
 
     return NextResponse.json({
