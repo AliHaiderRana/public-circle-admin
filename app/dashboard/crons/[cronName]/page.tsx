@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
+import { isSuperAdminDlqCron } from "@/lib/dlq-access";
 import {
   Card,
   CardContent,
@@ -78,6 +80,7 @@ interface HistoryData {
 export default function CronDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const cronName = params.cronName as string;
 
   const [cron, setCron] = useState<CronDetails | null>(null);
@@ -95,9 +98,14 @@ export default function CronDetailPage() {
   } | null>(null);
 
   useEffect(() => {
+    if (!authLoading && isSuperAdminDlqCron(cronName) && user && !user.isSuperAdmin) {
+      router.push("/dashboard/crons");
+      return;
+    }
+
     fetchCronDetails();
     fetchHistory();
-  }, [cronName, page]);
+  }, [cronName, page, authLoading, user, router]);
 
   const fetchCronDetails = async () => {
     setLoading(true);
@@ -206,6 +214,14 @@ export default function CronDetailPage() {
     };
     return scheduleMap[schedule] || schedule;
   };
+
+  if (authLoading || (isSuperAdminDlqCron(cronName) && !user?.isSuperAdmin)) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-neutral-500" />
+      </div>
+    );
+  }
 
   if (loading) {
     return (

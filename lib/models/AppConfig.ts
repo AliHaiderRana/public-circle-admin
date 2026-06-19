@@ -6,6 +6,14 @@ const schema = new mongoose.Schema(
       type: Date,
       default: new Date(),
     },
+    dlqAlertEmails: {
+      type: [String],
+      default: [],
+    },
+    dlqLastAlertedCount: {
+      type: Number,
+      default: 0,
+    },
     appleRelayEmail: {
       type: String,
       default: null,

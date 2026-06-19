@@ -197,6 +197,14 @@ export function buildAuditSummary(
       return 'Updated support request settings';
     case ADMIN_AUDIT_ACTION.SYSTEM_NOTIFICATIONS_UPDATE:
       return 'Updated system notifications';
+    case ADMIN_AUDIT_ACTION.DLQ_SETTINGS_UPDATE:
+      return 'Updated DLQ alert recipients';
+    case ADMIN_AUDIT_ACTION.DLQ_REDRIVE: {
+      const resentCount = typeof d.resentCount === 'number' ? d.resentCount : null;
+      return resentCount != null
+        ? `Redrove ${resentCount} DLQ message(s) back to SQS`
+        : 'Triggered DLQ redrive to SQS';
+    }
     case ADMIN_AUDIT_ACTION.SUPPORT_CHAT_DELETE: {
       const subject = typeof d.subject === 'string' ? d.subject.trim() : '';
       const sq = subject ? ` “${subject}”` : '';

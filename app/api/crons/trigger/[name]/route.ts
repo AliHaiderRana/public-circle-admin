@@ -8,6 +8,7 @@ import {
 import { getAdminLocalCronDefinition } from '@/lib/admin-cron-definitions';
 import { runAdminLocalCronInBackground } from '@/lib/admin-cron-runner.server';
 import { getBackendApiUrl, getBackendAuthHeaders } from '@/lib/backend-api.server';
+import { assertSuperAdminDlqAccess } from '@/lib/dlq-access';
 
 /**
  * POST /api/crons/trigger/[name]
@@ -26,6 +27,11 @@ export async function POST(
 
   if (!name) {
     return NextResponse.json({ error: 'Cron name is required' }, { status: 400 });
+  }
+
+  const dlqAccess = assertSuperAdminDlqAccess(name, session.isSuperAdmin);
+  if (!dlqAccess.allowed) {
+    return NextResponse.json({ error: dlqAccess.error }, { status: 403 });
   }
 
   const localCron = getAdminLocalCronDefinition(name);
