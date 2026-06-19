@@ -15,7 +15,6 @@ export default function ConfigPage() {
   const router = useRouter();
   const [appleRelayEmail, setAppleRelayEmail] = useState<string>('');
   const [deleteCompanyContactsAfterDays, setDeleteCompanyContactsAfterDays] = useState<number>(7);
-  const [dlqLastProcessedAt, setDlqLastProcessedAt] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
@@ -46,9 +45,6 @@ export default function ConfigPage() {
       const data = await res.json();
       setAppleRelayEmail(data.appleRelayEmail ?? '');
       setDeleteCompanyContactsAfterDays(data.deleteCompanyContactsAfterDays ?? 7);
-      setDlqLastProcessedAt(
-        data.DlqLastProcessedAt ? new Date(data.DlqLastProcessedAt).toLocaleString() : '',
-      );
     } catch (err) {
       console.error('Failed to load config');
     } finally {
@@ -72,9 +68,6 @@ export default function ConfigPage() {
         const data = await res.json();
         setAppleRelayEmail(data.appleRelayEmail ?? '');
         setDeleteCompanyContactsAfterDays(data.deleteCompanyContactsAfterDays ?? 7);
-        setDlqLastProcessedAt(
-          data.DlqLastProcessedAt ? new Date(data.DlqLastProcessedAt).toLocaleString() : '',
-        );
       }
     } catch (err) {
       console.error('Failed to update config');
@@ -97,8 +90,8 @@ export default function ConfigPage() {
             <CardTitle>System Settings</CardTitle>
           </div>
           <CardDescription>
-            Manage operational settings. DLQ status is read-only. Support request settings are
-            managed under System Notifications.
+            Manage operational settings. DLQ monitoring is available under Dead Letter Queue.
+            Support request settings are managed under System Notifications.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -136,17 +129,6 @@ export default function ConfigPage() {
                     setDeleteCompanyContactsAfterDays(val === '' ? 0 : Number(val));
                   }}
                   disabled={updating}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="dlqLastProcessedAt">DLQ Last Processed At (read-only)</Label>
-                <Input
-                  id="dlqLastProcessedAt"
-                  type="text"
-                  value={dlqLastProcessedAt}
-                  readOnly
-                  disabled
                 />
               </div>
 

@@ -29,6 +29,7 @@ import {
   Sparkles,
   Inbox,
   Bell,
+  MailWarning,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -86,6 +87,12 @@ const sidebarItems: SidebarItem[] = [
   { name: "Stripe Dashboard", href: "/dashboard/stripe", icon: CreditCard },
   { name: "Plan Quotas", href: "/dashboard/plans", icon: Layers },
   { name: "Cron Jobs", href: "/dashboard/crons", icon: Clock },
+  {
+    name: "Dead Letter Queue",
+    href: "/dashboard/dlq",
+    icon: MailWarning,
+    superAdminOnly: true,
+  },
   { name: "Translations", href: "/dashboard/translations", icon: Languages },
   { name: "Context help", href: "/dashboard/ui-hints", icon: Info },
   {

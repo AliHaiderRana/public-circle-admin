@@ -6,6 +6,7 @@ import {
   ADMIN_AUDIT_CATEGORY,
 } from "@/lib/admin-audit";
 import { getAdminLocalCronsForApi } from "@/lib/admin-cron-status.server";
+import { filterCronsForAdminSession } from "@/lib/dlq-access";
 import {
   getBackendApiUrl,
   getBackendAuthHeaders,
@@ -45,11 +46,14 @@ export async function GET() {
     const data = await res.json();
     const localCrons = await getAdminLocalCronsForApi();
     const localCronNames = new Set(localCrons.map((cron) => cron.name));
-    const mergedCrons = [
-      ...(data.crons || []).filter((cron: { name: string }) => !localCronNames.has(cron.name)),
-      ...localCrons,
-    ].sort((a, b) =>
-      String(a.displayName || a.name).localeCompare(String(b.displayName || b.name))
+    const mergedCrons = filterCronsForAdminSession(
+      [
+        ...(data.crons || []).filter((cron: { name: string }) => !localCronNames.has(cron.name)),
+        ...localCrons,
+      ].sort((a, b) =>
+        String(a.displayName || a.name).localeCompare(String(b.displayName || b.name))
+      ),
+      session.isSuperAdmin,
     );
 
     console.log(
