@@ -26,10 +26,7 @@ function formatDate(value: string | null) {
 
 function formatFailureReason(reason: string | null) {
   if (!reason) return 'No failure reason recorded.';
-  return reason.replace(
-    /^Failed after (\d+) delivery attempt\(s\)\. Check server logs if no API error was recorded\.$/,
-    'No API error recorded — failed after $1 delivery attempts.',
-  );
+  return reason;
 }
 
 type CampaignGroup = {
@@ -97,7 +94,13 @@ function groupDlqMessages(messages: DlqMessageDetail[]): CompanyGroup[] {
     }));
 }
 
-function FailedMessageCard({ row }: { row: DlqMessageDetail }) {
+function FailedMessageCard({
+  row,
+  maxRetriesBeforeDlq,
+}: {
+  row: DlqMessageDetail;
+  maxRetriesBeforeDlq?: number | null;
+}) {
   const lastActivity = formatDate(row.lastFailedAt) || formatDate(row.queuedAt);
 
   return (
@@ -127,10 +130,14 @@ function FailedMessageCard({ row }: { row: DlqMessageDetail }) {
         </div>
 
         <div className="shrink-0 space-y-2 text-sm lg:w-44 lg:text-right">
-          {typeof row.receiveCount === 'number' && row.receiveCount > 0 && (
+          {typeof row.deliveryAttempts === 'number' && row.deliveryAttempts > 0 && (
             <div>
-              <p className="text-neutral-500">Attempts</p>
-              <p className="font-medium">{row.receiveCount}</p>
+              <p className="text-neutral-500">Delivery attempts</p>
+              <p className="font-medium">
+                {row.deliveryAttempts}
+                {maxRetriesBeforeDlq ? ` / ${maxRetriesBeforeDlq}` : ''}
+              </p>
+              <p className="text-xs text-neutral-400">Recorded at API</p>
             </div>
           )}
           <div>
@@ -145,7 +152,13 @@ function FailedMessageCard({ row }: { row: DlqMessageDetail }) {
   );
 }
 
-function GroupedFailedMessages({ messages }: { messages: DlqMessageDetail[] }) {
+function GroupedFailedMessages({
+  messages,
+  maxRetriesBeforeDlq,
+}: {
+  messages: DlqMessageDetail[];
+  maxRetriesBeforeDlq?: number | null;
+}) {
   const groupedMessages = useMemo(() => groupDlqMessages(messages), [messages]);
 
   return (
@@ -199,7 +212,11 @@ function GroupedFailedMessages({ messages }: { messages: DlqMessageDetail[] }) {
 
                 <div className="space-y-3 border-l-2 border-neutral-200 pl-4 dark:border-neutral-800">
                   {campaign.messages.map((row) => (
-                    <FailedMessageCard key={row.messageId} row={row} />
+                    <FailedMessageCard
+                      key={row.messageId}
+                      row={row}
+                      maxRetriesBeforeDlq={maxRetriesBeforeDlq}
+                    />
                   ))}
                 </div>
               </div>
@@ -409,9 +426,11 @@ export default function DlqPage() {
         <CardHeader>
           <CardTitle>Failed messages</CardTitle>
           <CardDescription>
-            Peek at messages currently in the DLQ. Failure reasons are recorded when{' '}
+            Peek at messages currently in the DLQ. Failure reasons and delivery attempts are
+            recorded when{' '}
             <code className="rounded bg-muted px-1 py-0.5">/campaigns/sst-email</code> returns an
-            error.
+            error. Messages are retried up to {status?.maxRetriesBeforeDlq ?? 5} times before they
+            land here. Refreshing this page does not change the attempt count.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -424,7 +443,10 @@ export default function DlqPage() {
           ) : !status?.messages?.length ? (
             <p className="text-sm text-neutral-500">No failed messages in the DLQ right now.</p>
           ) : (
-            <GroupedFailedMessages messages={status.messages} />
+            <GroupedFailedMessages
+              messages={status.messages}
+              maxRetriesBeforeDlq={status.maxRetriesBeforeDlq}
+            />
           )}
           {typeof messageCount === 'number' &&
             status?.messages &&
