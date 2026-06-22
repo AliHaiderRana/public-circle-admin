@@ -38,6 +38,10 @@ const schema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    dlqSendAlertEmail: {
+      type: Boolean,
+      default: true,
+    },
     supportSendDetailEmail: {
       type: Boolean,
       default: true,

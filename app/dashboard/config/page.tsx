@@ -90,8 +90,8 @@ export default function ConfigPage() {
             <CardTitle>System Settings</CardTitle>
           </div>
           <CardDescription>
-            Manage operational settings. DLQ monitoring is available under Dead Letter Queue.
-            Support request settings are managed under System Notifications.
+            Manage operational settings. DLQ monitoring is under Dead Letter Queue. Support and
+            DLQ alert recipients are managed under System Notifications.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">

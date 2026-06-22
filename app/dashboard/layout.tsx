@@ -68,12 +68,6 @@ const sidebarItems: SidebarItem[] = [
     countKey: "unreadChatMessages",
     secondaryCountKey: "openSupportRequests",
   },
-  {
-    name: "System Notifications",
-    href: "/dashboard/system-notifications",
-    icon: Bell,
-    superAdminOnly: true,
-  },
   { name: "Companies", href: "/dashboard/companies", icon: Building2 },
   { name: "Users", href: "/dashboard/users", icon: Users },
   { name: "Campaigns", href: "/dashboard/campaigns", icon: TrendingUp },
@@ -103,6 +97,12 @@ const sidebarItems: SidebarItem[] = [
   },
   { name: "Changelog", href: "/dashboard/changelog", icon: Sparkles },
   { name: "Profile", href: "/dashboard/profile", icon: UserCircle },
+  {
+    name: "System Notifications",
+    href: "/dashboard/system-notifications",
+    icon: Bell,
+    superAdminOnly: true,
+  },
   {
     name: "System Configuration",
     href: "/dashboard/config",

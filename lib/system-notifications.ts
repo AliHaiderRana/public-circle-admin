@@ -4,6 +4,7 @@ export type AdminRecipient = {
   name?: string;
   isSuperAdmin: boolean;
   notifySupportAlertEmail: boolean;
+  notifyDlqAlertEmail: boolean;
 };
 
 export type TeamRecipient = {
@@ -13,16 +14,18 @@ export type TeamRecipient = {
 
 export type SystemNotificationSettings = {
   supportSendAlertEmail: boolean;
+  dlqSendAlertEmail: boolean;
 };
 
 export type AdminNotificationPreferenceUpdate = {
   adminId: string;
   notifySupportAlertEmail?: boolean;
+  notifyDlqAlertEmail?: boolean;
   /** @deprecated Use notifySupportAlertEmail */
   notifySupportEmail?: boolean;
 };
 
-const resolveAdminAlertPreference = (
+const resolveSupportAlertPreference = (
   prefs:
     | {
         supportEmail?: boolean;
@@ -35,10 +38,23 @@ const resolveAdminAlertPreference = (
   return true;
 };
 
+const resolveDlqAlertPreference = (
+  prefs:
+    | {
+        dlqAlertEmail?: boolean;
+      }
+    | undefined,
+): boolean => {
+  if (typeof prefs?.dlqAlertEmail === 'boolean') return prefs.dlqAlertEmail;
+  return true;
+};
+
 export const serializeSystemNotificationSettings = (config: {
   supportSendAlertEmail?: boolean;
+  dlqSendAlertEmail?: boolean;
 }): SystemNotificationSettings => ({
   supportSendAlertEmail: config.supportSendAlertEmail !== false,
+  dlqSendAlertEmail: config.dlqSendAlertEmail !== false,
 });
 
 export const serializeAdminRecipient = (admin: {
@@ -49,16 +65,18 @@ export const serializeAdminRecipient = (admin: {
   notificationPreferences?: {
     supportEmail?: boolean;
     supportAlertEmail?: boolean;
+    dlqAlertEmail?: boolean;
   };
 }): AdminRecipient => ({
   id: typeof admin._id === 'string' ? admin._id : admin._id.toString(),
   email: admin.email,
   name: admin.name,
   isSuperAdmin: Boolean(admin.isSuperAdmin),
-  notifySupportAlertEmail: resolveAdminAlertPreference(admin.notificationPreferences),
+  notifySupportAlertEmail: resolveSupportAlertPreference(admin.notificationPreferences),
+  notifyDlqAlertEmail: resolveDlqAlertPreference(admin.notificationPreferences),
 });
 
-export const computeTeamRecipients = ({
+export const computeSupportRecipients = ({
   supportSendAlertEmail,
   adminRecipients,
 }: {
@@ -71,6 +89,26 @@ export const computeTeamRecipients = ({
     .filter((admin) => admin.notifySupportAlertEmail)
     .map((admin) => ({
       email: admin.email.trim().toLowerCase(),
-      source: admin.isSuperAdmin ? 'Super admin' : 'Admin',
+      source: admin.isSuperAdmin ? 'Super admin · Support' : 'Admin · Support',
     }));
 };
+
+export const computeDlqRecipients = ({
+  dlqSendAlertEmail,
+  adminRecipients,
+}: {
+  dlqSendAlertEmail: boolean;
+  adminRecipients: AdminRecipient[];
+}): TeamRecipient[] => {
+  if (!dlqSendAlertEmail) return [];
+
+  return adminRecipients
+    .filter((admin) => admin.notifyDlqAlertEmail)
+    .map((admin) => ({
+      email: admin.email.trim().toLowerCase(),
+      source: admin.isSuperAdmin ? 'Super admin · DLQ' : 'Admin · DLQ',
+    }));
+};
+
+/** @deprecated Use computeSupportRecipients */
+export const computeTeamRecipients = computeSupportRecipients;
