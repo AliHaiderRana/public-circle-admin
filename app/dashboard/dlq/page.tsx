@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,19 +17,198 @@ import {
 } from '@/components/ui/dialog';
 import { AlertTriangle, Loader2, RefreshCw, RotateCcw } from 'lucide-react';
 import Link from 'next/link';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import type { DlqStatus } from '@/app/api/dlq/route';
+import type { DlqMessageDetail, DlqStatus } from '@/app/api/dlq/route';
 
 function formatDate(value: string | null) {
-  if (!value) return 'Never';
+  if (!value) return null;
   return new Date(value).toLocaleString();
+}
+
+function formatFailureReason(reason: string | null) {
+  if (!reason) return 'No failure reason recorded.';
+  return reason.replace(
+    /^Failed after (\d+) delivery attempt\(s\)\. Check server logs if no API error was recorded\.$/,
+    'No API error recorded — failed after $1 delivery attempts.',
+  );
+}
+
+type CampaignGroup = {
+  campaignId: string | null;
+  campaignName: string;
+  messages: DlqMessageDetail[];
+};
+
+type CompanyGroup = {
+  companyId: string | null;
+  companyName: string;
+  campaigns: CampaignGroup[];
+  messageCount: number;
+};
+
+function groupDlqMessages(messages: DlqMessageDetail[]): CompanyGroup[] {
+  const companyMap = new Map<string, CompanyGroup>();
+
+  for (const message of messages) {
+    const companyKey = message.companyId || '__unknown_company__';
+    const campaignKey = message.campaignId || '__unknown_campaign__';
+
+    if (!companyMap.has(companyKey)) {
+      companyMap.set(companyKey, {
+        companyId: message.companyId,
+        companyName: message.companyName || message.companyId || 'Unknown company',
+        campaigns: [],
+        messageCount: 0,
+      });
+    }
+
+    const companyGroup = companyMap.get(companyKey)!;
+    companyGroup.messageCount += 1;
+
+    let campaignGroup = companyGroup.campaigns.find(
+      (group) => (group.campaignId || '__unknown_campaign__') === campaignKey,
+    );
+
+    if (!campaignGroup) {
+      campaignGroup = {
+        campaignId: message.campaignId,
+        campaignName: message.campaignName || message.campaignId || 'Unknown campaign',
+        messages: [],
+      };
+      companyGroup.campaigns.push(campaignGroup);
+    }
+
+    campaignGroup.messages.push(message);
+  }
+
+  const sortByName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' });
+
+  return [...companyMap.values()]
+    .sort((a, b) => sortByName(a.companyName, b.companyName))
+    .map((company) => ({
+      ...company,
+      campaigns: company.campaigns
+        .sort((a, b) => sortByName(a.campaignName, b.campaignName))
+        .map((campaign) => ({
+          ...campaign,
+          messages: [...campaign.messages].sort((a, b) =>
+            sortByName(a.emailTo || '', b.emailTo || ''),
+          ),
+        })),
+    }));
+}
+
+function FailedMessageCard({ row }: { row: DlqMessageDetail }) {
+  const lastActivity = formatDate(row.lastFailedAt) || formatDate(row.queuedAt);
+
+  return (
+    <div className="rounded-lg border bg-white p-4 shadow-sm dark:bg-neutral-950">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1 space-y-3">
+          <div>
+            <p className="text-base font-semibold break-all">{row.emailTo || 'Unknown recipient'}</p>
+            {row.emailSubject && (
+              <p className="mt-1 text-sm text-neutral-500 break-words">{row.emailSubject}</p>
+            )}
+          </div>
+
+          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2.5 dark:border-red-900/40 dark:bg-red-950/20">
+            <p className="text-xs font-medium uppercase tracking-wide text-red-700 dark:text-red-300">
+              Failure reason
+            </p>
+            <p className="mt-1 text-sm text-red-800 break-words dark:text-red-200">
+              {formatFailureReason(row.failureReason)}
+            </p>
+            {row.failureStatusCode && (
+              <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                HTTP {row.failureStatusCode}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="shrink-0 space-y-2 text-sm lg:w-44 lg:text-right">
+          {typeof row.receiveCount === 'number' && row.receiveCount > 0 && (
+            <div>
+              <p className="text-neutral-500">Attempts</p>
+              <p className="font-medium">{row.receiveCount}</p>
+            </div>
+          )}
+          <div>
+            <p className="text-neutral-500">
+              {row.lastFailedAt ? 'Last API failure' : 'Queued at'}
+            </p>
+            <p className="font-medium">{lastActivity || 'Unknown'}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GroupedFailedMessages({ messages }: { messages: DlqMessageDetail[] }) {
+  const groupedMessages = useMemo(() => groupDlqMessages(messages), [messages]);
+
+  return (
+    <div className="space-y-6">
+      {groupedMessages.map((company) => (
+        <section
+          key={company.companyId || company.companyName}
+          className="rounded-xl border bg-muted/20 p-4 space-y-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {company.companyId ? (
+                <Link
+                  href={`/dashboard/companies/${company.companyId}`}
+                  className="text-lg font-semibold hover:underline underline-offset-2"
+                >
+                  {company.companyName}
+                </Link>
+              ) : (
+                <h3 className="text-lg font-semibold">{company.companyName}</h3>
+              )}
+              <Badge variant="secondary">
+                {company.messageCount} message{company.messageCount === 1 ? '' : 's'}
+              </Badge>
+            </div>
+          </div>
+
+          <div className="space-y-5 pl-0 sm:pl-2">
+            {company.campaigns.map((campaign) => (
+              <div
+                key={campaign.campaignId || `${company.companyId}-${campaign.campaignName}`}
+                className="space-y-3"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  {campaign.campaignId ? (
+                    <Link
+                      href={`/dashboard/campaigns/${campaign.campaignId}`}
+                      className="text-sm font-medium text-neutral-800 hover:underline underline-offset-2 dark:text-neutral-200"
+                    >
+                      {campaign.campaignName}
+                    </Link>
+                  ) : (
+                    <p className="text-sm font-medium text-neutral-800 dark:text-neutral-200">
+                      {campaign.campaignName}
+                    </p>
+                  )}
+                  <Badge variant="outline" className="font-normal">
+                    {campaign.messages.length} failed
+                  </Badge>
+                </div>
+
+                <div className="space-y-3 border-l-2 border-neutral-200 pl-4 dark:border-neutral-800">
+                  {campaign.messages.map((row) => (
+                    <FailedMessageCard key={row.messageId} row={row} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
 }
 
 export default function DlqPage() {
@@ -194,11 +373,11 @@ export default function DlqPage() {
               <div className="grid gap-3 text-sm sm:grid-cols-2">
                 <div className="rounded-md border bg-muted/30 px-3 py-2">
                   <div className="text-neutral-500">Last alert sent</div>
-                  <div className="font-medium">{formatDate(status?.dlqLastAlertAt ?? null)}</div>
+                  <div className="font-medium">{formatDate(status?.dlqLastAlertAt ?? null) || 'Never'}</div>
                 </div>
                 <div className="rounded-md border bg-muted/30 px-3 py-2">
                   <div className="text-neutral-500">Count refreshed</div>
-                  <div className="font-medium">{formatDate(lastRefreshedAt)}</div>
+                  <div className="font-medium">{formatDate(lastRefreshedAt) || '—'}</div>
                 </div>
               </div>
 
@@ -245,75 +424,7 @@ export default function DlqPage() {
           ) : !status?.messages?.length ? (
             <p className="text-sm text-neutral-500">No failed messages in the DLQ right now.</p>
           ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Recipient</TableHead>
-                    <TableHead>Company</TableHead>
-                    <TableHead>Campaign</TableHead>
-                    <TableHead>Failure reason</TableHead>
-                    <TableHead>Last failed</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {status.messages.map((row) => (
-                    <TableRow key={row.messageId}>
-                      <TableCell className="align-top">
-                        <div className="space-y-1">
-                          <p className="font-medium">{row.emailTo || '—'}</p>
-                          {row.emailSubject && (
-                            <p className="text-xs text-neutral-500">{row.emailSubject}</p>
-                          )}
-                          {typeof row.receiveCount === 'number' && row.receiveCount > 0 && (
-                            <p className="text-xs text-neutral-500">
-                              {row.receiveCount} delivery attempt(s)
-                            </p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="align-top">
-                        {row.companyId ? (
-                          <Link
-                            href={`/dashboard/companies/${row.companyId}`}
-                            className="text-sm underline underline-offset-2"
-                          >
-                            {row.companyName || row.companyId}
-                          </Link>
-                        ) : (
-                          '—'
-                        )}
-                      </TableCell>
-                      <TableCell className="align-top">
-                        {row.campaignId ? (
-                          <Link
-                            href={`/dashboard/campaigns/${row.campaignId}`}
-                            className="text-sm underline underline-offset-2"
-                          >
-                            {row.campaignName || row.campaignId}
-                          </Link>
-                        ) : (
-                          '—'
-                        )}
-                      </TableCell>
-                      <TableCell className="align-top max-w-md">
-                        <p className="text-sm text-red-700 break-words">
-                          {row.failureReason || '—'}
-                        </p>
-                        {row.failureStatusCode && (
-                          <p className="mt-1 text-xs text-neutral-500">
-                            HTTP {row.failureStatusCode}
-                          </p>
-                        )}
-                      </TableCell>
-                      <TableCell className="align-top text-sm text-neutral-600">
-                        {formatDate(row.lastFailedAt)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <GroupedFailedMessages messages={status.messages} />
           )}
           {typeof messageCount === 'number' &&
             status?.messages &&
