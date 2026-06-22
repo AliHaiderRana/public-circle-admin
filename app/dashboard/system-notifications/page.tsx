@@ -16,14 +16,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, Bell, Mail, Shield, Users } from 'lucide-react';
-import { SupportQuickLinks } from '@/components/SupportQuickLinks';
+import { Loader2, Bell, Mail, MailWarning } from 'lucide-react';
 import {
   ConfirmToggleDialog,
   type ConfirmToggleRequest,
 } from '@/components/ConfirmToggleDialog';
 import {
-  computeTeamRecipients,
+  computeSupportRecipients,
+  computeDlqRecipients,
   type AdminRecipient,
   type TeamRecipient,
   type SystemNotificationSettings,
@@ -31,6 +31,8 @@ import {
 
 type SettingsState = SystemNotificationSettings & {
   adminRecipients: AdminRecipient[];
+  supportRecipients: TeamRecipient[];
+  dlqRecipients: TeamRecipient[];
 };
 
 type PendingToggle = ConfirmToggleRequest & {
@@ -129,16 +131,21 @@ export default function SystemNotificationsPage() {
     });
   };
 
-  const teamRecipients = useMemo(() => {
+  const supportRecipients = useMemo(() => {
     if (!settings) return [];
-    return computeTeamRecipients({
+    return computeSupportRecipients({
       supportSendAlertEmail: settings.supportSendAlertEmail,
       adminRecipients: settings.adminRecipients,
     });
   }, [settings]);
 
-  const superAdmins = settings?.adminRecipients.filter((admin) => admin.isSuperAdmin) ?? [];
-  const regularAdmins = settings?.adminRecipients.filter((admin) => !admin.isSuperAdmin) ?? [];
+  const dlqRecipients = useMemo(() => {
+    if (!settings) return [];
+    return computeDlqRecipients({
+      dlqSendAlertEmail: settings.dlqSendAlertEmail,
+      adminRecipients: settings.adminRecipients,
+    });
+  }, [settings]);
 
   const ToggleRow = ({
     id,
@@ -191,82 +198,6 @@ export default function SystemNotificationsPage() {
     </div>
   );
 
-  const AdminGroupTable = ({
-    title,
-    icon,
-    admins,
-    roleDescription,
-    globalAlertEnabled,
-  }: {
-    title: string;
-    icon: React.ReactNode;
-    admins: AdminRecipient[];
-    roleDescription: string;
-    globalAlertEnabled: boolean;
-  }) => (
-    <div className="space-y-4 rounded-xl border p-4">
-      <div className="space-y-1">
-        <div className="flex items-center gap-2">
-          {icon}
-          <p className="text-sm font-semibold">{title}</p>
-          <Badge variant="secondary">{admins.length}</Badge>
-        </div>
-        <p className="text-sm text-neutral-500">{roleDescription}</p>
-      </div>
-
-      {admins.length === 0 ? (
-        <p className="text-sm text-neutral-500">No admin users in this group.</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Admin</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead className="w-[140px] text-center">Alert emails</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {admins.map((admin) => (
-              <TableRow key={admin.id}>
-                <TableCell>
-                  <p className="font-medium">{admin.name || admin.email}</p>
-                </TableCell>
-                <TableCell>
-                  <p className="text-sm text-neutral-600">{admin.email}</p>
-                </TableCell>
-                <TableCell className="text-center">
-                  <Switch
-                    checked={admin.notifySupportAlertEmail}
-                    onCheckedChange={() =>
-                      requestBooleanToggle({
-                        title: admin.notifySupportAlertEmail
-                          ? `Stop alert emails for ${admin.email}?`
-                          : `Send alert emails to ${admin.email}?`,
-                        description: admin.notifySupportAlertEmail
-                          ? `${admin.email} will no longer receive support alert emails.`
-                          : `${admin.email} will receive short support alert emails when requests are submitted.`,
-                        nextValue: !admin.notifySupportAlertEmail,
-                        patchBody: {
-                          adminPreferences: [
-                            {
-                              adminId: admin.id,
-                              notifySupportAlertEmail: !admin.notifySupportAlertEmail,
-                            },
-                          ],
-                        },
-                      })
-                    }
-                    disabled={toggleSaving || !globalAlertEnabled}
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
-    </div>
-  );
-
   if (authLoading || !user?.isSuperAdmin) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -275,19 +206,15 @@ export default function SystemNotificationsPage() {
     );
   }
 
-  const teamEmailsActive = settings?.supportSendAlertEmail && teamRecipients.length > 0;
-
   return (
     <div className="max-w-5xl space-y-8">
       <div>
         <h2 className="text-3xl font-bold tracking-tight">System Notifications</h2>
         <p className="text-neutral-500">
-          Super admins choose which admin emails receive support alert emails. In-app bell
-          notifications are not configured here.
+          Super admins control which alert emails are sent and which admin users receive them.
+          In-app bell notifications are not configured here.
         </p>
       </div>
-
-      <SupportQuickLinks />
 
       {feedback && (
         <p
@@ -305,81 +232,177 @@ export default function SystemNotificationsPage() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Bell className="h-5 w-5 text-primary" />
-            <CardTitle>Support email notifications</CardTitle>
+            <CardTitle>Email alert types</CardTitle>
           </div>
           <CardDescription>
-            Alert emails go directly to selected admin addresses when a support request is
-            submitted.
+            Turn each alert type on or off globally. Per-admin delivery is configured in the
+            table below.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-3">
           {loading || !settings ? (
-            <div className="space-y-4">
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-48 w-full" />
-            </div>
+            <Skeleton className="h-28 w-full" />
           ) : (
             <>
-              <div className="space-y-3">
-                <p className="text-sm font-medium">Email types</p>
-                <ToggleRow
-                  id="supportSendAlertEmail"
-                  label="Alert email"
-                  description="Short notification sent to selected admins when a support request is submitted."
-                  checked={settings.supportSendAlertEmail}
-                  onRequestChange={(nextValue) =>
-                    requestBooleanToggle({
-                      title: nextValue ? 'Enable alert emails?' : 'Disable alert emails?',
-                      description: nextValue
-                        ? 'Selected admins can receive short support alert emails.'
-                        : 'Support alert emails will stop being sent.',
-                      nextValue,
-                      patchBody: { supportSendAlertEmail: nextValue },
-                    })
-                  }
-                />
-              </div>
-
-              <div className="space-y-4 pt-2 border-t">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Admin alert recipients</p>
-                  <p className="text-xs text-neutral-500">
-                    Turn alert emails on or off for each admin individually. Toggles are disabled
-                    when alert emails are turned off globally.
-                  </p>
-                </div>
-                <AdminGroupTable
-                  title="Super admins"
-                  icon={<Shield className="h-4 w-4 text-amber-600" />}
-                  admins={superAdmins}
-                  roleDescription="Choose which super admins receive support alert emails."
-                  globalAlertEnabled={settings.supportSendAlertEmail}
-                />
-                <AdminGroupTable
-                  title="Admins"
-                  icon={<Users className="h-4 w-4 text-blue-600" />}
-                  admins={regularAdmins}
-                  roleDescription="Choose which admins receive support alert emails."
-                  globalAlertEnabled={settings.supportSendAlertEmail}
-                />
-              </div>
-
-              <div className="space-y-2 pt-2 border-t">
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-neutral-500" />
-                  <p className="text-sm font-medium">Alert email recipients</p>
-                </div>
-                <p className="text-xs text-neutral-500">
-                  {teamEmailsActive
-                    ? 'These addresses will receive alert emails when support requests are submitted.'
-                    : 'Enable alert emails globally and turn them on for at least one admin.'}
-                </p>
-                <RecipientList recipients={teamRecipients} />
-              </div>
+              <ToggleRow
+                id="supportSendAlertEmail"
+                label="Support request alerts"
+                description="Short notification when a customer submits a support request."
+                checked={settings.supportSendAlertEmail}
+                onRequestChange={(nextValue) =>
+                  requestBooleanToggle({
+                    title: nextValue ? 'Enable support alert emails?' : 'Disable support alert emails?',
+                    description: nextValue
+                      ? 'Selected admins can receive support alert emails.'
+                      : 'Support alert emails will stop being sent.',
+                    nextValue,
+                    patchBody: { supportSendAlertEmail: nextValue },
+                  })
+                }
+              />
+              <ToggleRow
+                id="dlqSendAlertEmail"
+                label="DLQ alerts"
+                description="Notification when failed outbound campaign emails land in the Dead Letter Queue."
+                checked={settings.dlqSendAlertEmail}
+                onRequestChange={(nextValue) =>
+                  requestBooleanToggle({
+                    title: nextValue ? 'Enable DLQ alert emails?' : 'Disable DLQ alert emails?',
+                    description: nextValue
+                      ? 'Selected admins can receive DLQ alert emails.'
+                      : 'DLQ alert emails will stop being sent.',
+                    nextValue,
+                    patchBody: { dlqSendAlertEmail: nextValue },
+                  })
+                }
+              />
             </>
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Admin alert recipients</CardTitle>
+          <CardDescription>
+            Choose which admins receive each alert type. Toggles are disabled when that alert
+            type is turned off globally.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading || !settings ? (
+            <Skeleton className="h-48 w-full" />
+          ) : settings.adminRecipients.length === 0 ? (
+            <p className="text-sm text-neutral-500">No admin users found.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Admin</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead className="w-[120px] text-center">Support</TableHead>
+                  <TableHead className="w-[120px] text-center">DLQ</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {settings.adminRecipients.map((admin) => (
+                  <TableRow key={admin.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">{admin.name || admin.email}</p>
+                        {admin.isSuperAdmin && (
+                          <Badge variant="secondary" className="font-normal">
+                            Super admin
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <p className="text-sm text-neutral-600">{admin.email}</p>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Switch
+                        checked={admin.notifySupportAlertEmail}
+                        onCheckedChange={() =>
+                          requestBooleanToggle({
+                            title: admin.notifySupportAlertEmail
+                              ? `Stop support alerts for ${admin.email}?`
+                              : `Send support alerts to ${admin.email}?`,
+                            description: admin.notifySupportAlertEmail
+                              ? `${admin.email} will no longer receive support alert emails.`
+                              : `${admin.email} will receive support alert emails.`,
+                            nextValue: !admin.notifySupportAlertEmail,
+                            patchBody: {
+                              adminPreferences: [
+                                {
+                                  adminId: admin.id,
+                                  notifySupportAlertEmail: !admin.notifySupportAlertEmail,
+                                },
+                              ],
+                            },
+                          })
+                        }
+                        disabled={toggleSaving || !settings.supportSendAlertEmail}
+                      />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Switch
+                        checked={admin.notifyDlqAlertEmail}
+                        onCheckedChange={() =>
+                          requestBooleanToggle({
+                            title: admin.notifyDlqAlertEmail
+                              ? `Stop DLQ alerts for ${admin.email}?`
+                              : `Send DLQ alerts to ${admin.email}?`,
+                            description: admin.notifyDlqAlertEmail
+                              ? `${admin.email} will no longer receive DLQ alert emails.`
+                              : `${admin.email} will receive DLQ alert emails.`,
+                            nextValue: !admin.notifyDlqAlertEmail,
+                            patchBody: {
+                              adminPreferences: [
+                                {
+                                  adminId: admin.id,
+                                  notifyDlqAlertEmail: !admin.notifyDlqAlertEmail,
+                                },
+                              ],
+                            },
+                          })
+                        }
+                        disabled={toggleSaving || !settings.dlqSendAlertEmail}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-neutral-500" />
+              <CardTitle className="text-base">Support alert recipients</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <RecipientList recipients={supportRecipients} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <MailWarning className="h-4 w-4 text-neutral-500" />
+              <CardTitle className="text-base">DLQ alert recipients</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <RecipientList recipients={dlqRecipients} />
+          </CardContent>
+        </Card>
+      </div>
 
       <ConfirmToggleDialog
         request={pendingToggle}

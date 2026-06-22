@@ -69,6 +69,7 @@ const humanizeFieldName = (field: unknown) => {
     supportRequestsEnabled: 'Talk to Support enabled',
     supportNotificationEmail: 'support email',
     supportSendAlertEmail: 'support alert emails',
+    dlqSendAlertEmail: 'DLQ alert emails',
     supportSendDetailEmail: 'support detail emails',
     supportSendCustomerConfirmation: 'support customer confirmation',
     supportNotifySuperAdmins: 'support super-admin notifications',

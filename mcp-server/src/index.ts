@@ -445,6 +445,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: "object" as const,
           properties: {
             supportSendAlertEmail: { type: "boolean" },
+            dlqSendAlertEmail: { type: "boolean" },
             adminPreferences: {
               type: "array",
               description: "Per-admin alert email preferences",
@@ -455,6 +456,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                   notifySupportAlertEmail: {
                     type: "boolean",
                     description: "Whether this admin receives support alert emails",
+                  },
+                  notifyDlqAlertEmail: {
+                    type: "boolean",
+                    description: "Whether this admin receives DLQ alert emails",
                   },
                 },
                 required: ["adminId"],
