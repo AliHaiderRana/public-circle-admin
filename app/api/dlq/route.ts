@@ -12,7 +12,7 @@ export type DlqMessageDetail = {
   campaignId: string | null;
   campaignName: string | null;
   campaignRunId: string | null;
-  receiveCount: number | null;
+  deliveryAttempts: number | null;
   index: number | null;
   queuedAt: string | null;
   failureReason: string | null;
@@ -25,6 +25,7 @@ export type DlqStatus = {
   countError: string | null;
   messages: DlqMessageDetail[];
   messagesError: string | null;
+  maxRetriesBeforeDlq: number;
   dlqLastAlertAt: string | null;
   dlqLastAlertedCount: number;
   environment: string | null;
