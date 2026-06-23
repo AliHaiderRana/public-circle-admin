@@ -56,6 +56,7 @@ export const ADMIN_AUDIT_ACTION = {
   SYSTEM_NOTIFICATIONS_UPDATE: 'system_notifications.update',
   DLQ_SETTINGS_UPDATE: 'dlq.settings_update',
   DLQ_REDRIVE: 'dlq.redrive',
+  DLQ_SYNC_FAILURES: 'dlq.sync_failures',
   SAMPLE_TEMPLATE_TEST_EMAIL: 'sample_template.test_email',
   EDITOR_ASSET_UPLOAD: 'editor_asset.upload',
   EDITOR_ASSET_ACTIVATE: 'editor_asset.activate',

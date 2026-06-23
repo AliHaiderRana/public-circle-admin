@@ -206,6 +206,14 @@ export function buildAuditSummary(
         ? `Redrove ${resentCount} DLQ message(s) back to SQS`
         : 'Triggered DLQ redrive to SQS';
     }
+    case ADMIN_AUDIT_ACTION.DLQ_SYNC_FAILURES: {
+      const deletedCount = typeof d.deletedCount === 'number' ? d.deletedCount : null;
+      const keptCount = typeof d.keptCount === 'number' ? d.keptCount : null;
+      if (deletedCount != null && keptCount != null) {
+        return `Synced failure records with DLQ (deleted ${deletedCount}, kept ${keptCount})`;
+      }
+      return 'Synced outbound email failure records with DLQ';
+    }
     case ADMIN_AUDIT_ACTION.SUPPORT_CHAT_DELETE: {
       const subject = typeof d.subject === 'string' ? d.subject.trim() : '';
       const sq = subject ? ` “${subject}”` : '';
