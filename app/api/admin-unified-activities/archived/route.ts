@@ -10,6 +10,12 @@ import {
   IMPERSONATION_ACTIVITY_CATEGORY_LABELS,
 } from '@/lib/impersonation-activity-labels';
 import type { UnifiedActivityRow } from '@/lib/unified-admin-activity';
+import {
+  enumerateMonthsInRange,
+  isValidAuditDate,
+  matchesAuditDateRange,
+  parseAuditSortOrder,
+} from '@/lib/audit-query';
 
 type ArchivePayload = {
   collection?: string;
@@ -20,6 +26,7 @@ type ArchivePayload = {
 };
 
 const ARCHIVE_PREFIX = 'admin-activity-archives';
+const MAX_WAREHOUSE_MONTHS = 24;
 
 function normalizeSource(raw: string): 'all' | 'admin_panel' | 'public_circle' {
   if (raw === 'admin_panel' || raw === 'public_circle') return raw;
@@ -41,6 +48,41 @@ function parseCategoryFilter(
 
 function isValidMonth(month: string): boolean {
   return /^\d{4}-\d{2}$/.test(month);
+}
+
+function resolveWarehouseDateRange(searchParams: URLSearchParams): {
+  dateFrom: string;
+  dateTo: string;
+  error?: string;
+} {
+  const dateFrom = (searchParams.get('dateFrom') || '').trim();
+  const dateTo = (searchParams.get('dateTo') || '').trim();
+  const month = (searchParams.get('month') || '').trim();
+
+  let effectiveFrom = dateFrom;
+  let effectiveTo = dateTo;
+
+  if (month && isValidMonth(month) && !dateFrom && !dateTo) {
+    const [year, monthNum] = month.split('-').map(Number);
+    const lastDay = new Date(year, monthNum, 0).getDate();
+    effectiveFrom = `${month}-01`;
+    effectiveTo = `${month}-${String(lastDay).padStart(2, '0')}`;
+  }
+
+  if (!effectiveFrom && !effectiveTo) {
+    return { dateFrom: '', dateTo: '', error: 'dateFrom or dateTo is required' };
+  }
+  if (effectiveFrom && !isValidAuditDate(effectiveFrom)) {
+    return { dateFrom: '', dateTo: '', error: 'dateFrom must be in YYYY-MM-DD format' };
+  }
+  if (effectiveTo && !isValidAuditDate(effectiveTo)) {
+    return { dateFrom: '', dateTo: '', error: 'dateTo must be in YYYY-MM-DD format' };
+  }
+  if (effectiveFrom && effectiveTo && effectiveFrom > effectiveTo) {
+    return { dateFrom: '', dateTo: '', error: 'dateFrom must be on or before dateTo' };
+  }
+
+  return { dateFrom: effectiveFrom, dateTo: effectiveTo };
 }
 
 function mapPanelItem(row: Record<string, unknown>): UnifiedActivityRow {
@@ -120,95 +162,143 @@ function mapPcItem(row: Record<string, unknown>): UnifiedActivityRow {
   };
 }
 
+function filterPanelItem(
+  item: Record<string, unknown>,
+  opts: {
+    adminEmail: string;
+    panelCategory?: string;
+    dateFrom: string;
+    dateTo: string;
+  }
+): boolean {
+  const email = String(item.adminEmail ?? '').toLowerCase();
+  if (opts.adminEmail && email !== opts.adminEmail) return false;
+  if (opts.panelCategory && String(item.category ?? '') !== opts.panelCategory) return false;
+  const createdAt = String(item.createdAt ?? '');
+  if (!matchesAuditDateRange(createdAt, opts.dateFrom, opts.dateTo)) return false;
+  return true;
+}
+
+function filterPcItem(
+  item: Record<string, unknown>,
+  opts: {
+    adminEmail: string;
+    pcCategory?: string;
+    dateFrom: string;
+    dateTo: string;
+  }
+): boolean {
+  const email = String(item.adminEmail ?? '').toLowerCase();
+  if (opts.adminEmail && email !== opts.adminEmail) return false;
+  const metadata =
+    item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
+      ? (item.metadata as Record<string, unknown>)
+      : null;
+  const inferredCategory =
+    typeof metadata?.category === 'string'
+      ? metadata.category
+      : String(item.type ?? '').toLowerCase();
+  if (opts.pcCategory && inferredCategory !== opts.pcCategory) return false;
+  const createdAt = String(item.createdAt ?? '');
+  if (!matchesAuditDateRange(createdAt, opts.dateFrom, opts.dateTo)) return false;
+  return true;
+}
+
 export async function GET(request: Request) {
   const { error } = await requireSuperAdminSession();
   if (error) return error;
 
   try {
     const { searchParams } = new URL(request.url);
-    const month = (searchParams.get('month') || '').trim();
-    if (!isValidMonth(month)) {
-      return NextResponse.json({ error: 'month must be in YYYY-MM format' }, { status: 400 });
+    const { dateFrom, dateTo, error: rangeError } = resolveWarehouseDateRange(searchParams);
+    if (rangeError) {
+      return NextResponse.json({ error: rangeError }, { status: 400 });
+    }
+
+    const months = enumerateMonthsInRange(dateFrom, dateTo);
+    if (!months.length) {
+      return NextResponse.json({ error: 'Could not resolve warehouse months for date range' }, { status: 400 });
+    }
+    if (months.length > MAX_WAREHOUSE_MONTHS) {
+      return NextResponse.json(
+        { error: `Date range spans more than ${MAX_WAREHOUSE_MONTHS} months. Narrow the range.` },
+        { status: 400 }
+      );
     }
 
     const source = normalizeSource((searchParams.get('source') || 'all').trim());
     const summaryOnly = searchParams.get('summaryOnly') === '1';
     const adminEmail = (searchParams.get('adminEmail') || '').trim().toLowerCase();
     const category = (searchParams.get('category') || 'all').trim();
+    const sort = parseAuditSortOrder(searchParams.get('sort'));
     const { panelCategory, pcCategory } = parseCategoryFilter(category, source);
 
     const includePanel = source !== 'public_circle';
     const includePc = source !== 'admin_panel';
 
-    const panelKey = `${ARCHIVE_PREFIX}/${month}/admin-panel-activities.json`;
-    const pcKey = `${ARCHIVE_PREFIX}/${month}/impersonation-activities.json`;
+    const panelPayloads = includePanel
+      ? await Promise.all(
+          months.map((month) =>
+            downloadJsonFromS3<ArchivePayload>({
+              s3Path: `${ARCHIVE_PREFIX}/${month}/admin-panel-activities.json`,
+            })
+          )
+        )
+      : [];
+    const pcPayloads = includePc
+      ? await Promise.all(
+          months.map((month) =>
+            downloadJsonFromS3<ArchivePayload>({
+              s3Path: `${ARCHIVE_PREFIX}/${month}/impersonation-activities.json`,
+            })
+          )
+        )
+      : [];
 
-    const [panelPayload, pcPayload] = await Promise.all([
-      includePanel ? downloadJsonFromS3<ArchivePayload>({ s3Path: panelKey }) : Promise.resolve(null),
-      includePc ? downloadJsonFromS3<ArchivePayload>({ s3Path: pcKey }) : Promise.resolve(null),
-    ]);
+    const panelItems = panelPayloads.flatMap((payload) => payload?.items || []).filter((item) =>
+      filterPanelItem(item, { adminEmail, panelCategory, dateFrom, dateTo })
+    );
 
-    const panelItems = (panelPayload?.items || []).filter((item) => {
-      const email = String(item.adminEmail ?? '').toLowerCase();
-      if (adminEmail && email !== adminEmail) return false;
-      if (panelCategory && String(item.category ?? '') !== panelCategory) return false;
-      return true;
-    });
-
-    const pcItems = (pcPayload?.items || []).filter((item) => {
-      const email = String(item.adminEmail ?? '').toLowerCase();
-      if (adminEmail && email !== adminEmail) return false;
-      const metadata =
-        item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
-          ? (item.metadata as Record<string, unknown>)
-          : null;
-      const inferredCategory =
-        typeof metadata?.category === 'string'
-          ? metadata.category
-          : String(item.type ?? '').toLowerCase();
-      if (pcCategory && inferredCategory !== pcCategory) return false;
-      return true;
-    });
+    const pcItems = pcPayloads.flatMap((payload) => payload?.items || []).filter((item) =>
+      filterPcItem(item, { adminEmail, pcCategory, dateFrom, dateTo })
+    );
 
     const activities = [
       ...panelItems.map(mapPanelItem),
       ...pcItems.map(mapPcItem),
-    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    ].sort((a, b) => {
+      const delta = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      return sort === 'asc' ? delta : -delta;
+    });
 
     if (summaryOnly) {
-      const panelStored = Number(panelPayload?.totalRecords ?? panelPayload?.items?.length ?? 0);
-      const pcStored = Number(pcPayload?.totalRecords ?? pcPayload?.items?.length ?? 0);
       return NextResponse.json({
-        month,
+        dateFrom,
+        dateTo,
+        months,
         summary: {
-          totalStored: panelStored + pcStored,
-          panelStored,
-          publicCircleStored: pcStored,
-          panelArchivedAt: panelPayload?.archivedAt || null,
-          publicCircleArchivedAt: pcPayload?.archivedAt || null,
-        },
-        files: {
-          panelKey: includePanel ? panelKey : null,
-          publicCircleKey: includePc ? pcKey : null,
+          totalStored: activities.length,
+          panelStored: panelItems.length,
+          publicCircleStored: pcItems.length,
+          panelArchivedAt: null,
+          publicCircleArchivedAt: null,
         },
       });
     }
 
     return NextResponse.json({
-      month,
+      dateFrom,
+      dateTo,
+      months,
       activities,
       counts: {
         total: activities.length,
         panel: panelItems.length,
         publicCircle: pcItems.length,
       },
-      files: {
-        panelKey: includePanel ? panelKey : null,
-        publicCircleKey: includePc ? pcKey : null,
-      },
     });
   } catch (err) {
     console.error('[admin-unified-activities/archived]', err);
-    return NextResponse.json({ error: 'Failed to load archived activity from S3' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to load warehouse activity from S3' }, { status: 500 });
   }
 }

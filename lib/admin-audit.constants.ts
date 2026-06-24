@@ -90,3 +90,6 @@ export const ADMIN_AUDIT_CATEGORY_LABELS: Record<string, string> = {
   [ADMIN_AUDIT_CATEGORY.SYSTEM_NOTIFICATIONS]: 'System notifications',
   [ADMIN_AUDIT_CATEGORY.DLQ]: 'Dead letter queue',
 };
+
+/** Activity older than this is moved from MongoDB to S3 warehouse storage. */
+export const ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS = 6;

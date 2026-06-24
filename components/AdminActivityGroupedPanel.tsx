@@ -35,7 +35,7 @@ import {
 } from '@/components/ui/select';
 import AdminActivityPagination from '@/components/AdminActivityPagination';
 import AuditLogFilters from '@/components/AuditLogFilters';
-import type { AuditSortOrder } from '@/lib/audit-query';
+import { formatAuditDateRangeLabel, type AuditSortOrder } from '@/lib/audit-query';
 import {
   buildUnifiedCategoryOptions,
   UNIFIED_SOURCE_LABELS,
@@ -43,6 +43,7 @@ import {
   type GroupedTimelineEntry,
   type UnifiedActivityRow,
 } from '@/lib/unified-admin-activity';
+import { ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS } from '@/lib/admin-audit.constants';
 import {
   Dialog,
   DialogContent,
@@ -51,9 +52,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Archive,
   Building2,
   ChevronRight,
+  Database,
   LayoutDashboard,
   Loader2,
   LogIn,
@@ -353,7 +354,7 @@ function SessionRecordsBadge({ count }: { count: number }) {
 }
 
 type GroupedTimelineSessionEntry = Extract<GroupedTimelineEntry, { kind: 'session' }>;
-type ArchivedWarehouseSummary = {
+type WarehouseMonthSummary = {
   totalStored: number;
   panelStored: number;
   publicCircleStored: number;
@@ -424,7 +425,7 @@ export default function AdminActivityGroupedPanel({
   adminEmail,
 }: AdminActivityGroupedPanelProps) {
   const [controlsOpen, setControlsOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<'live' | 'archived'>('live');
+  const [viewMode, setViewMode] = useState<'live' | 'warehouse'>('live');
   const [timeline, setTimeline] = useState<GroupedTimelineEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -446,13 +447,15 @@ export default function AdminActivityGroupedPanel({
   const [sessionModal, setSessionModal] = useState<GroupedTimelineSessionEntry | null>(null);
   const [sessionActions, setSessionActions] = useState<Record<string, UnifiedActivityRow[]>>({});
   const [loadingSessions, setLoadingSessions] = useState<Set<string>>(new Set());
-  const [archiveMonth, setArchiveMonth] = useState('');
-  const [archivedRows, setArchivedRows] = useState<UnifiedActivityRow[]>([]);
-  const [archivedLoading, setArchivedLoading] = useState(false);
-  const [archivedError, setArchivedError] = useState<string | null>(null);
-  const [archivedLoadedOnce, setArchivedLoadedOnce] = useState(false);
-  const [archivedSummary, setArchivedSummary] = useState<ArchivedWarehouseSummary | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [warehouseDateFrom, setWarehouseDateFrom] = useState('');
+  const [warehouseDateTo, setWarehouseDateTo] = useState('');
+  const [warehouseRows, setWarehouseRows] = useState<UnifiedActivityRow[]>([]);
+  const [warehouseLoading, setWarehouseLoading] = useState(false);
+  const [warehouseError, setWarehouseError] = useState<string | null>(null);
+  const [warehouseLoadedOnce, setWarehouseLoadedOnce] = useState(false);
+  const [warehouseSummary, setWarehouseSummary] = useState<WarehouseMonthSummary | null>(null);
+  const [warehousePage, setWarehousePage] = useState(1);
+  const [warehouseLimit, setWarehouseLimit] = useState(25);
 
   const categoryOptions = useMemo(() => buildUnifiedCategoryOptions(source), [source]);
 
@@ -542,11 +545,29 @@ export default function AdminActivityGroupedPanel({
   }, [fetchTimeline]);
 
   useEffect(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - 1);
-    const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    setArchiveMonth(month);
+    const now = new Date();
+    const firstOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    const from = `${firstOfPrevMonth.getFullYear()}-${String(firstOfPrevMonth.getMonth() + 1).padStart(2, '0')}-01`;
+    const to = `${lastOfPrevMonth.getFullYear()}-${String(lastOfPrevMonth.getMonth() + 1).padStart(2, '0')}-${String(lastOfPrevMonth.getDate()).padStart(2, '0')}`;
+    setWarehouseDateFrom(from);
+    setWarehouseDateTo(to);
   }, []);
+
+  const warehouseDateRangeLabel = useMemo(
+    () => formatAuditDateRangeLabel(warehouseDateFrom, warehouseDateTo),
+    [warehouseDateFrom, warehouseDateTo]
+  );
+
+  const hasWarehouseDateRange = Boolean(warehouseDateFrom || warehouseDateTo);
+
+  useEffect(() => {
+    setWarehouseRows([]);
+    setWarehouseLoadedOnce(false);
+    setWarehouseSummary(null);
+    setWarehouseError(null);
+    setWarehousePage(1);
+  }, [warehouseDateFrom, warehouseDateTo, source, category, adminEmail, sort]);
 
   const loadSessionActions = useCallback(
     async (sessionId: string) => {
@@ -610,67 +631,57 @@ export default function AdminActivityGroupedPanel({
     setSort('desc');
   };
 
-  const loadArchivedRows = useCallback(async (monthOverride?: string) => {
-    const monthToLoad = monthOverride ?? archiveMonth;
-    if (!monthToLoad) {
-      setArchivedError('Select a month first (YYYY-MM).');
+  const loadWarehouseRows = useCallback(async () => {
+    if (!warehouseDateFrom && !warehouseDateTo) {
+      setWarehouseError('Select a from date, to date, or both.');
       return;
     }
-    setArchivedLoading(true);
-    setArchivedError(null);
-    setArchivedLoadedOnce(true);
+    setWarehouseLoading(true);
+    setWarehouseError(null);
+    setWarehouseLoadedOnce(true);
+    setViewMode('warehouse');
     try {
       const params = new URLSearchParams({
-        month: monthToLoad,
         source,
         category,
+        sort,
       });
+      if (warehouseDateFrom) params.set('dateFrom', warehouseDateFrom);
+      if (warehouseDateTo) params.set('dateTo', warehouseDateTo);
       if (adminEmail) params.set('adminEmail', adminEmail);
       const res = await fetch(`/api/admin-unified-activities/archived?${params.toString()}`);
       const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || 'Failed to load archived activity');
-      setArchivedRows((json.activities ?? []) as UnifiedActivityRow[]);
+      if (!res.ok) throw new Error(json?.error || 'Failed to load warehouse activity');
+      const activities = (json.activities ?? []) as UnifiedActivityRow[];
+      setWarehouseRows(activities);
+      setWarehousePage(1);
+      const panelCount = Number(json.counts?.panel ?? 0);
+      const pcCount = Number(json.counts?.publicCircle ?? 0);
+      setWarehouseSummary({
+        totalStored: activities.length,
+        panelStored: panelCount,
+        publicCircleStored: pcCount,
+        panelArchivedAt: null,
+        publicCircleArchivedAt: null,
+      });
     } catch (err) {
-      setArchivedRows([]);
-      setArchivedError(err instanceof Error ? err.message : 'Failed to load archived activity');
+      setWarehouseRows([]);
+      setWarehouseSummary(null);
+      setWarehouseError(err instanceof Error ? err.message : 'Failed to load warehouse activity');
     } finally {
-      setArchivedLoading(false);
+      setWarehouseLoading(false);
     }
-  }, [archiveMonth, source, category, adminEmail]);
+  }, [warehouseDateFrom, warehouseDateTo, source, category, adminEmail, sort]);
 
-  const fetchArchivedSummary = useCallback(async (monthOverride?: string) => {
-    const monthToLoad = monthOverride ?? archiveMonth;
-    if (!monthToLoad) {
-      setArchivedSummary(null);
-      return;
-    }
-    setSummaryLoading(true);
-    try {
-      const params = new URLSearchParams({
-        month: monthToLoad,
-        source,
-        category,
-        summaryOnly: '1',
-      });
-      if (adminEmail) params.set('adminEmail', adminEmail);
-      const res = await fetch(`/api/admin-unified-activities/archived?${params.toString()}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || 'Failed to load archive summary');
-      setArchivedSummary((json.summary ?? null) as ArchivedWarehouseSummary | null);
-    } catch {
-      setArchivedSummary(null);
-    } finally {
-      setSummaryLoading(false);
-    }
-  }, [archiveMonth, source, category, adminEmail]);
+  const warehouseTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(warehouseRows.length / warehouseLimit)),
+    [warehouseRows.length, warehouseLimit]
+  );
 
-  useEffect(() => {
-    if (!archiveMonth) {
-      setArchivedSummary(null);
-      return;
-    }
-    void fetchArchivedSummary();
-  }, [archiveMonth, source, category, adminEmail, fetchArchivedSummary]);
+  const paginatedWarehouseRows = useMemo(() => {
+    const start = (warehousePage - 1) * warehouseLimit;
+    return warehouseRows.slice(start, start + warehouseLimit);
+  }, [warehouseRows, warehousePage, warehouseLimit]);
 
   const handleRefresh = () => {
     setSessionModal(null);
@@ -767,7 +778,7 @@ export default function AdminActivityGroupedPanel({
           <CardHeader className="py-1.5 px-3">
             <CollapsibleTrigger asChild>
               <Button variant="ghost" className="w-full h-8 justify-between px-1 text-sm">
-                <span className="font-medium">Filters & Archived Data</span>
+                <span className="font-medium">Filters & warehouse data</span>
                 <ChevronRight className={cn('h-4 w-4 transition-transform', controlsOpen && 'rotate-90')} />
               </Button>
             </CollapsibleTrigger>
@@ -827,86 +838,80 @@ export default function AdminActivityGroupedPanel({
               <Card>
                 <CardHeader className="pb-3">
                   <div className="flex items-start gap-2">
-                    <Archive className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                    <Database className="h-4 w-4 mt-0.5 text-muted-foreground" />
                     <div>
-                      <CardTitle className="text-base">Archived Data Explorer</CardTitle>
+                      <CardTitle className="text-base">Warehouse data explorer</CardTitle>
                       <CardDescription>
-                        Records older than 6 months move to warehouse storage by month and may take a few seconds to load.
+                        Activity older than {ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS} months is moved to
+                        S3 warehouse storage. Loading warehouse data may take a few seconds.
                       </CardDescription>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                    <div className="space-y-2 min-w-0">
-                      <Label htmlFor="timeline-archive-month">Archived month</Label>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="timeline-warehouse-date-from">From date</Label>
                       <Input
-                        id="timeline-archive-month"
-                        type="month"
-                        value={archiveMonth}
-                        onChange={(e) => {
-                          const next = e.target.value;
-                          setArchiveMonth(next);
-                          setArchivedError(null);
-                          if (!next) {
-                            setArchivedRows([]);
-                            setArchivedLoadedOnce(false);
-                            setArchivedSummary(null);
-                            setViewMode('live');
-                            return;
-                          }
-                          void fetchArchivedSummary(next);
-                          void loadArchivedRows(next);
-                          setViewMode('archived');
-                        }}
-                        className="h-9 w-full sm:w-[240px]"
+                        id="timeline-warehouse-date-from"
+                        type="date"
+                        value={warehouseDateFrom}
+                        onChange={(e) => setWarehouseDateFrom(e.target.value)}
                       />
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void loadArchivedRows()}
-                      disabled={archivedLoading || !archiveMonth}
-                      className="shrink-0"
-                    >
-                      {archivedLoading ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Loading...
-                        </>
-                      ) : (
-                        'Reload archived data'
-                      )}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="shrink-0"
-                      onClick={() => setViewMode((prev) => (prev === 'live' ? 'archived' : 'live'))}
-                      disabled={!archivedLoadedOnce && viewMode === 'live'}
-                    >
-                      {viewMode === 'live' ? 'View archived data' : 'View live timeline'}
-                    </Button>
+                    <div className="space-y-2">
+                      <Label htmlFor="timeline-warehouse-date-to">To date</Label>
+                      <Input
+                        id="timeline-warehouse-date-to"
+                        type="date"
+                        value={warehouseDateTo}
+                        onChange={(e) => setWarehouseDateTo(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        onClick={() => void loadWarehouseRows()}
+                        disabled={warehouseLoading || !hasWarehouseDateRange}
+                        className="w-full sm:w-auto"
+                      >
+                        {warehouseLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Loading warehouse data...
+                          </>
+                        ) : warehouseLoadedOnce ? (
+                          'Reload warehouse data'
+                        ) : (
+                          'Load warehouse data'
+                        )}
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                    {summaryLoading ? (
-                      <span>Checking warehouse summary...</span>
-                    ) : archivedSummary ? (
+                    {warehouseLoading ? (
+                      <span>Fetching activity from S3 warehouse...</span>
+                    ) : warehouseSummary ? (
                       <span>
-                        Stored for {archiveMonth}: {archivedSummary.totalStored.toLocaleString()} rows
-                        {' '}({archivedSummary.panelStored.toLocaleString()} admin panel,{' '}
-                        {archivedSummary.publicCircleStored.toLocaleString()} Public Circle)
+                        {warehouseDateRangeLabel}: {warehouseSummary.totalStored.toLocaleString()} matching row
+                        {warehouseSummary.totalStored === 1 ? '' : 's'}
+                        {' '}({warehouseSummary.panelStored.toLocaleString()} admin panel,{' '}
+                        {warehouseSummary.publicCircleStored.toLocaleString()} Public Circle)
+                      </span>
+                    ) : hasWarehouseDateRange ? (
+                      <span>
+                        Set a date range and click &ldquo;Load warehouse data&rdquo; to fetch records from S3.
                       </span>
                     ) : (
-                      <span>Select a month to see what is stored in warehouse.</span>
+                      <span>Select a date range to browse warehouse storage.</span>
                     )}
                   </div>
 
-                  {archivedError && (
-                    <p className="text-xs text-red-600">{archivedError}</p>
+                  {warehouseError && (
+                    <p className="text-xs text-red-600">{warehouseError}</p>
                   )}
                 </CardContent>
               </Card>
@@ -972,16 +977,18 @@ export default function AdminActivityGroupedPanel({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle className="text-lg">
-                {viewMode === 'live' ? 'Activity timeline' : `Archived activity (${archiveMonth || 'Select month'})`}
+                {viewMode === 'live' ? 'Activity timeline' : `Warehouse activity (${warehouseDateRangeLabel})`}
               </CardTitle>
               <CardDescription>
                 {viewMode === 'live'
                   ? (loading
                       ? 'Loading activity…'
                       : `${total.toLocaleString()} entries · open a login session to view Public Circle actions`)
-                  : (archivedLoading
-                      ? 'Loading archived rows...'
-                      : `${archivedRows.length.toLocaleString()} row${archivedRows.length === 1 ? '' : 's'} loaded from warehouse`)}
+                  : (warehouseLoading
+                      ? 'Loading warehouse data from S3...'
+                      : warehouseLoadedOnce
+                        ? `${warehouseRows.length.toLocaleString()} row${warehouseRows.length === 1 ? '' : 's'} from S3 warehouse`
+                        : 'Warehouse data is stored on S3 — set a date range and load to view older activity')}
               </CardDescription>
             </div>
             <div className="inline-flex rounded-md border bg-muted/30 p-1 w-fit">
@@ -995,12 +1002,12 @@ export default function AdminActivityGroupedPanel({
               </Button>
               <Button
                 size="sm"
-                variant={viewMode === 'archived' ? 'secondary' : 'ghost'}
+                variant={viewMode === 'warehouse' ? 'secondary' : 'ghost'}
                 className="h-7"
-                onClick={() => setViewMode('archived')}
-                disabled={!archiveMonth}
+                onClick={() => setViewMode('warehouse')}
+                disabled={!hasWarehouseDateRange}
               >
-                Archived data
+                Warehouse data
               </Button>
             </div>
           </div>
@@ -1111,34 +1118,68 @@ export default function AdminActivityGroupedPanel({
                       );
                     })
                   )
-                ) : archivedLoading ? (
+                ) : warehouseLoading ? (
                   Array.from({ length: 4 }).map((_, i) => (
-                    <TableRow key={`archived-skeleton-${i}`}>
+                    <TableRow key={`warehouse-skeleton-${i}`}>
                       <TableCell colSpan={5} className="py-3">
                         <Skeleton className="h-12 w-full" />
                       </TableCell>
                     </TableRow>
                   ))
-                ) : !archivedLoadedOnce ? (
+                ) : !warehouseLoadedOnce ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-12 text-center text-sm text-muted-foreground">
-                      Select a month in Archived Data Explorer to load warehouse records.
+                    <TableCell colSpan={5} className="py-16">
+                      <div className="flex flex-col items-center justify-center text-center gap-3">
+                        <Database className="h-10 w-10 text-muted-foreground/50" />
+                        <p className="text-sm font-medium">Warehouse data not loaded</p>
+                        <p className="text-xs text-muted-foreground max-w-md">
+                          Activity older than {ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS} months is stored in
+                          S3 warehouse. Set a date range and request the data to view it here.
+                        </p>
+                        {warehouseError && (
+                          <p className="text-xs text-red-600">{warehouseError}</p>
+                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => void loadWarehouseRows()}
+                          disabled={warehouseLoading || !hasWarehouseDateRange}
+                        >
+                          {hasWarehouseDateRange ? 'Load warehouse data' : 'Select a date range first'}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
-                ) : archivedRows.length === 0 ? (
+                ) : warehouseRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                      No archived rows found for this month and filter.
+                    <TableCell colSpan={5} className="py-16">
+                      <div className="flex flex-col items-center justify-center text-center gap-3">
+                        <Database className="h-10 w-10 text-muted-foreground/50" />
+                        <p className="text-sm font-medium">No warehouse data found</p>
+                        <p className="text-xs text-muted-foreground max-w-md">
+                          No activity matched for {warehouseDateRangeLabel} with the current filters.
+                          Try another month or clear filters.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void loadWarehouseRows()}
+                          disabled={warehouseLoading}
+                        >
+                          Retry loading warehouse data
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : (
-                  archivedRows.map((row) => renderActivityRow(row))
+                  paginatedWarehouseRows.map((row) => renderActivityRow(row))
                 )}
               </TableBody>
             </Table>
           </ScrollArea>
 
-          {viewMode === 'live' && (
+          {viewMode === 'live' ? (
             <>
               <Separator />
               <div className="px-6 py-3">
@@ -1154,7 +1195,26 @@ export default function AdminActivityGroupedPanel({
                 />
               </div>
             </>
-          )}
+          ) : warehouseLoadedOnce && warehouseRows.length > 0 ? (
+            <>
+              <Separator />
+              <div className="px-6 py-3">
+                <AdminActivityPagination
+                  page={warehousePage}
+                  totalPages={warehouseTotalPages}
+                  total={warehouseRows.length}
+                  limit={warehouseLimit}
+                  loading={warehouseLoading}
+                  compact={false}
+                  onPageChange={setWarehousePage}
+                  onLimitChange={(next) => {
+                    setWarehouseLimit(next);
+                    setWarehousePage(1);
+                  }}
+                />
+              </div>
+            </>
+          ) : null}
         </CardContent>
       </Card>
 
