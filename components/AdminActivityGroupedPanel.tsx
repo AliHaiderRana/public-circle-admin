@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -52,12 +51,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from '@/components/ui/toggle-group';
+import {
   Building2,
   ChevronRight,
   Database,
+  Filter,
   LayoutDashboard,
   Loader2,
-  LogIn,
+  RefreshCw,
   ScrollText,
   ShieldAlert,
   X,
@@ -360,23 +364,42 @@ type WarehouseMonthSummary = {
   publicCircleStored: number;
   panelArchivedAt: string | null;
   publicCircleArchivedAt: string | null;
+  dateFrom?: string;
+  dateTo?: string;
 };
 
 function ActivityTableHeader({ hideSourceAndCustomer = false }: { hideSourceAndCustomer?: boolean }) {
   return (
     <TableHeader>
       <TableRow className="hover:bg-transparent">
-        <TableHead className="w-[150px] pl-6">When</TableHead>
+        <TableHead className="w-[130px] pl-4">When</TableHead>
         <TableHead>Action</TableHead>
         {!hideSourceAndCustomer && (
           <>
-            <TableHead className="w-[130px]">Source</TableHead>
-            <TableHead className="w-[160px]">Customer</TableHead>
+            <TableHead className="w-[120px]">Source</TableHead>
+            <TableHead className="w-[140px]">Customer</TableHead>
           </>
         )}
-        <TableHead className="w-[140px] pr-6">Category</TableHead>
+        <TableHead className="w-[120px] pr-4">Category</TableHead>
       </TableRow>
     </TableHeader>
+  );
+}
+
+function CompactStat({
+  label,
+  value,
+  loading,
+}: {
+  label: string;
+  value: number;
+  loading: boolean;
+}) {
+  return (
+    <span className="text-sm whitespace-nowrap">
+      <span className="text-muted-foreground">{label}</span>{' '}
+      <span className="font-semibold tabular-nums">{loading ? '—' : value.toLocaleString()}</span>
+    </span>
   );
 }
 
@@ -387,32 +410,6 @@ function SourceBadge({ source }: { source: UnifiedActivityRow['source'] }) {
       {isPanel ? <LayoutDashboard className="h-3 w-3" /> : <ShieldAlert className="h-3 w-3" />}
       {UNIFIED_SOURCE_LABELS[source]}
     </Badge>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  loading,
-  icon,
-}: {
-  label: string;
-  value: number;
-  loading: boolean;
-  icon: React.ReactNode;
-}) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1.5">
-        <CardTitle className="text-sm font-medium">{label}</CardTitle>
-        <span className="text-muted-foreground">{icon}</span>
-      </CardHeader>
-      <CardContent className="p-3 pt-0">
-        <div className="text-xl font-bold tabular-nums">
-          {loading ? '—' : value.toLocaleString()}
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -544,30 +541,23 @@ export default function AdminActivityGroupedPanel({
     void fetchTimeline();
   }, [fetchTimeline]);
 
-  useEffect(() => {
-    const now = new Date();
-    const firstOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
-    const from = `${firstOfPrevMonth.getFullYear()}-${String(firstOfPrevMonth.getMonth() + 1).padStart(2, '0')}-01`;
-    const to = `${lastOfPrevMonth.getFullYear()}-${String(lastOfPrevMonth.getMonth() + 1).padStart(2, '0')}-${String(lastOfPrevMonth.getDate()).padStart(2, '0')}`;
-    setWarehouseDateFrom(from);
-    setWarehouseDateTo(to);
-  }, []);
-
-  const warehouseDateRangeLabel = useMemo(
-    () => formatAuditDateRangeLabel(warehouseDateFrom, warehouseDateTo),
-    [warehouseDateFrom, warehouseDateTo]
-  );
-
-  const hasWarehouseDateRange = Boolean(warehouseDateFrom || warehouseDateTo);
+  const warehouseDateRangeLabel = useMemo(() => {
+    if (warehouseDateFrom || warehouseDateTo) {
+      return formatAuditDateRangeLabel(warehouseDateFrom, warehouseDateTo);
+    }
+    if (warehouseSummary?.dateFrom || warehouseSummary?.dateTo) {
+      return formatAuditDateRangeLabel(
+        warehouseSummary.dateFrom ?? '',
+        warehouseSummary.dateTo ?? ''
+      );
+    }
+    return 'All data warehouse records';
+  }, [warehouseDateFrom, warehouseDateTo, warehouseSummary]);
 
   useEffect(() => {
-    setWarehouseRows([]);
-    setWarehouseLoadedOnce(false);
-    setWarehouseSummary(null);
-    setWarehouseError(null);
+    if (viewMode !== 'warehouse') return;
     setWarehousePage(1);
-  }, [warehouseDateFrom, warehouseDateTo, source, category, adminEmail, sort]);
+  }, [warehouseDateFrom, warehouseDateTo, source, category, adminEmail, sort, viewMode]);
 
   const loadSessionActions = useCallback(
     async (sessionId: string) => {
@@ -632,13 +622,8 @@ export default function AdminActivityGroupedPanel({
   };
 
   const loadWarehouseRows = useCallback(async () => {
-    if (!warehouseDateFrom && !warehouseDateTo) {
-      setWarehouseError('Select a from date, to date, or both.');
-      return;
-    }
     setWarehouseLoading(true);
     setWarehouseError(null);
-    setWarehouseLoadedOnce(true);
     setViewMode('warehouse');
     try {
       const params = new URLSearchParams({
@@ -646,15 +631,20 @@ export default function AdminActivityGroupedPanel({
         category,
         sort,
       });
-      if (warehouseDateFrom) params.set('dateFrom', warehouseDateFrom);
-      if (warehouseDateTo) params.set('dateTo', warehouseDateTo);
+      if (warehouseDateFrom || warehouseDateTo) {
+        if (warehouseDateFrom) params.set('dateFrom', warehouseDateFrom);
+        if (warehouseDateTo) params.set('dateTo', warehouseDateTo);
+      } else {
+        params.set('all', '1');
+      }
       if (adminEmail) params.set('adminEmail', adminEmail);
       const res = await fetch(`/api/admin-unified-activities/archived?${params.toString()}`);
       const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || 'Failed to load warehouse activity');
+      if (!res.ok) throw new Error(json?.error || 'Failed to load data warehouse activity');
       const activities = (json.activities ?? []) as UnifiedActivityRow[];
       setWarehouseRows(activities);
       setWarehousePage(1);
+      setWarehouseLoadedOnce(true);
       const panelCount = Number(json.counts?.panel ?? 0);
       const pcCount = Number(json.counts?.publicCircle ?? 0);
       setWarehouseSummary({
@@ -663,15 +653,24 @@ export default function AdminActivityGroupedPanel({
         publicCircleStored: pcCount,
         panelArchivedAt: null,
         publicCircleArchivedAt: null,
+        dateFrom: typeof json.dateFrom === 'string' ? json.dateFrom : undefined,
+        dateTo: typeof json.dateTo === 'string' ? json.dateTo : undefined,
       });
     } catch (err) {
       setWarehouseRows([]);
       setWarehouseSummary(null);
-      setWarehouseError(err instanceof Error ? err.message : 'Failed to load warehouse activity');
+      setWarehouseLoadedOnce(false);
+      setWarehouseError(err instanceof Error ? err.message : 'Failed to load data warehouse activity');
     } finally {
       setWarehouseLoading(false);
     }
   }, [warehouseDateFrom, warehouseDateTo, source, category, adminEmail, sort]);
+
+  useEffect(() => {
+    if (viewMode === 'warehouse' && !warehouseLoadedOnce && !warehouseLoading) {
+      void loadWarehouseRows();
+    }
+  }, [viewMode, warehouseLoadedOnce, warehouseLoading, loadWarehouseRows]);
 
   const warehouseTotalPages = useMemo(
     () => Math.max(1, Math.ceil(warehouseRows.length / warehouseLimit)),
@@ -709,10 +708,10 @@ export default function AdminActivityGroupedPanel({
         key={row.id}
         className={cn('group transition-colors', nested && 'bg-muted/30')}
       >
-        <TableCell className={cn('align-top py-3', !nested && 'pl-6')}>
+        <TableCell className={cn('align-top py-2', !nested && 'pl-4')}>
           <WhenCell iso={row.createdAt} nested={nested} />
         </TableCell>
-        <TableCell className="align-top whitespace-normal min-w-[280px] py-3">
+        <TableCell className="align-top whitespace-normal min-w-0 py-2">
           <p className="text-sm leading-snug text-foreground">
             {sanitizeSummaryForDisplay(row.summary)}
           </p>
@@ -720,10 +719,10 @@ export default function AdminActivityGroupedPanel({
         </TableCell>
         {!hideSourceAndCustomer && (
           <>
-            <TableCell className="align-top py-3">
+            <TableCell className="align-top py-2">
               <SourceBadge source={row.source} />
             </TableCell>
-            <TableCell className="align-top whitespace-normal py-3">
+            <TableCell className="align-top whitespace-normal py-2">
               <span className="text-xs text-foreground/80 truncate block max-w-[200px]">
                 {getCustomerDisplayLabel({
                   name:
@@ -741,8 +740,8 @@ export default function AdminActivityGroupedPanel({
             </TableCell>
           </>
         )}
-        <TableCell className="align-top py-3 pr-6">
-          <Badge variant="outline" className="text-[10px] font-normal">
+        <TableCell className="align-top py-2 pr-4">
+          <Badge variant="outline" className="text-xs font-normal">
             {row.categoryLabel}
           </Badge>
         </TableCell>
@@ -752,39 +751,71 @@ export default function AdminActivityGroupedPanel({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        <StatCard
-          label="Admin panel actions"
-          value={panelTotal}
-          loading={loading}
-          icon={<LayoutDashboard className="h-4 w-4" />}
-        />
-        <StatCard
-          label="Login sessions"
-          value={sessionTotal}
-          loading={loading}
-          icon={<LogIn className="h-4 w-4" />}
-        />
-        <StatCard
-          label="Public Circle actions"
-          value={pcActionTotal}
-          loading={loading}
-          icon={<ShieldAlert className="h-4 w-4" />}
-        />
-      </div>
-
       <Collapsible open={controlsOpen} onOpenChange={setControlsOpen}>
-        <Card>
-          <CardHeader className="py-1.5 px-3">
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" className="w-full h-8 justify-between px-1 text-sm">
-                <span className="font-medium">Filters & warehouse data</span>
-                <ChevronRight className={cn('h-4 w-4 transition-transform', controlsOpen && 'rotate-90')} />
-              </Button>
-            </CollapsibleTrigger>
-          </CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2">
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2">
+              <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+              Filters
+              <ChevronRight className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', controlsOpen && 'rotate-90')} />
+            </Button>
+          </CollapsibleTrigger>
+          <div className="flex flex-wrap items-center gap-3">
+            {hasActiveFilters && (
+              <>
+                {dateFrom && (
+                  <Badge variant="secondary" className="gap-1 h-6 font-normal text-xs">
+                    From {dateFrom}
+                    <button type="button" onClick={() => setDateFrom('')} aria-label="Clear from date">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {dateTo && (
+                  <Badge variant="secondary" className="gap-1 h-6 font-normal text-xs">
+                    To {dateTo}
+                    <button type="button" onClick={() => setDateTo('')} aria-label="Clear to date">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {source !== 'all' && sourceLabel && (
+                  <Badge variant="secondary" className="gap-1 h-6 font-normal text-xs">
+                    {sourceLabel}
+                    <button type="button" onClick={() => setSource('all')} aria-label="Clear source">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {category !== 'all' && categoryLabel && (
+                  <Badge variant="secondary" className="gap-1 h-6 font-normal text-xs">
+                    {categoryLabel}
+                    <button type="button" onClick={() => setCategory('all')} aria-label="Clear category">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={clearFilters}>
+                  Clear
+                </Button>
+              </>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5"
+              onClick={handleRefresh}
+              disabled={loading}
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+              Refresh
+            </Button>
+          </div>
+        </div>
           <CollapsibleContent>
-            <CardContent className="space-y-4 pt-0">
+            <Card className="mt-2">
+            <CardContent className="space-y-4 pt-4">
               <AuditLogFilters
                 showAdminEmail={false}
                 dateFrom={dateFrom}
@@ -796,7 +827,7 @@ export default function AdminActivityGroupedPanel({
                 onRefresh={handleRefresh}
                 refreshing={loading}
                 title="Filters"
-                description="Narrow the timeline by source, date, and category."
+                description="Source, date, and category."
               >
                 <div className="space-y-2">
                   <Label htmlFor="timeline-source-filter">Source</Label>
@@ -835,20 +866,16 @@ export default function AdminActivityGroupedPanel({
                 </div>
               </AuditLogFilters>
 
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-start gap-2">
-                    <Database className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                    <div>
-                      <CardTitle className="text-base">Warehouse data explorer</CardTitle>
-                      <CardDescription>
-                        Activity older than {ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS} months is moved to
-                        S3 warehouse storage. Loading warehouse data may take a few seconds.
-                      </CardDescription>
-                    </div>
+              <div className="rounded-md border p-3 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Database className="h-4 w-4 text-muted-foreground" />
+                    <p className="text-sm font-medium">Data warehouse</p>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Loads activity in the selected date range from the data warehouse (S3 archives
+                    older than {ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS} months) and the live
+                    database for recent dates. Leave dates empty to load everything available.
+                  </p>
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     <div className="space-y-2">
                       <Label htmlFor="timeline-warehouse-date-from">From date</Label>
@@ -874,18 +901,18 @@ export default function AdminActivityGroupedPanel({
                         variant="default"
                         size="sm"
                         onClick={() => void loadWarehouseRows()}
-                        disabled={warehouseLoading || !hasWarehouseDateRange}
+                        disabled={warehouseLoading}
                         className="w-full sm:w-auto"
                       >
                         {warehouseLoading ? (
                           <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Loading warehouse data...
+                            Loading data warehouse…
                           </>
                         ) : warehouseLoadedOnce ? (
-                          'Reload warehouse data'
+                          'Reload data warehouse'
                         ) : (
-                          'Load warehouse data'
+                          'Load data warehouse'
                         )}
                       </Button>
                     </div>
@@ -893,7 +920,7 @@ export default function AdminActivityGroupedPanel({
 
                   <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                     {warehouseLoading ? (
-                      <span>Fetching activity from S3 warehouse...</span>
+                      <span>Fetching activity from the data warehouse…</span>
                     ) : warehouseSummary ? (
                       <span>
                         {warehouseDateRangeLabel}: {warehouseSummary.totalStored.toLocaleString()} matching row
@@ -901,119 +928,61 @@ export default function AdminActivityGroupedPanel({
                         {' '}({warehouseSummary.panelStored.toLocaleString()} admin panel,{' '}
                         {warehouseSummary.publicCircleStored.toLocaleString()} Public Circle)
                       </span>
-                    ) : hasWarehouseDateRange ? (
-                      <span>
-                        Set a date range and click &ldquo;Load warehouse data&rdquo; to fetch records from S3.
-                      </span>
                     ) : (
-                      <span>Select a date range to browse warehouse storage.</span>
+                      <span>Click load to fetch all data warehouse records, or set dates to narrow the range.</span>
                     )}
                   </div>
 
                   {warehouseError && (
                     <p className="text-xs text-red-600">{warehouseError}</p>
                   )}
-                </CardContent>
-              </Card>
-
-              {hasActiveFilters && (
-                <Alert>
-                  <AlertDescription className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-medium text-foreground">Active filters</span>
-                    <Separator orientation="vertical" className="hidden h-4 sm:block" />
-                    {dateFrom && (
-                      <Badge variant="secondary" className="gap-1 font-normal">
-                        From {dateFrom}
-                        <button type="button" onClick={() => setDateFrom('')} aria-label="Clear from date">
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    )}
-                    {dateTo && (
-                      <Badge variant="secondary" className="gap-1 font-normal">
-                        To {dateTo}
-                        <button type="button" onClick={() => setDateTo('')} aria-label="Clear to date">
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    )}
-                    {source !== 'all' && sourceLabel && (
-                      <Badge variant="secondary" className="gap-1 font-normal">
-                        Source: {sourceLabel}
-                        <button type="button" onClick={() => setSource('all')} aria-label="Clear source">
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    )}
-                    {category !== 'all' && categoryLabel && (
-                      <Badge variant="secondary" className="gap-1 font-normal">
-                        {categoryLabel}
-                        <button type="button" onClick={() => setCategory('all')} aria-label="Clear category">
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    )}
-                    {sort !== 'desc' && (
-                      <Badge variant="secondary" className="gap-1 font-normal">
-                        Oldest first
-                        <button type="button" onClick={() => setSort('desc')} aria-label="Reset sort">
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    )}
-                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={clearFilters}>
-                      Clear all
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              )}
+              </div>
             </CardContent>
+            </Card>
           </CollapsibleContent>
-        </Card>
-      </Collapsible>
+        </Collapsible>
 
       <Card>
-        <CardHeader className="border-b">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <CardTitle className="text-lg">
-                {viewMode === 'live' ? 'Activity timeline' : `Warehouse activity (${warehouseDateRangeLabel})`}
+        <CardHeader className="border-b py-3 px-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <CardTitle className="text-base font-semibold">
+                {viewMode === 'live' ? 'Activity timeline' : 'Data warehouse activity'}
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs m-0">
                 {viewMode === 'live'
-                  ? (loading
-                      ? 'Loading activity…'
-                      : `${total.toLocaleString()} entries · open a login session to view Public Circle actions`)
+                  ? (loading ? 'Loading…' : `${total.toLocaleString()} entries`)
                   : (warehouseLoading
-                      ? 'Loading warehouse data from S3...'
+                      ? 'Loading…'
                       : warehouseLoadedOnce
-                        ? `${warehouseRows.length.toLocaleString()} row${warehouseRows.length === 1 ? '' : 's'} from S3 warehouse`
-                        : 'Warehouse data is stored on S3 — set a date range and load to view older activity')}
+                        ? `${warehouseRows.length.toLocaleString()} rows`
+                        : 'Open filters to load data warehouse')}
               </CardDescription>
+              <div className="hidden sm:flex items-center gap-3 text-sm border-l pl-4">
+                <CompactStat label="Panel" value={panelTotal} loading={loading} />
+                <CompactStat label="Sessions" value={sessionTotal} loading={loading} />
+                <CompactStat label="PC" value={pcActionTotal} loading={loading} />
+              </div>
             </div>
-            <div className="inline-flex rounded-md border bg-muted/30 p-1 w-fit">
-              <Button
-                size="sm"
-                variant={viewMode === 'live' ? 'secondary' : 'ghost'}
-                className="h-7"
-                onClick={() => setViewMode('live')}
-              >
-                Live timeline
-              </Button>
-              <Button
-                size="sm"
-                variant={viewMode === 'warehouse' ? 'secondary' : 'ghost'}
-                className="h-7"
-                onClick={() => setViewMode('warehouse')}
-                disabled={!hasWarehouseDateRange}
-              >
-                Warehouse data
-              </Button>
-            </div>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              value={viewMode}
+              onValueChange={(value) => {
+                if (value === 'live' || value === 'warehouse') setViewMode(value);
+              }}
+            >
+              <ToggleGroupItem value="live" aria-label="Live timeline">
+                Live
+              </ToggleGroupItem>
+              <ToggleGroupItem value="warehouse" aria-label="Data warehouse">
+                Data warehouse
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="h-[min(70vh,760px)]">
             <Table>
               <ActivityTableHeader />
               <TableBody>
@@ -1028,7 +997,7 @@ export default function AdminActivityGroupedPanel({
                     ))
                   ) : timeline.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="py-16">
+                      <TableCell colSpan={5} className="py-10">
                         <div className="flex flex-col items-center justify-center text-center gap-2">
                           <ScrollText className="h-10 w-10 text-muted-foreground/50" />
                           <p className="text-sm font-medium">No activity found</p>
@@ -1064,7 +1033,7 @@ export default function AdminActivityGroupedPanel({
                       return (
                         <TableRow
                           key={entry.id}
-                          className="group cursor-pointer bg-muted/40 hover:bg-muted/60"
+                          className="group cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors"
                           onClick={() => openSessionModal(entry)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
@@ -1081,36 +1050,31 @@ export default function AdminActivityGroupedPanel({
                               : 'View login session, no Public Circle actions'
                           }
                         >
-                          <TableCell className="align-top py-3 pl-6">
+                          <TableCell className="align-top py-2 pl-4">
                             <WhenCell iso={entry.createdAt} />
                           </TableCell>
-                          <TableCell className="align-top whitespace-normal min-w-[280px] py-3">
+                          <TableCell className="align-top whitespace-normal min-w-0 py-2">
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-sm font-medium leading-snug text-foreground">
+                                <span className="text-sm leading-snug text-foreground">
                                   {sanitizeSummaryForDisplay(entry.loginSummary)}
                                 </span>
                                 <SessionRecordsBadge count={entry.actionCount} />
                               </div>
-                              <p className="text-xs text-muted-foreground mt-1 group-hover:text-foreground/80">
-                                {hasRecords
-                                  ? `View ${recordCount} Public Circle action${recordCount === 1 ? '' : 's'}`
-                                  : 'No Public Circle actions in this session'}
-                              </p>
                             </div>
                           </TableCell>
-                          <TableCell className="align-top py-3">
+                          <TableCell className="align-top py-2">
                             <Badge variant="secondary" className="font-normal">
                               Login session
                             </Badge>
                           </TableCell>
-                          <TableCell className="align-top py-3">
+                          <TableCell className="align-top py-2">
                             <span className="text-xs text-foreground/80 truncate block max-w-[200px]">
                               {customerLabel}
                             </span>
                           </TableCell>
-                          <TableCell className="align-top py-3 pr-6">
-                            <Badge variant="outline" className="text-[10px] font-normal">
+                          <TableCell className="align-top py-2 pr-4">
+                            <Badge variant="outline" className="text-xs font-normal">
                               Impersonation
                             </Badge>
                           </TableCell>
@@ -1126,15 +1090,31 @@ export default function AdminActivityGroupedPanel({
                       </TableCell>
                     </TableRow>
                   ))
+                ) : warehouseError ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-10">
+                      <div className="flex flex-col items-center justify-center text-center gap-3">
+                        <p className="text-sm font-medium text-destructive">{warehouseError}</p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => void loadWarehouseRows()}
+                          disabled={warehouseLoading}
+                        >
+                          Retry loading data warehouse
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ) : !warehouseLoadedOnce ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-16">
+                    <TableCell colSpan={5} className="py-10">
                       <div className="flex flex-col items-center justify-center text-center gap-3">
                         <Database className="h-10 w-10 text-muted-foreground/50" />
-                        <p className="text-sm font-medium">Warehouse data not loaded</p>
+                        <p className="text-sm font-medium">Data warehouse not loaded</p>
                         <p className="text-xs text-muted-foreground max-w-md">
-                          Activity older than {ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS} months is stored in
-                          S3 warehouse. Set a date range and request the data to view it here.
+                          Load archived activity from the data warehouse (older than{' '}
+                          {ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS} months) plus recent live data.
                         </p>
                         {warehouseError && (
                           <p className="text-xs text-red-600">{warehouseError}</p>
@@ -1143,9 +1123,9 @@ export default function AdminActivityGroupedPanel({
                           type="button"
                           size="sm"
                           onClick={() => void loadWarehouseRows()}
-                          disabled={warehouseLoading || !hasWarehouseDateRange}
+                          disabled={warehouseLoading}
                         >
-                          {hasWarehouseDateRange ? 'Load warehouse data' : 'Select a date range first'}
+                          {warehouseLoading ? 'Loading…' : 'Load data warehouse'}
                         </Button>
                       </div>
                     </TableCell>
@@ -1155,10 +1135,10 @@ export default function AdminActivityGroupedPanel({
                     <TableCell colSpan={5} className="py-16">
                       <div className="flex flex-col items-center justify-center text-center gap-3">
                         <Database className="h-10 w-10 text-muted-foreground/50" />
-                        <p className="text-sm font-medium">No warehouse data found</p>
+                        <p className="text-sm font-medium">No data warehouse records found</p>
                         <p className="text-xs text-muted-foreground max-w-md">
                           No activity matched for {warehouseDateRangeLabel} with the current filters.
-                          Try another month or clear filters.
+                          Try a different range or clear filters.
                         </p>
                         <Button
                           type="button"
@@ -1167,7 +1147,7 @@ export default function AdminActivityGroupedPanel({
                           onClick={() => void loadWarehouseRows()}
                           disabled={warehouseLoading}
                         >
-                          Retry loading warehouse data
+                          Retry loading data warehouse
                         </Button>
                       </div>
                     </TableCell>
@@ -1177,12 +1157,11 @@ export default function AdminActivityGroupedPanel({
                 )}
               </TableBody>
             </Table>
-          </ScrollArea>
 
           {viewMode === 'live' ? (
             <>
               <Separator />
-              <div className="px-6 py-3">
+              <div className="px-4 py-3">
                 <AdminActivityPagination
                   page={page}
                   totalPages={totalPages}
@@ -1198,7 +1177,7 @@ export default function AdminActivityGroupedPanel({
           ) : warehouseLoadedOnce && warehouseRows.length > 0 ? (
             <>
               <Separator />
-              <div className="px-6 py-3">
+              <div className="px-4 py-3">
                 <AdminActivityPagination
                   page={warehousePage}
                   totalPages={warehouseTotalPages}

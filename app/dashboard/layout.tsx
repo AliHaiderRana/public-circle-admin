@@ -43,6 +43,7 @@ import { SupportCountBadge } from "@/components/SupportCountBadge";
 import { useSupportStats } from "@/hooks/use-support-stats";
 import { formatAdminDisplayName } from "@/lib/support-admin.util";
 import { useAdminSupportRealtimeSync } from "@/hooks/use-admin-support-realtime-sync";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 type SidebarItem = {
   name: string;
@@ -154,6 +155,7 @@ export default function DashboardLayout({
   return (
     <ProtectedRoute>
       <AdminNotificationSoundProvider>
+      <TooltipProvider delayDuration={300}>
       <div className="flex h-screen bg-background text-foreground">
         <aside
           className={cn(
@@ -306,6 +308,7 @@ export default function DashboardLayout({
           </main>
         </div>
       </div>
+      </TooltipProvider>
       </AdminNotificationSoundProvider>
     </ProtectedRoute>
   );

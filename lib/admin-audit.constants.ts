@@ -91,5 +91,5 @@ export const ADMIN_AUDIT_CATEGORY_LABELS: Record<string, string> = {
   [ADMIN_AUDIT_CATEGORY.DLQ]: 'Dead letter queue',
 };
 
-/** Activity older than this is moved from MongoDB to S3 warehouse storage. */
+/** Activity older than this is moved from MongoDB to the S3 data warehouse. */
 export const ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS = 6;

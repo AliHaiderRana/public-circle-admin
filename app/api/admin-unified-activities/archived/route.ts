@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+import dbConnect from '@/lib/db';
+import AdminActivity from '@/lib/models/AdminActivity';
+import AdminImpersonationActivity from '@/lib/models/AdminImpersonationActivity';
 import { requireSuperAdminSession } from '@/lib/auth';
 import { downloadJsonFromS3 } from '@/lib/s3-json';
 import {
@@ -10,12 +13,17 @@ import {
   IMPERSONATION_ACTIVITY_CATEGORY_LABELS,
 } from '@/lib/impersonation-activity-labels';
 import type { UnifiedActivityRow } from '@/lib/unified-admin-activity';
+import { fetchUnifiedAdminActivitiesInRange } from '@/lib/unified-admin-activity.server';
 import {
   enumerateMonthsInRange,
+  getFullWarehouseDateRange,
   isValidAuditDate,
   matchesAuditDateRange,
+  normalizeWarehouseDateBounds,
   parseAuditSortOrder,
+  splitWarehouseAndLiveRanges,
 } from '@/lib/audit-query';
+import { ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS } from '@/lib/admin-audit.constants';
 
 type ArchivePayload = {
   collection?: string;
@@ -26,7 +34,7 @@ type ArchivePayload = {
 };
 
 const ARCHIVE_PREFIX = 'admin-activity-archives';
-const MAX_WAREHOUSE_MONTHS = 24;
+const S3_FETCH_BATCH_SIZE = 6;
 
 function normalizeSource(raw: string): 'all' | 'admin_panel' | 'public_circle' {
   if (raw === 'admin_panel' || raw === 'public_circle') return raw;
@@ -55,34 +63,40 @@ function resolveWarehouseDateRange(searchParams: URLSearchParams): {
   dateTo: string;
   error?: string;
 } {
+  const loadAll = searchParams.get('all') === '1';
   const dateFrom = (searchParams.get('dateFrom') || '').trim();
   const dateTo = (searchParams.get('dateTo') || '').trim();
   const month = (searchParams.get('month') || '').trim();
 
-  let effectiveFrom = dateFrom;
-  let effectiveTo = dateTo;
+  if (loadAll) {
+    return getFullWarehouseDateRange(ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS);
+  }
 
   if (month && isValidMonth(month) && !dateFrom && !dateTo) {
     const [year, monthNum] = month.split('-').map(Number);
     const lastDay = new Date(year, monthNum, 0).getDate();
-    effectiveFrom = `${month}-01`;
-    effectiveTo = `${month}-${String(lastDay).padStart(2, '0')}`;
+    return {
+      dateFrom: `${month}-01`,
+      dateTo: `${month}-${String(lastDay).padStart(2, '0')}`,
+    };
   }
 
-  if (!effectiveFrom && !effectiveTo) {
-    return { dateFrom: '', dateTo: '', error: 'dateFrom or dateTo is required' };
+  if (!dateFrom && !dateTo) {
+    return getFullWarehouseDateRange(ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS);
   }
-  if (effectiveFrom && !isValidAuditDate(effectiveFrom)) {
+
+  if (dateFrom && !isValidAuditDate(dateFrom)) {
     return { dateFrom: '', dateTo: '', error: 'dateFrom must be in YYYY-MM-DD format' };
   }
-  if (effectiveTo && !isValidAuditDate(effectiveTo)) {
+  if (dateTo && !isValidAuditDate(dateTo)) {
     return { dateFrom: '', dateTo: '', error: 'dateTo must be in YYYY-MM-DD format' };
   }
-  if (effectiveFrom && effectiveTo && effectiveFrom > effectiveTo) {
-    return { dateFrom: '', dateTo: '', error: 'dateFrom must be on or before dateTo' };
-  }
 
-  return { dateFrom: effectiveFrom, dateTo: effectiveTo };
+  return normalizeWarehouseDateBounds(
+    dateFrom,
+    dateTo,
+    ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS
+  );
 }
 
 function mapPanelItem(row: Record<string, unknown>): UnifiedActivityRow {
@@ -204,6 +218,37 @@ function filterPcItem(
   return true;
 }
 
+async function fetchArchivePayloads(
+  months: string[],
+  fileName: string
+): Promise<ArchivePayload[]> {
+  const payloads: ArchivePayload[] = [];
+
+  for (let i = 0; i < months.length; i += S3_FETCH_BATCH_SIZE) {
+    const batch = months.slice(i, i + S3_FETCH_BATCH_SIZE);
+    const batchPayloads = await Promise.all(
+      batch.map((month) =>
+        downloadJsonFromS3<ArchivePayload>({
+          s3Path: `${ARCHIVE_PREFIX}/${month}/${fileName}`,
+        })
+      )
+    );
+    payloads.push(...batchPayloads);
+  }
+
+  return payloads;
+}
+
+function sortActivities(
+  activities: UnifiedActivityRow[],
+  sort: ReturnType<typeof parseAuditSortOrder>
+): UnifiedActivityRow[] {
+  return [...activities].sort((a, b) => {
+    const delta = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    return sort === 'asc' ? delta : -delta;
+  });
+}
+
 export async function GET(request: Request) {
   const { error } = await requireSuperAdminSession();
   if (error) return error;
@@ -213,17 +258,6 @@ export async function GET(request: Request) {
     const { dateFrom, dateTo, error: rangeError } = resolveWarehouseDateRange(searchParams);
     if (rangeError) {
       return NextResponse.json({ error: rangeError }, { status: 400 });
-    }
-
-    const months = enumerateMonthsInRange(dateFrom, dateTo);
-    if (!months.length) {
-      return NextResponse.json({ error: 'Could not resolve warehouse months for date range' }, { status: 400 });
-    }
-    if (months.length > MAX_WAREHOUSE_MONTHS) {
-      return NextResponse.json(
-        { error: `Date range spans more than ${MAX_WAREHOUSE_MONTHS} months. Narrow the range.` },
-        { status: 400 }
-      );
     }
 
     const source = normalizeSource((searchParams.get('source') || 'all').trim());
@@ -236,46 +270,94 @@ export async function GET(request: Request) {
     const includePanel = source !== 'public_circle';
     const includePc = source !== 'admin_panel';
 
-    const panelPayloads = includePanel
-      ? await Promise.all(
-          months.map((month) =>
-            downloadJsonFromS3<ArchivePayload>({
-              s3Path: `${ARCHIVE_PREFIX}/${month}/admin-panel-activities.json`,
-            })
-          )
-        )
-      : [];
-    const pcPayloads = includePc
-      ? await Promise.all(
-          months.map((month) =>
-            downloadJsonFromS3<ArchivePayload>({
-              s3Path: `${ARCHIVE_PREFIX}/${month}/impersonation-activities.json`,
-            })
-          )
-        )
-      : [];
-
-    const panelItems = panelPayloads.flatMap((payload) => payload?.items || []).filter((item) =>
-      filterPanelItem(item, { adminEmail, panelCategory, dateFrom, dateTo })
+    const { warehouse, live } = splitWarehouseAndLiveRanges(
+      dateFrom,
+      dateTo,
+      ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS
     );
 
-    const pcItems = pcPayloads.flatMap((payload) => payload?.items || []).filter((item) =>
-      filterPcItem(item, { adminEmail, pcCategory, dateFrom, dateTo })
-    );
+    let panelItems: UnifiedActivityRow[] = [];
+    let pcItems: UnifiedActivityRow[] = [];
+    const months: string[] = [];
 
-    const activities = [
-      ...panelItems.map(mapPanelItem),
-      ...pcItems.map(mapPcItem),
-    ].sort((a, b) => {
-      const delta = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      return sort === 'asc' ? delta : -delta;
-    });
+    if (warehouse) {
+      const warehouseMonths = enumerateMonthsInRange(warehouse.dateFrom, warehouse.dateTo);
+      months.push(...warehouseMonths);
+
+      const [panelPayloads, pcPayloads] = await Promise.all([
+        includePanel
+          ? fetchArchivePayloads(warehouseMonths, 'admin-panel-activities.json')
+          : Promise.resolve([]),
+        includePc
+          ? fetchArchivePayloads(warehouseMonths, 'impersonation-activities.json')
+          : Promise.resolve([]),
+      ]);
+
+      panelItems = panelPayloads
+        .flatMap((payload) => payload?.items || [])
+        .filter((item) =>
+          filterPanelItem(item, {
+            adminEmail,
+            panelCategory,
+            dateFrom: warehouse.dateFrom,
+            dateTo: warehouse.dateTo,
+          })
+        )
+        .map(mapPanelItem);
+
+      pcItems = pcPayloads
+        .flatMap((payload) => payload?.items || [])
+        .filter((item) =>
+          filterPcItem(item, {
+            adminEmail,
+            pcCategory,
+            dateFrom: warehouse.dateFrom,
+            dateTo: warehouse.dateTo,
+          })
+        )
+        .map(mapPcItem);
+    }
+
+    if (live) {
+      await dbConnect();
+      const liveResult = await fetchUnifiedAdminActivitiesInRange({
+        AdminActivity,
+        AdminImpersonationActivity,
+        sort,
+        source,
+        adminEmail,
+        dateFrom: live.dateFrom,
+        dateTo: live.dateTo,
+        category,
+        hideNoise: true,
+      });
+
+      if (includePanel) {
+        panelItems = [
+          ...panelItems,
+          ...liveResult.activities.filter((row) => row.source === 'admin_panel'),
+        ];
+      }
+      if (includePc) {
+        pcItems = [
+          ...pcItems,
+          ...liveResult.activities.filter((row) => row.source === 'public_circle'),
+        ];
+      }
+    }
+
+    const activities = sortActivities(
+      [...panelItems, ...pcItems],
+      sort
+    );
 
     if (summaryOnly) {
       return NextResponse.json({
         dateFrom,
         dateTo,
         months,
+        warehouseRange: warehouse,
+        liveRange: live,
         summary: {
           totalStored: activities.length,
           panelStored: panelItems.length,
@@ -290,6 +372,8 @@ export async function GET(request: Request) {
       dateFrom,
       dateTo,
       months,
+      warehouseRange: warehouse,
+      liveRange: live,
       activities,
       counts: {
         total: activities.length,
@@ -299,6 +383,6 @@ export async function GET(request: Request) {
     });
   } catch (err) {
     console.error('[admin-unified-activities/archived]', err);
-    return NextResponse.json({ error: 'Failed to load warehouse activity from S3' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to load data warehouse activity from S3' }, { status: 500 });
   }
 }

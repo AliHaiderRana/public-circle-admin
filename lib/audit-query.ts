@@ -91,5 +91,91 @@ export function formatAuditDateRangeLabel(dateFrom: string, dateTo: string): str
   if (dateFrom && dateTo) return `${dateFrom} – ${dateTo}`;
   if (dateFrom) return `from ${dateFrom}`;
   if (dateTo) return `until ${dateTo}`;
-  return 'Select date range';
+  return 'All data warehouse records';
+}
+
+function formatAuditDate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Last calendar day stored only in S3 warehouse (older than retention window). */
+export function getWarehouseArchiveEndDate(retentionMonths = 6): string {
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setMonth(cutoff.getMonth() - retentionMonths);
+  const archiveEnd = new Date(cutoff);
+  archiveEnd.setDate(archiveEnd.getDate() - 1);
+  return formatAuditDate(archiveEnd);
+}
+
+/** First calendar day kept in live MongoDB (within retention window). */
+export function getLiveActivityStartDate(retentionMonths = 6): string {
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setMonth(cutoff.getMonth() - retentionMonths);
+  return formatAuditDate(cutoff);
+}
+
+export function normalizeWarehouseDateBounds(
+  dateFrom: string,
+  dateTo: string,
+  retentionMonths = 6
+): { dateFrom: string; dateTo: string } {
+  const today = formatAuditDate(new Date());
+  let from = dateFrom.trim();
+  let to = dateTo.trim();
+
+  if (!from && !to) {
+    return {
+      dateFrom: '2020-01-01',
+      dateTo: getWarehouseArchiveEndDate(retentionMonths),
+    };
+  }
+  if (!from) from = '2020-01-01';
+  if (!to) to = today;
+
+  if (from > to) {
+    return { dateFrom: to, dateTo: from };
+  }
+
+  return { dateFrom: from, dateTo: to };
+}
+
+export function splitWarehouseAndLiveRanges(
+  dateFrom: string,
+  dateTo: string,
+  retentionMonths = 6
+): {
+  warehouse: { dateFrom: string; dateTo: string } | null;
+  live: { dateFrom: string; dateTo: string } | null;
+} {
+  const liveStart = getLiveActivityStartDate(retentionMonths);
+  const archiveEnd = getWarehouseArchiveEndDate(retentionMonths);
+
+  let warehouse: { dateFrom: string; dateTo: string } | null = null;
+  let live: { dateFrom: string; dateTo: string } | null = null;
+
+  if (dateFrom <= archiveEnd) {
+    warehouse = {
+      dateFrom,
+      dateTo: dateTo <= archiveEnd ? dateTo : archiveEnd,
+    };
+  }
+  if (dateTo >= liveStart) {
+    live = {
+      dateFrom: dateFrom >= liveStart ? dateFrom : liveStart,
+      dateTo,
+    };
+  }
+
+  return { warehouse, live };
+}
+
+/** Full S3 warehouse span for "load all" — from earliest archive through retention cutoff. */
+export function getFullWarehouseDateRange(retentionMonths = 6): { dateFrom: string; dateTo: string } {
+  return {
+    dateFrom: '2020-01-01',
+    dateTo: getWarehouseArchiveEndDate(retentionMonths),
+  };
 }
