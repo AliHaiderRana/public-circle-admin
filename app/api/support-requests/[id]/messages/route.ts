@@ -16,6 +16,7 @@ import {
 } from '@/lib/admin-audit';
 import { SUPPORT_REQUEST_CATEGORY_LABELS } from '@/lib/constants';
 import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
+import { enrichSupportChatMessagesWithSenderRoles } from '@/lib/support-message-sender.util';
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -58,6 +59,10 @@ export async function GET(
     }
 
     const data = payload.data ?? payload;
+
+    if (Array.isArray(data?.messages)) {
+      data.messages = await enrichSupportChatMessagesWithSenderRoles(data.messages);
+    }
 
     const auditSession = toAdminAuditSession(session);
     if (auditSession) {
@@ -134,6 +139,11 @@ export async function POST(
       );
     }
 
+    const message = payload.data ?? payload;
+    const [enrichedMessage] = await enrichSupportChatMessagesWithSenderRoles(
+      message && typeof message === 'object' ? [message] : [],
+    );
+
     const auditSession = toAdminAuditSession(session);
     if (auditSession) {
       const ticketDoc = await SupportRequest.findById(id)
@@ -166,7 +176,7 @@ export async function POST(
       });
     }
 
-    return NextResponse.json(payload.data, { status: 201 });
+    return NextResponse.json(enrichedMessage ?? message, { status: 201 });
   } catch {
     return NextResponse.json({ error: 'Failed to send message' }, { status: 500 });
   }

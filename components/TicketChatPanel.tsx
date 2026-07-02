@@ -41,7 +41,8 @@ import {
   SUPPORT_REQUEST_STATUS,
   SUPPORT_REQUEST_STATUS_LABELS,
 } from '@/lib/constants';
-import { getAdminMessageLabel } from '@/lib/support-admin.util';
+import { getSupportMessageSenderLabel } from '@/lib/support-admin.util';
+import { formatReferralPartnerRole } from '@/components/support/AssigneeSelectOptions';
 import {
   getSupportSocket,
   joinSupportChatRoom,
@@ -92,6 +93,13 @@ const CHAT_POLL_MS = 15000;
 
 type ChatMessage = AdminChatMessage;
 
+type AssignableAdmin = {
+  id: string;
+  name: string;
+  email?: string;
+  isSuperAdmin?: boolean;
+};
+
 type TicketChatPanelProps = {
   requestId: string;
   referenceId?: string;
@@ -103,6 +111,7 @@ type TicketChatPanelProps = {
   userName?: string;
   currentAdminId?: string;
   currentAdminName?: string;
+  assignableAdmins?: AssignableAdmin[];
   className?: string;
   onActivity?: () => void;
   onOpenManage?: () => void;
@@ -177,6 +186,7 @@ export function TicketChatPanel({
   userName,
   currentAdminId,
   currentAdminName,
+  assignableAdmins = [],
   className,
   onActivity,
   onOpenManage,
@@ -225,6 +235,7 @@ export function TicketChatPanel({
       role: 'SALES_PERSON' | 'MARKETING_AFFILIATE';
     }>
   >([]);
+  const [fetchedSenderRoles, setFetchedSenderRoles] = useState<Record<string, string>>({});
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesContentRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -251,6 +262,61 @@ export function TicketChatPanel({
     () => prepareSupportChatMessagesForDisplay(messages),
     [messages],
   );
+
+  const resolveAdminRole = useCallback(
+    (senderAdminId: string) => {
+      const admin = assignableAdmins.find((entry) => entry.id === senderAdminId);
+      if (admin) {
+        return admin.isSuperAdmin ? 'Super admin' : 'Admin';
+      }
+
+      const partner = linkedReferralPartners.find((entry) => entry.id === senderAdminId);
+      if (partner) {
+        return formatReferralPartnerRole(partner.role);
+      }
+
+      return fetchedSenderRoles[senderAdminId];
+    },
+    [assignableAdmins, linkedReferralPartners, fetchedSenderRoles],
+  );
+
+  useEffect(() => {
+    const missingAdminIds = [
+      ...new Set(
+        displayMessages
+          .filter((message) => {
+            if (
+              message.senderType !== SUPPORT_CHAT_SENDER_TYPE.ADMIN ||
+              !message.senderAdminId ||
+              message.senderRoleLabel
+            ) {
+              return false;
+            }
+
+            const senderAdminId = String(message.senderAdminId);
+            if (fetchedSenderRoles[senderAdminId]) return false;
+            if (assignableAdmins.some((entry) => entry.id === senderAdminId)) return false;
+            if (linkedReferralPartners.some((entry) => entry.id === senderAdminId)) {
+              return false;
+            }
+            return true;
+          })
+          .map((message) => String(message.senderAdminId)),
+      ),
+    ];
+
+    if (!missingAdminIds.length) return;
+
+    const query = new URLSearchParams({ ids: missingAdminIds.join(',') });
+    void fetch(`/api/support/sender-roles?${query.toString()}`)
+      .then((res) => (res.ok ? res.json() : { roles: {} }))
+      .then((data: { roles?: Record<string, string> }) => {
+        const roles = data.roles ?? {};
+        if (!Object.keys(roles).length) return;
+        setFetchedSenderRoles((prev) => ({ ...prev, ...roles }));
+      })
+      .catch(() => undefined);
+  }, [displayMessages, assignableAdmins, linkedReferralPartners, fetchedSenderRoles]);
 
   const markTicketSeen = useCallback(() => {
     if (!canMarkAdminSupportTicketRead(requestId)) return;
@@ -501,6 +567,7 @@ export function TicketChatPanel({
     previousMessageCountRef.current = 0;
     previousOldestIdRef.current = null;
     setDetailsExpanded(false);
+    setFetchedSenderRoles({});
     setLoading(true);
 
     let cancelled = false;
@@ -1186,14 +1253,16 @@ export function TicketChatPanel({
             if (isPartner && isInternal) {
               return null;
             }
-            const label = isAdmin
-              ? getAdminMessageLabel(
-                  msg.senderName,
-                  msg.senderAdminId,
-                  currentAdminId,
-                  currentAdminName,
-                )
-              : msg.senderName?.trim() || userName || 'Customer';
+            const label = getSupportMessageSenderLabel({
+              senderType: msg.senderType,
+              senderName: msg.senderName,
+              senderAdminId: msg.senderAdminId,
+              senderRoleLabel: msg.senderRoleLabel,
+              currentAdminId,
+              currentAdminName,
+              customerFallbackName: userName,
+              resolveAdminRole,
+            });
 
             const showBubble = messageHasDisplayableContent(msg);
             const hasImage = messageHasImage(msg);

@@ -357,7 +357,7 @@ export default function SupportRequestsPage() {
   }, []);
 
   useEffect(() => {
-    if (!isSuperAdmin) {
+    if (isPartner) {
       setAssignableAdmins([]);
       return;
     }
@@ -365,7 +365,7 @@ export default function SupportRequestsPage() {
       .then((res) => (res.ok ? res.json() : { admins: [] }))
       .then((data) => setAssignableAdmins(data.admins ?? []))
       .catch(() => setAssignableAdmins([]));
-  }, [isSuperAdmin]);
+  }, [isPartner]);
 
   const fetchRequests = useCallback(async (silent = false) => {
     if (!silent) {
@@ -1342,10 +1342,11 @@ export default function SupportRequestsPage() {
                 userName={resolvedActiveTicket ? formatUser(resolvedActiveTicket.userId) : undefined}
                 currentAdminId={currentAdminId}
                 currentAdminName={currentAdminName}
+                assignableAdmins={assignableAdmins}
                 onActivity={handleChatActivity}
                 onTicketLoaded={handleTicketLoaded}
                 onOpenManage={isSuperAdmin ? openManageForActiveTicket : undefined}
-                onCloseTicket={isPartner ? undefined : handleCloseActiveTicket}
+                onCloseTicket={handleCloseActiveTicket}
                 onForceResolveTicket={
                   isSuperAdmin ? handleForceResolveActiveTicket : undefined
                 }

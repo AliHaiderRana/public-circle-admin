@@ -17,7 +17,7 @@ import {
 import { formatSupportReferenceId } from '@/lib/support-admin.util';
 import { buildStatusTimelineForAdmin } from '@/lib/support-status-timeline.util';
 import { formatAssignmentHistoryForAdmin } from '@/lib/support-assignment.util';
-import { canSessionAccessTicket, denyPartnerWrite } from '@/lib/partner-access.util';
+import { canSessionAccessTicket, denyPartnerSupportTicketPatch } from '@/lib/partner-access.util';
 import { getReferralPartnersForCompany } from '@/lib/referral-partner.service';
 import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
 
@@ -146,11 +146,11 @@ export async function PATCH(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const writeDenied = denyPartnerWrite(session);
-  if (writeDenied) return writeDenied;
-
   const { id } = await params;
   const body = await request.json();
+
+  const writeDenied = denyPartnerSupportTicketPatch(session, body);
+  if (writeDenied) return writeDenied;
 
   const {
     status,

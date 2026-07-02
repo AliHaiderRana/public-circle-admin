@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Company from '@/lib/models/Company';
+import { SUPPORT_REQUEST_STATUS } from '@/lib/constants';
 import { getPartnerStripeCustomerIds } from '@/lib/referral-partner.service';
 
 export type AdminSessionLike = {
@@ -45,6 +46,57 @@ export function denyPartnerSupportMessageWrite(
   if (options?.internal) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  return null;
+}
+
+export type PartnerSupportTicketPatchBody = {
+  status?: string;
+  adminNotes?: unknown;
+  assignedAdminId?: unknown;
+  assignedAdminName?: unknown;
+  anchorMessageId?: unknown;
+  forceResolve?: boolean;
+};
+
+/** Partners may close tickets (pending customer confirmation) but not other ticket writes. */
+export function denyPartnerSupportTicketPatch(
+  session: AdminSessionLike | null | undefined,
+  body: PartnerSupportTicketPatchBody,
+): NextResponse | null {
+  if (!isPartnerSession(session)) return null;
+
+  const {
+    status,
+    adminNotes,
+    assignedAdminId,
+    assignedAdminName,
+    anchorMessageId,
+    forceResolve,
+  } = body;
+
+  if (forceResolve) {
+    return NextResponse.json(
+      { error: 'Only super admins can resolve tickets without customer confirmation' },
+      { status: 403 },
+    );
+  }
+
+  if (adminNotes !== undefined) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (
+    assignedAdminId !== undefined ||
+    assignedAdminName !== undefined ||
+    anchorMessageId !== undefined
+  ) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (status !== SUPPORT_REQUEST_STATUS.RESOLVED) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   return null;
 }
 
