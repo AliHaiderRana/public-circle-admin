@@ -393,7 +393,16 @@ export default function SupportRequestsPage() {
       const data = await res.json();
 
       if (data.requests) {
-        setRequests(data.requests);
+        let nextRequests = data.requests as SupportRequestRow[];
+        const selectedId = selectedTicketIdRef.current;
+        if (isPartner && selectedId) {
+          const stillListed = nextRequests.some((request) => request._id === selectedId);
+          const pinnedTicket = resolvedActiveTicketRef.current;
+          if (!stillListed && pinnedTicket?._id === selectedId) {
+            nextRequests = [pinnedTicket, ...nextRequests];
+          }
+        }
+        setRequests(nextRequests);
         setPagination(data.pagination);
       } else {
         setRequests([]);
@@ -416,6 +425,7 @@ export default function SupportRequestsPage() {
     assigneeFilter,
     categoryFilter,
     currentAdminId,
+    isPartner,
   ]);
 
   const scheduleSilentRefresh = useCallback(() => {
