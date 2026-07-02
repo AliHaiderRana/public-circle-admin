@@ -32,7 +32,26 @@ export type TicketHistoryEntry =
       changedAt: string;
       note?: string;
       anchorMessagePreview?: string;
+    }
+  | {
+      kind: 'audit';
+      _id?: string;
+      label: string;
+      changedAt: string;
+      actorName?: string;
+      actorIsPartner?: boolean;
+      referralRole?: string | null;
     };
+
+export type SupportAuditTrailEntry = {
+  id: string;
+  summary: string;
+  adminEmail: string;
+  adminName: string;
+  actorIsPartner?: boolean;
+  referralRole?: string | null;
+  createdAt: string;
+};
 
 type TicketForTimeline = {
   statusHistory?: StatusHistoryEntry[];
@@ -130,6 +149,7 @@ export function buildStatusTimelineForAdmin(ticket: TicketForTimeline): StatusTi
 export function buildTicketHistoryForAdmin(
   statusTimeline: StatusTimelineEntry[],
   assignmentHistory: AssignmentHistoryEntry[] = [],
+  auditTrail: SupportAuditTrailEntry[] = [],
 ): TicketHistoryEntry[] {
   const statusItems: TicketHistoryEntry[] = statusTimeline.map((entry) => ({
     ...entry,
@@ -148,7 +168,17 @@ export function buildTicketHistoryForAdmin(
     anchorMessagePreview: entry.anchorMessagePreview,
   }));
 
-  return [...statusItems, ...assignmentItems].sort(
+  const auditItems: TicketHistoryEntry[] = auditTrail.map((entry) => ({
+    kind: 'audit',
+    _id: entry.id,
+    label: entry.summary,
+    changedAt: entry.createdAt,
+    actorName: entry.adminName?.trim() || entry.adminEmail,
+    actorIsPartner: entry.actorIsPartner,
+    referralRole: entry.referralRole,
+  }));
+
+  return [...statusItems, ...assignmentItems, ...auditItems].sort(
     (a, b) => new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime(),
   );
 }

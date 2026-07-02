@@ -399,6 +399,34 @@ function SourceBadge({ source }: { source: UnifiedActivityRow['source'] }) {
   );
 }
 
+function ActorTypeBadge({ row }: { row: UnifiedActivityRow }) {
+  if (row.actorIsPartner) {
+    const label =
+      row.referralRole === 'SALES_PERSON'
+        ? 'Sales partner'
+        : row.referralRole === 'MARKETING_AFFILIATE'
+          ? 'Marketing partner'
+          : 'Support partner';
+    return (
+      <Badge variant="outline" className="gap-1 font-normal border-amber-300/80 text-amber-900 dark:text-amber-200">
+        {label}
+      </Badge>
+    );
+  }
+  if (row.actorWasSuperAdmin) {
+    return (
+      <Badge className="gap-1 font-normal">
+        <ShieldAlert className="h-3 w-3" />
+        Super admin
+      </Badge>
+    );
+  }
+  if (row.source === 'admin_panel') {
+    return <Badge variant="secondary" className="font-normal">Support admin</Badge>;
+  }
+  return null;
+}
+
 type AdminActivityGroupedPanelProps = {
   adminEmail: string;
   adminName?: string;
@@ -677,6 +705,9 @@ export default function AdminActivityGroupedPanel({
           <p className="text-sm leading-snug text-foreground">
             {sanitizeSummaryForDisplay(row.summary)}
           </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            <ActorTypeBadge row={row} />
+          </div>
           <ActivityDetailCell row={row} />
         </TableCell>
         {!hideSourceAndCustomer && (

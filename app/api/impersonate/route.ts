@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { getServerSession, toAdminAuditSession } from "@/lib/auth";
+import { isPartnerSession, canPartnerAccessCompany } from "@/lib/partner-access.util";
 import {
   logAdminActivity,
   ADMIN_AUDIT_ACTION,
   ADMIN_AUDIT_CATEGORY,
 } from "@/lib/admin-audit";
+import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
 import {
   createImpersonationSession,
   ImpersonationError,
@@ -21,7 +23,7 @@ function buildRedirectUrl(data: {
   token: string;
   sessionId: string;
   impersonatedBy: { email: string; name: string };
-}) {
+}, options?: { impersonatorRole?: string }) {
   const base = PUBLIC_CIRCLE_APP_URL!.replace(/\/$/, "");
   const redirectUrl = new URL(`${base}/auth/jwt/admin-impersonate`);
   redirectUrl.searchParams.set("token", data.token);
@@ -29,6 +31,9 @@ function buildRedirectUrl(data: {
   redirectUrl.searchParams.set("adminName", data.impersonatedBy.name);
   if (data.sessionId) {
     redirectUrl.searchParams.set("sessionId", data.sessionId);
+  }
+  if (options?.impersonatorRole) {
+    redirectUrl.searchParams.set("impersonatorRole", options.impersonatorRole);
   }
   return redirectUrl.toString();
 }
@@ -67,6 +72,13 @@ export async function POST(request: Request) {
     );
   }
 
+  if (isPartnerSession(session)) {
+    const allowed = await canPartnerAccessCompany(session, companyId);
+    if (!allowed) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+
   const adminEmail = session.email ?? "";
   const adminName = session.name ?? "";
 
@@ -89,10 +101,25 @@ export async function POST(request: Request) {
       });
     }
 
-    const redirectUrl = buildRedirectUrl(data);
+    const redirectUrl = buildRedirectUrl(data, {
+      impersonatorRole: session.referralRole,
+    });
 
     const auditSession = toAdminAuditSession(session);
     if (auditSession) {
+      if (isPartnerSession(session)) {
+        await logPartnerPortalActivity(auditSession, {
+          action: PARTNER_PORTAL_ACTIONS.IMPERSONATE_START,
+          resourceType: 'user',
+          resourceId: userId,
+          details: {
+            companyId,
+            impersonatedUserEmail: data.impersonatedUser.email,
+            companyName: data.company.name,
+          },
+        });
+      }
+
       await logAdminActivity(auditSession, {
         action: ADMIN_AUDIT_ACTION.IMPERSONATE_START,
         category: ADMIN_AUDIT_CATEGORY.IMPERSONATION,
@@ -105,6 +132,7 @@ export async function POST(request: Request) {
           impersonatedUserName: data.impersonatedUser.name,
           companyName: data.company.name,
           sessionId: data.sessionId,
+          referralRole: session.referralRole,
         },
       });
     }

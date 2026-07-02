@@ -1,10 +1,21 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import SupportRequest from '@/lib/models/SupportRequest';
-import { getServerSession } from '@/lib/auth';
+import Company from '@/lib/models/Company';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
 import { internalApiFetch } from '@/lib/internal-api.server';
 import { formatAdminDisplayName } from '@/lib/support-admin.util';
-import { canAdminAccessTicket } from '@/lib/support-access.util';
+import {
+  canSessionAccessTicket,
+  denyPartnerSupportMessageWrite,
+} from '@/lib/partner-access.util';
+import {
+  logAdminActivity,
+  ADMIN_AUDIT_ACTION,
+  ADMIN_AUDIT_CATEGORY,
+} from '@/lib/admin-audit';
+import { SUPPORT_REQUEST_CATEGORY_LABELS } from '@/lib/constants';
+import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -25,11 +36,11 @@ export async function GET(
 
   try {
     await dbConnect();
-    const ticket = await SupportRequest.findById(id).select('assignedAdminId').lean();
+    const ticket = await SupportRequest.findById(id).select('assignedAdminId companyId').lean();
     if (!ticket) {
       return NextResponse.json({ error: 'Support request not found' }, { status: 404 });
     }
-    if (!canAdminAccessTicket(session, ticket)) {
+    if (!(await canSessionAccessTicket(session, ticket))) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -47,6 +58,21 @@ export async function GET(
     }
 
     const data = payload.data ?? payload;
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logPartnerPortalActivity(auditSession, {
+        action: PARTNER_PORTAL_ACTIONS.VIEW_SUPPORT_MESSAGES,
+        resourceType: 'support_request',
+        resourceId: id,
+        details: {
+          limit: limit ? Number(limit) : undefined,
+          before: before || undefined,
+          messageCount: Array.isArray(data?.messages) ? data.messages.length : undefined,
+        },
+        summary: `Partner viewed support request messages for ticket ${id}`,
+      });
+    }
 
     return NextResponse.json(data);
   } catch (error) {
@@ -68,6 +94,9 @@ export async function POST(
   const body = await request.json();
   const message = typeof body.message === 'string' ? body.message.trim() : '';
   const internal = Boolean(body.internal);
+
+  const writeDenied = denyPartnerSupportMessageWrite(session, { internal });
+  if (writeDenied) return writeDenied;
   const attachment = body.attachment;
 
   if (!message && !attachment) {
@@ -76,11 +105,11 @@ export async function POST(
 
   try {
     await dbConnect();
-    const ticket = await SupportRequest.findById(id).select('assignedAdminId').lean();
+    const ticket = await SupportRequest.findById(id).select('assignedAdminId companyId').lean();
     if (!ticket) {
       return NextResponse.json({ error: 'Support request not found' }, { status: 404 });
     }
-    if (!canAdminAccessTicket(session, ticket)) {
+    if (!(await canSessionAccessTicket(session, ticket))) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -103,6 +132,38 @@ export async function POST(
         { error: payload?.errorMessage || 'Failed to send message' },
         { status: response.status },
       );
+    }
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      const ticketDoc = await SupportRequest.findById(id)
+        .select('subject category companyId')
+        .lean();
+      let companyName = '';
+      if (ticketDoc?.companyId) {
+        const company = await Company.findById(ticketDoc.companyId).select('name').lean();
+        companyName = company?.name ?? '';
+      }
+      const category = ticketDoc?.category;
+      await logAdminActivity(auditSession, {
+        action: ADMIN_AUDIT_ACTION.SUPPORT_MESSAGE_REPLY,
+        category: ADMIN_AUDIT_CATEGORY.SUPPORT_REQUEST,
+        resourceType: 'support_request',
+        resourceId: id,
+        details: {
+          internal,
+          hasAttachment: Boolean(attachment),
+          messagePreview: message.slice(0, 200),
+          subject: ticketDoc?.subject,
+          category,
+          categoryLabel:
+            (category && SUPPORT_REQUEST_CATEGORY_LABELS[category]) || category,
+          companyName,
+          actorName: adminDisplayName,
+          actorIsPartner: Boolean(session.isPartner),
+          referralRole: session.referralRole ?? null,
+        },
+      });
     }
 
     return NextResponse.json(payload.data, { status: 201 });

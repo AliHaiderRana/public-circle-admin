@@ -110,6 +110,7 @@ type TicketChatPanelProps = {
   onForceResolveTicket?: () => void;
   closingTicket?: boolean;
   isSuperAdmin?: boolean;
+  isPartner?: boolean;
   onTicketDeleted?: () => void;
   onTicketLoaded?: (ticket: {
     status?: string;
@@ -183,6 +184,7 @@ export function TicketChatPanel({
   onForceResolveTicket,
   closingTicket = false,
   isSuperAdmin = false,
+  isPartner = false,
   onTicketDeleted,
   onTicketLoaded,
   showRefresh = true,
@@ -215,6 +217,14 @@ export function TicketChatPanel({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [deletingChat, setDeletingChat] = useState(false);
+  const [linkedReferralPartners, setLinkedReferralPartners] = useState<
+    Array<{
+      id: string;
+      email: string;
+      name: string;
+      role: 'SALES_PERSON' | 'MARKETING_AFFILIATE';
+    }>
+  >([]);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesContentRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -824,6 +834,28 @@ export function TicketChatPanel({
     : null;
   const companyProfileId = companyIdProp || loadedCompanyId;
 
+  useEffect(() => {
+    if (!isSuperAdmin || !companyProfileId) {
+      setLinkedReferralPartners([]);
+      return;
+    }
+
+    let cancelled = false;
+    fetch(`/api/companies/${companyProfileId}/referral-partners`)
+      .then((res) => (res.ok ? res.json() : { partners: [] }))
+      .then((data) => {
+        if (cancelled) return;
+        setLinkedReferralPartners(Array.isArray(data.partners) ? data.partners : []);
+      })
+      .catch(() => {
+        if (!cancelled) setLinkedReferralPartners([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSuperAdmin, companyProfileId]);
+
   return (
     <div
       className={cn(
@@ -934,6 +966,22 @@ export function TicketChatPanel({
                       <span className="font-medium text-foreground/80">Assigned to:</span>{' '}
                       {loadedAssignedAdminName?.trim() || 'Unassigned'}
                     </p>
+                    {isSuperAdmin ? (
+                      <p className="sm:col-span-2">
+                        <span className="font-medium text-foreground/80">Referral partners:</span>{' '}
+                        {linkedReferralPartners.length > 0
+                          ? linkedReferralPartners
+                              .map((partner) =>
+                                `${partner.name} (${
+                                  partner.role === 'SALES_PERSON'
+                                    ? 'Sales person'
+                                    : 'Marketing affiliate'
+                                })`,
+                              )
+                              .join(' · ')
+                          : 'None linked'}
+                      </p>
+                    ) : null}
                     {totalCount > 0 && (
                       <p>
                         <span className="font-medium text-foreground/80">Messages:</span> {totalCount}
@@ -1063,7 +1111,7 @@ export function TicketChatPanel({
             </Button>
           </div>
         )}
-        {(displayTicketMessage || displayAdminNotes) && (
+        {(displayTicketMessage || (!isPartner && displayAdminNotes)) && (
           <div className="space-y-3 pb-1">
             {displayTicketMessage ? (
               <div className="rounded-lg border bg-background p-3">
@@ -1075,7 +1123,7 @@ export function TicketChatPanel({
                 </p>
               </div>
             ) : null}
-            {displayAdminNotes ? (
+            {!isPartner && displayAdminNotes ? (
               <div className="rounded-lg border border-amber-200/80 bg-amber-50/80 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
                 <p className="text-[11px] font-medium uppercase tracking-wide text-amber-800 dark:text-amber-300">
                   Private team notes
@@ -1135,6 +1183,9 @@ export function TicketChatPanel({
 
             const isAdmin = msg.senderType === SUPPORT_CHAT_SENDER_TYPE.ADMIN;
             const isInternal = msg.visibility === 'INTERNAL';
+            if (isPartner && isInternal) {
+              return null;
+            }
             const label = isAdmin
               ? getAdminMessageLabel(
                   msg.senderName,
@@ -1277,27 +1328,31 @@ export function TicketChatPanel({
         ) : (
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={sending}
-                onClick={() => setReplyInternal((prev) => !prev)}
-                className={cn(
-                  'h-7 gap-1.5 px-2.5 text-xs font-normal',
-                  replyInternal
-                    ? 'bg-amber-100 text-amber-900 hover:bg-amber-100/90 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/50'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <Lock className="size-3 shrink-0" />
-                Internal note
-                {replyInternal ? (
-                  <span className="rounded-full bg-amber-200/80 px-1.5 py-px text-[10px] font-medium text-amber-900 dark:bg-amber-800/60 dark:text-amber-100">
-                    On
-                  </span>
-                ) : null}
-              </Button>
+              {!isPartner ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={sending}
+                  onClick={() => setReplyInternal((prev) => !prev)}
+                  className={cn(
+                    'h-7 gap-1.5 px-2.5 text-xs font-normal',
+                    replyInternal
+                      ? 'bg-amber-100 text-amber-900 hover:bg-amber-100/90 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/50'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <Lock className="size-3 shrink-0" />
+                  Internal note
+                  {replyInternal ? (
+                    <span className="rounded-full bg-amber-200/80 px-1.5 py-px text-[10px] font-medium text-amber-900 dark:bg-amber-800/60 dark:text-amber-100">
+                      On
+                    </span>
+                  ) : null}
+                </Button>
+              ) : (
+                <span />
+              )}
               <span className="hidden text-[10px] text-muted-foreground sm:inline">
                 Enter to send · Shift+Enter for new line
               </span>

@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  isPartnerSession,
+  getPartnerAllowedCompanyIds,
+} from '@/lib/partner-access.util';
 import { internalApiFetch } from '@/lib/internal-api.server';
+import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
 
 export async function GET(request: Request) {
   const session = await getServerSession();
@@ -26,7 +31,34 @@ export async function GET(request: Request) {
       );
     }
 
-    return NextResponse.json(payload.data);
+    let data = payload.data;
+
+    if (isPartnerSession(session) && data?.threads) {
+      const allowedIds = new Set(await getPartnerAllowedCompanyIds(session));
+      data = {
+        ...data,
+        threads: data.threads.filter((thread: { companyId?: string }) =>
+          thread.companyId ? allowedIds.has(String(thread.companyId)) : false,
+        ),
+      };
+    }
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logPartnerPortalActivity(auditSession, {
+        action: PARTNER_PORTAL_ACTIONS.VIEW_SUPPORT_CHAT_THREADS,
+        resourceType: 'support_chat_thread',
+        details: {
+          page: Number(page),
+          limit: Number(limit),
+          search: search || undefined,
+          threadCount: Array.isArray(data?.threads) ? data.threads.length : undefined,
+        },
+        summary: 'Partner viewed support chat threads',
+      });
+    }
+
+    return NextResponse.json(data);
   } catch {
     return NextResponse.json({ error: 'Failed to fetch chat threads' }, { status: 500 });
   }

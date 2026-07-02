@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Loader2, UserPlus } from 'lucide-react';
@@ -15,6 +16,8 @@ export default function ConfigPage() {
   const router = useRouter();
   const [appleRelayEmail, setAppleRelayEmail] = useState<string>('');
   const [deleteCompanyContactsAfterDays, setDeleteCompanyContactsAfterDays] = useState<number>(7);
+  const [autoAssignSupportTicketsToReferralUsers, setAutoAssignSupportTicketsToReferralUsers] =
+    useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
@@ -45,6 +48,9 @@ export default function ConfigPage() {
       const data = await res.json();
       setAppleRelayEmail(data.appleRelayEmail ?? '');
       setDeleteCompanyContactsAfterDays(data.deleteCompanyContactsAfterDays ?? 7);
+      setAutoAssignSupportTicketsToReferralUsers(
+        data.autoAssignSupportTicketsToReferralUsers === true,
+      );
     } catch (err) {
       console.error('Failed to load config');
     } finally {
@@ -61,6 +67,7 @@ export default function ConfigPage() {
         body: JSON.stringify({
           appleRelayEmail: appleRelayEmail.trim() === '' ? null : appleRelayEmail.trim(),
           deleteCompanyContactsAfterDays,
+          autoAssignSupportTicketsToReferralUsers,
         }),
       });
 
@@ -68,6 +75,9 @@ export default function ConfigPage() {
         const data = await res.json();
         setAppleRelayEmail(data.appleRelayEmail ?? '');
         setDeleteCompanyContactsAfterDays(data.deleteCompanyContactsAfterDays ?? 7);
+        setAutoAssignSupportTicketsToReferralUsers(
+          data.autoAssignSupportTicketsToReferralUsers === true,
+        );
       }
     } catch (err) {
       console.error('Failed to update config');
@@ -130,6 +140,26 @@ export default function ConfigPage() {
                   }}
                   disabled={updating}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="space-y-1 pr-4">
+                    <Label htmlFor="autoAssignSupportTicketsToReferralUsers">
+                      Auto-assign support tickets
+                    </Label>
+                    <p className="text-sm text-neutral-500">
+                      Automatically assign new tickets to linked referral users when available;
+                      otherwise assign to the default super admin.
+                    </p>
+                  </div>
+                  <Switch
+                    id="autoAssignSupportTicketsToReferralUsers"
+                    checked={autoAssignSupportTicketsToReferralUsers}
+                    onCheckedChange={setAutoAssignSupportTicketsToReferralUsers}
+                    disabled={updating}
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-end">

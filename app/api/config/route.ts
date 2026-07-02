@@ -20,6 +20,8 @@ export async function GET() {
       appleRelayEmail: config.appleRelayEmail,
       deleteCompanyContactsAfterDays: config.deleteCompanyContactsAfterDays,
       isSignupAllowed: config.isSignupAllowed,
+      autoAssignSupportTicketsToReferralUsers:
+        config.autoAssignSupportTicketsToReferralUsers === true,
     });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch config' }, { status: 500 });
@@ -39,7 +41,12 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Only super admins can modify system configuration' }, { status: 403 });
     }
 
-    const { isSignupAllowed, appleRelayEmail, deleteCompanyContactsAfterDays } =
+    const {
+      isSignupAllowed,
+      appleRelayEmail,
+      deleteCompanyContactsAfterDays,
+      autoAssignSupportTicketsToReferralUsers,
+    } =
       await request.json();
 
     let config = await AppConfig.findOne();
@@ -48,6 +55,8 @@ export async function PATCH(request: Request) {
           isSignupAllowed: config.isSignupAllowed,
           appleRelayEmail: config.appleRelayEmail,
           deleteCompanyContactsAfterDays: config.deleteCompanyContactsAfterDays,
+          autoAssignSupportTicketsToReferralUsers:
+            config.autoAssignSupportTicketsToReferralUsers === true,
         }
       : null;
 
@@ -60,6 +69,9 @@ export async function PATCH(request: Request) {
         ...(typeof deleteCompanyContactsAfterDays === 'number'
           ? { deleteCompanyContactsAfterDays }
           : {}),
+        ...(typeof autoAssignSupportTicketsToReferralUsers === 'boolean'
+          ? { autoAssignSupportTicketsToReferralUsers }
+          : {}),
       });
     } else {
       if (typeof isSignupAllowed === 'boolean') {
@@ -70,6 +82,9 @@ export async function PATCH(request: Request) {
       }
       if (typeof deleteCompanyContactsAfterDays === 'number') {
         config.deleteCompanyContactsAfterDays = deleteCompanyContactsAfterDays;
+      }
+      if (typeof autoAssignSupportTicketsToReferralUsers === 'boolean') {
+        config.autoAssignSupportTicketsToReferralUsers = autoAssignSupportTicketsToReferralUsers;
       }
       await config.save();
     }
@@ -90,6 +105,13 @@ export async function PATCH(request: Request) {
     ) {
       fieldsChanged.push('contact deletion retention');
     }
+    if (
+      typeof autoAssignSupportTicketsToReferralUsers === 'boolean' &&
+      previousConfig?.autoAssignSupportTicketsToReferralUsers !==
+        autoAssignSupportTicketsToReferralUsers
+    ) {
+      fieldsChanged.push('auto-assign support tickets to referral users');
+    }
 
     const auditSession = toAdminAuditSession(session);
     if (auditSession) {
@@ -102,6 +124,8 @@ export async function PATCH(request: Request) {
           isSignupAllowed: config.isSignupAllowed,
           appleRelayEmail: config.appleRelayEmail,
           deleteCompanyContactsAfterDays: config.deleteCompanyContactsAfterDays,
+          autoAssignSupportTicketsToReferralUsers:
+            config.autoAssignSupportTicketsToReferralUsers === true,
         },
       });
     }
@@ -111,6 +135,8 @@ export async function PATCH(request: Request) {
       appleRelayEmail: config.appleRelayEmail,
       deleteCompanyContactsAfterDays: config.deleteCompanyContactsAfterDays,
       isSignupAllowed: config.isSignupAllowed,
+      autoAssignSupportTicketsToReferralUsers:
+        config.autoAssignSupportTicketsToReferralUsers === true,
     });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to update config' }, { status: 500 });

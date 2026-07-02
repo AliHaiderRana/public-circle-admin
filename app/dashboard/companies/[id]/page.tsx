@@ -88,7 +88,8 @@ interface CompanyDetails {
 export default function CompanyDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { token: adminToken } = useAuth();
+  const { token: adminToken, user: authUser } = useAuth();
+  const isPartnerView = Boolean(authUser?.isPartner);
   const [companyDetails, setCompanyDetails] = useState<CompanyDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -290,7 +291,7 @@ export default function CompanyDetailPage() {
             <Play className="h-4 w-4" />
             View Campaign Runs
           </Button>
-          {companyDetails.company.status === 'ACTIVE' ? (
+          {!isPartnerView && companyDetails.company.status === 'ACTIVE' ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button 
@@ -330,7 +331,7 @@ export default function CompanyDetailPage() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-          ) : companyDetails.company.status === 'BLOCKED' ? (
+          ) : !isPartnerView && companyDetails.company.status === 'BLOCKED' ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button 

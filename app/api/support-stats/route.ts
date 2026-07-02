@@ -6,6 +6,10 @@ import { internalApiFetch } from '@/lib/internal-api.server';
 import { SUPPORT_REQUEST_STATUS } from '@/lib/constants';
 import { assignedTicketsFilterForAdmin } from '@/lib/support-access.util';
 import {
+  isPartnerSession,
+  ticketsFilterForSession,
+} from '@/lib/partner-access.util';
+import {
   getSupportStatsCache,
   setSupportStatsCache,
 } from '@/lib/support-stats-cache.server';
@@ -19,6 +23,40 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (isPartnerSession(session)) {
+    try {
+      await dbConnect();
+      const activeStatuses = [
+        SUPPORT_REQUEST_STATUS.OPEN,
+        SUPPORT_REQUEST_STATUS.IN_PROGRESS,
+      ];
+      const scopedFilter = await ticketsFilterForSession(session);
+      const [chatAgg, openSupportRequests] = await Promise.all([
+        SupportRequest.aggregate([
+          { $match: scopedFilter },
+          { $group: { _id: null, unreadChatMessages: { $sum: '$unreadByAdmin' } } },
+        ]),
+        SupportRequest.countDocuments({
+          ...scopedFilter,
+          status: { $in: activeStatuses },
+        }),
+      ]);
+
+      return NextResponse.json({
+        unreadChatMessages: chatAgg[0]?.unreadChatMessages ?? 0,
+        openSupportRequests,
+        unassignedTickets: 0,
+        pendingCustomerRequests: 0,
+      });
+    } catch (error) {
+      console.error('[support-stats] partner fetch failed:', error);
+      return NextResponse.json(
+        { error: 'Failed to fetch support stats' },
+        { status: 500 },
+      );
+    }
+  }
+
   if (!session.isSuperAdmin) {
     try {
       await dbConnect();
@@ -26,17 +64,17 @@ export async function GET() {
         SUPPORT_REQUEST_STATUS.OPEN,
         SUPPORT_REQUEST_STATUS.IN_PROGRESS,
       ];
-      const assignedFilter = assignedTicketsFilterForAdmin(session);
+      const scopedFilter = await ticketsFilterForSession(session);
       const [chatAgg, openSupportRequests, pendingCustomerRequests] = await Promise.all([
         SupportRequest.aggregate([
-          { $match: assignedFilter },
+          { $match: scopedFilter },
           { $group: { _id: null, unreadChatMessages: { $sum: '$unreadByAdmin' } } },
         ]),
         SupportRequest.countDocuments({
-          ...assignedFilter,
+          ...scopedFilter,
           status: { $in: activeStatuses },
         }),
-        getPendingCustomerRequestsCount(),
+        isPartnerSession(session) ? Promise.resolve(0) : getPendingCustomerRequestsCount(),
       ]);
 
       return NextResponse.json({

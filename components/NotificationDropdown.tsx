@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Bell, Check, Trash2, CheckCheck, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { getAdminNotificationDisplay } from '@/lib/support-notifications';
+import { getAdminNotificationDisplay, dedupeNotificationsForDisplay } from '@/lib/support-notifications';
 import { ADMIN_NOTIFICATION_TYPES } from '@/lib/constants';
 import {
   subscribeAdminNotificationConnection,
@@ -14,13 +14,20 @@ import {
   type AdminNotificationPayload,
 } from '@/lib/admin-notification-socket';
 import { SUPPORT_CHAT_SENDER_TYPE } from '@/lib/constants';
+import { partnerCanAccessNotification } from '@/lib/partner-notifications.client.util';
 
 const PAGE_SIZE = 10;
+
+type NotificationDropdownProps = {
+  partnerMode?: boolean;
+  partnerReferralUserId?: string;
+};
 
 type AdminNotification = AdminNotificationPayload & {
   metadata: {
     customerRequestId?: string;
     supportRequestId?: string;
+    assignedAdminId?: string;
     companyId?: string;
     companyName?: string;
     requestType?: string;
@@ -28,7 +35,10 @@ type AdminNotification = AdminNotificationPayload & {
   };
 };
 
-export default function NotificationDropdown() {
+export default function NotificationDropdown({
+  partnerMode = false,
+  partnerReferralUserId,
+}: NotificationDropdownProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
@@ -44,6 +54,18 @@ export default function NotificationDropdown() {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const isOpenRef = useRef(isOpen);
   isOpenRef.current = isOpen;
+
+  const partnerAllowsNotification = useCallback(
+    (notification: AdminNotification) => {
+      if (!partnerMode) return true;
+      return partnerCanAccessNotification(partnerReferralUserId, notification.metadata);
+    },
+    [partnerMode, partnerReferralUserId],
+  );
+
+  const normalizeNotifications = useCallback((items: AdminNotification[]) => {
+    return dedupeNotificationsForDisplay(items, PAGE_SIZE);
+  }, []);
 
   const fetchNotifications = useCallback(async (pageNum = 1, append = false) => {
     try {
@@ -66,10 +88,13 @@ export default function NotificationDropdown() {
       if (append) {
         setNotifications((prev) => {
           const seen = new Set(prev.map((item) => item._id));
-          return [...prev, ...items.filter((item) => !seen.has(item._id))];
+          return normalizeNotifications([
+            ...prev,
+            ...items.filter((item) => !seen.has(item._id)),
+          ]);
         });
       } else {
-        setNotifications(items);
+        setNotifications(normalizeNotifications(items));
       }
 
       setUnreadCount(data.unreadCount || 0);
@@ -83,29 +108,30 @@ export default function NotificationDropdown() {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, []);
+  }, [normalizeNotifications]);
 
-  // Fetch unread count
   const fetchUnreadCount = useCallback(async () => {
     try {
-      const res = await fetch('/api/notifications?limit=1');
+      const res = await fetch('/api/notifications/unread-count');
       if (!res.ok) return;
       const data = await res.json();
       setUnreadCount(data.unreadCount || 0);
-    } catch (err) {
+    } catch {
       // Silently fail - notifications API might not be ready
     }
   }, []);
 
   const handleIncomingNotification = useCallback(
     (notification: AdminNotification) => {
+      if (!partnerAllowsNotification(notification)) return;
+
       setNotifications((prev) => {
         const without = prev.filter((item) => item._id !== notification._id);
-        return [notification, ...without];
+        return normalizeNotifications([notification, ...without]);
       });
       void fetchUnreadCount();
     },
-    [fetchUnreadCount],
+    [fetchUnreadCount, normalizeNotifications, partnerAllowsNotification],
   );
 
   useEffect(() => {
@@ -406,10 +432,10 @@ export default function NotificationDropdown() {
                 className="w-full text-xs text-neutral-600"
                 onClick={() => {
                   setIsOpen(false);
-                  router.push('/dashboard/customer-requests');
+                  router.push('/dashboard/support-requests');
                 }}
               >
-                View all requests
+                View all support requests
               </Button>
             </div>
           )}

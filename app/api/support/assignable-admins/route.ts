@@ -2,12 +2,16 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import AdminUser from '@/lib/models/AdminUser';
 import { getServerSession } from '@/lib/auth';
+import { denyPartnerSupportAccess } from '@/lib/partner-access.util';
 
 export async function GET() {
   const session = await getServerSession();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const supportDenied = denyPartnerSupportAccess(session);
+  if (supportDenied) return supportDenied;
 
   await dbConnect();
 

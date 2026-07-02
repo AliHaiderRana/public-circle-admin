@@ -13,7 +13,10 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -26,6 +29,7 @@ type CategoryOption = { value: string; label: string };
 type AssignableAdmin = {
   id: string;
   name: string;
+  email?: string;
   isSuperAdmin: boolean;
 };
 
@@ -43,6 +47,7 @@ type SupportInboxFiltersProps = {
   onCategoryChange: (value: string) => void;
   categoryOptions: CategoryOption[];
   isSuperAdmin: boolean;
+  isPartner?: boolean;
   assignableAdmins: AssignableAdmin[];
   currentAdminId?: string;
   openTicketCount: number;
@@ -89,6 +94,7 @@ export function SupportInboxFilters({
   onCategoryChange,
   categoryOptions,
   isSuperAdmin,
+  isPartner = false,
   assignableAdmins,
   currentAdminId,
   openTicketCount,
@@ -97,6 +103,15 @@ export function SupportInboxFilters({
 }: SupportInboxFiltersProps) {
   const assigneeSelectValue =
     assigneeFilter === 'unassigned' ? 'all' : assigneeFilter;
+
+  const superAdmins = useMemo(
+    () => assignableAdmins.filter((admin) => admin.isSuperAdmin),
+    [assignableAdmins],
+  );
+  const regularAdmins = useMemo(
+    () => assignableAdmins.filter((admin) => !admin.isSuperAdmin),
+    [assignableAdmins],
+  );
 
   const advancedFilterCount = useMemo(() => {
     let count = 0;
@@ -192,11 +207,43 @@ export function SupportInboxFilters({
                   {currentAdminId ? (
                     <SelectItem value="me">Assigned to me</SelectItem>
                   ) : null}
-                  {assignableAdmins.map((admin) => (
-                    <SelectItem key={admin.id} value={admin.id}>
-                      {admin.name}
-                    </SelectItem>
-                  ))}
+                  {superAdmins.length > 0 ? (
+                    <SelectGroup>
+                      <SelectLabel className="text-[10px] font-semibold uppercase tracking-[0.12em]">
+                        Super admins
+                      </SelectLabel>
+                      {superAdmins.map((admin) => (
+                        <SelectItem key={admin.id} value={admin.id} textValue={admin.name}>
+                          <span className="flex flex-col gap-0.5 py-0.5 text-left">
+                            <span className="font-medium leading-tight">{admin.name}</span>
+                            {admin.email ? (
+                              <span className="text-xs text-muted-foreground">{admin.email}</span>
+                            ) : null}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ) : null}
+                  {superAdmins.length > 0 && regularAdmins.length > 0 ? (
+                    <SelectSeparator className="my-1.5" />
+                  ) : null}
+                  {regularAdmins.length > 0 ? (
+                    <SelectGroup>
+                      <SelectLabel className="text-[10px] font-semibold uppercase tracking-[0.12em]">
+                        Admins
+                      </SelectLabel>
+                      {regularAdmins.map((admin) => (
+                        <SelectItem key={admin.id} value={admin.id} textValue={admin.name}>
+                          <span className="flex flex-col gap-0.5 py-0.5 text-left">
+                            <span className="font-medium leading-tight">{admin.name}</span>
+                            {admin.email ? (
+                              <span className="text-xs text-muted-foreground">{admin.email}</span>
+                            ) : null}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ) : null}
                 </SelectContent>
               </Select>
             ) : null}
@@ -205,14 +252,16 @@ export function SupportInboxFilters({
       </div>
 
       <div className="flex items-center gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <FilterChip
-          active={assigneeFilter === 'unassigned'}
-          onClick={() =>
-            onAssigneeFilterChange(assigneeFilter === 'unassigned' ? 'all' : 'unassigned')
-          }
-        >
-          Unassigned
-        </FilterChip>
+        {!isPartner ? (
+          <FilterChip
+            active={assigneeFilter === 'unassigned'}
+            onClick={() =>
+              onAssigneeFilterChange(assigneeFilter === 'unassigned' ? 'all' : 'unassigned')
+            }
+          >
+            Unassigned
+          </FilterChip>
+        ) : null}
         <FilterChip active={activeOnlyFilter} onClick={onActiveOnlyToggle}>
           Active
           {openTicketCount > 0 ? (
@@ -233,7 +282,7 @@ export function SupportInboxFilters({
             Reset
           </button>
         ) : null}
-        {currentAdminId && !isSuperAdmin ? (
+        {currentAdminId && !isSuperAdmin && !isPartner ? (
           <FilterChip
             active={assigneeFilter === 'me'}
             onClick={() => onAssigneeFilterChange(assigneeFilter === 'me' ? 'all' : 'me')}

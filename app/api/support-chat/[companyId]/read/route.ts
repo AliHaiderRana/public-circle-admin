@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import { canPartnerAccessCompany, isPartnerSession } from '@/lib/partner-access.util';
 import { internalApiFetch } from '@/lib/internal-api.server';
+import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
 
 export async function PATCH(
   _request: Request,
@@ -13,6 +15,13 @@ export async function PATCH(
 
   const { companyId } = await params;
 
+  if (isPartnerSession(session)) {
+    const allowed = await canPartnerAccessCompany(session, companyId);
+    if (!allowed) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+  }
+
   try {
     const response = await internalApiFetch(`/support-chat/${companyId}/read`, {
       method: 'PATCH',
@@ -24,6 +33,17 @@ export async function PATCH(
         { error: payload?.errorMessage || 'Failed to mark thread as read' },
         { status: response.status },
       );
+    }
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logPartnerPortalActivity(auditSession, {
+        action: PARTNER_PORTAL_ACTIONS.MARK_SUPPORT_CHAT_READ,
+        resourceType: 'company',
+        resourceId: companyId,
+        details: { companyId },
+        summary: 'Partner marked support chat thread as read',
+      });
     }
 
     return NextResponse.json({ success: true });

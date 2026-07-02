@@ -145,6 +145,8 @@ function mapPanelItem(row: Record<string, unknown>): UnifiedActivityRow {
         ? (row.details as Record<string, unknown>)
         : null,
     actorWasSuperAdmin: Boolean(row.actorWasSuperAdmin),
+    actorIsPartner: Boolean(row.actorIsPartner),
+    referralRole: row.referralRole != null ? String(row.referralRole) : null,
     action: typeof row.action === 'string' ? row.action : undefined,
     resourceType: row.resourceType != null ? String(row.resourceType) : null,
     resourceId: row.resourceId != null ? String(row.resourceId) : null,

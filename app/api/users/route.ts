@@ -5,6 +5,10 @@ import Company from '@/lib/models/Company';
 import Role from '@/lib/models/Role';
 import OnboardingProgress from '@/lib/models/OnboardingProgress';
 import { getServerSession } from '@/lib/auth';
+import {
+  isPartnerSession,
+  resolvePartnerCompanyScope,
+} from '@/lib/partner-access.util';
 
 export async function GET(request: Request) {
   const session = await getServerSession();
@@ -56,7 +60,13 @@ export async function GET(request: Request) {
       }
     }
 
-    if (companyId) {
+    if (isPartnerSession(session)) {
+      const scope = await resolvePartnerCompanyScope(session, companyId || undefined);
+      if (scope.forbidden) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      Object.assign(query, scope.filter);
+    } else if (companyId) {
       query.company = companyId;
     }
     

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import { getServerSession } from '@/lib/auth';
+import { denyPartnerPaymentAccess } from '@/lib/partner-access.util';
 import Plan, { normalizePlanQuota } from '@/lib/models/Plan';
 import { fetchStripePlanPricesByName } from '@/lib/stripe-plans';
 
@@ -12,6 +13,9 @@ export async function GET() {
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const paymentDenied = denyPartnerPaymentAccess(session);
+  if (paymentDenied) return paymentDenied;
 
   await dbConnect();
 

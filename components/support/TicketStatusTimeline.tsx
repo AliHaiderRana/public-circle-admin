@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader2, UserRoundCheck } from 'lucide-react';
+import { Loader2, ScrollText, UserRoundCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   formatTimelineTimestamp,
@@ -44,7 +44,11 @@ export function TicketStatusTimeline({
             <span
               className={cn(
                 'mt-1.5 size-2 shrink-0 rounded-full',
-                entry.kind === 'assignment' ? 'bg-violet-500/80' : 'bg-primary/70',
+                entry.kind === 'assignment'
+                  ? 'bg-violet-500/80'
+                  : entry.kind === 'audit'
+                    ? 'bg-amber-500/80'
+                    : 'bg-primary/70',
               )}
             />
             {index < entries.length - 1 && (
@@ -62,7 +66,7 @@ export function TicketStatusTimeline({
                   {entry.statusLabel ? ` · ${entry.statusLabel}` : ''}
                 </p>
               </>
-            ) : (
+            ) : entry.kind === 'assignment' ? (
               <div className="rounded-lg border border-violet-200/80 bg-violet-50/60 p-2.5 dark:border-violet-900/50 dark:bg-violet-950/20">
                 <div className="flex items-start gap-2">
                   <UserRoundCheck className="mt-0.5 size-3.5 shrink-0 text-violet-700 dark:text-violet-300" />
@@ -82,6 +86,28 @@ export function TicketStatusTimeline({
                         “{entry.anchorMessagePreview}”
                       </p>
                     ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-200/80 bg-amber-50/50 p-2.5 dark:border-amber-900/40 dark:bg-amber-950/15">
+                <div className="flex items-start gap-2">
+                  <ScrollText className="mt-0.5 size-3.5 shrink-0 text-amber-800 dark:text-amber-300" />
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className={cn('leading-snug', compact ? 'text-sm' : 'text-sm font-medium')}>
+                      {entry.label}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatTimelineTimestamp(entry.changedAt)}
+                      {entry.actorName ? ` · ${entry.actorName}` : ''}
+                      {entry.actorIsPartner
+                        ? entry.referralRole === 'SALES_PERSON'
+                          ? ' · Sales partner'
+                          : entry.referralRole === 'MARKETING_AFFILIATE'
+                            ? ' · Marketing partner'
+                            : ' · Support partner'
+                        : ''}
+                    </p>
                   </div>
                 </div>
               </div>

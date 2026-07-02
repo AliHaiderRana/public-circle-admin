@@ -3,7 +3,9 @@ import dbConnect from '@/lib/db';
 import Campaign from '@/lib/models/Campaign';
 import Company from '@/lib/models/Company';
 import CampaignRun from '@/lib/models/CampaignRun';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import { isPartnerSession, canPartnerAccessCompany } from '@/lib/partner-access.util';
+import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
 
 export async function GET(
   request: Request,
@@ -41,8 +43,36 @@ export async function GET(
       }, { status: 404 });
     }
 
+    const campaignCompanyId =
+      typeof campaign.company === 'object' && campaign.company !== null && '_id' in campaign.company
+        ? String((campaign.company as { _id: unknown })._id)
+        : String(campaign.company);
+
+    if (isPartnerSession(session)) {
+      const allowed = await canPartnerAccessCompany(session, campaignCompanyId);
+      if (!allowed) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
+
     // Fetch campaign runs count for this campaign
     const campaignRunsCount = await CampaignRun.countDocuments({ campaign: id });
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logPartnerPortalActivity(auditSession, {
+        action: PARTNER_PORTAL_ACTIONS.VIEW_CAMPAIGN,
+        resourceType: 'campaign',
+        resourceId: id,
+        details: {
+          campaignId: id,
+          companyId: campaignCompanyId,
+          campaignName: campaign.campaignName,
+          emailSubject: campaign.emailSubject,
+        },
+        summary: `Partner viewed campaign ${campaign.campaignName || id}`,
+      });
+    }
 
     return NextResponse.json({ 
       campaign: {
