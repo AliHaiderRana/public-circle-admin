@@ -262,15 +262,17 @@ export function SupportInboxFilters({
             Unassigned
           </FilterChip>
         ) : null}
-        <FilterChip active={activeOnlyFilter} onClick={onActiveOnlyToggle}>
-          Active
-          {openTicketCount > 0 ? (
-            <SupportCountBadge
-              count={openTicketCount}
-              className="min-h-4 min-w-4 px-1 text-[9px]"
-            />
-          ) : null}
-        </FilterChip>
+        {!isPartner ? (
+          <FilterChip active={activeOnlyFilter} onClick={onActiveOnlyToggle}>
+            Active
+            {openTicketCount > 0 ? (
+              <SupportCountBadge
+                count={openTicketCount}
+                className="min-h-4 min-w-4 px-1 text-[9px]"
+              />
+            ) : null}
+          </FilterChip>
+        ) : null}
         {hasActiveFilters ? (
           <button
             type="button"

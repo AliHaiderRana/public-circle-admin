@@ -43,7 +43,7 @@ export async function GET(request: Request) {
       ...(await ticketsFilterForSession(session)),
     };
 
-    if (activeOnly) {
+    if (activeOnly && !isPartnerSession(session)) {
       query.status = {
         $in: [
           SUPPORT_REQUEST_STATUS.OPEN,

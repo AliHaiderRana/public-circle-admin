@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import Company from '@/lib/models/Company';
+import AdminUser from '@/lib/models/AdminUser';
 import { SUPPORT_REQUEST_STATUS } from '@/lib/constants';
 import { getPartnerStripeCustomerIds } from '@/lib/referral-partner.service';
 
@@ -22,6 +23,74 @@ export function isFullAdminSession(session: AdminSessionLike | null | undefined)
 }
 
 const PARTNER_PAYMENT_API_PREFIXES = ['/api/stripe', '/api/plans'] as const;
+const ADMIN_ASSIGNEE_CACHE_MS = 60_000;
+
+let cachedAdminAssigneeIds: {
+  expiresAt: number;
+  ids: Array<string | mongoose.Types.ObjectId>;
+} | null = null;
+
+async function getInternalAdminAssigneeIds(): Promise<Array<string | mongoose.Types.ObjectId>> {
+  const now = Date.now();
+  if (cachedAdminAssigneeIds && cachedAdminAssigneeIds.expiresAt > now) {
+    return cachedAdminAssigneeIds.ids;
+  }
+
+  await dbConnect();
+  const admins = await AdminUser.find({}).select('_id').lean();
+  const ids = admins.flatMap((admin) => {
+    const id = String(admin._id);
+    return mongoose.isValidObjectId(id)
+      ? [id, new mongoose.Types.ObjectId(id)]
+      : [id];
+  });
+
+  cachedAdminAssigneeIds = { ids, expiresAt: now + ADMIN_ASSIGNEE_CACHE_MS };
+  return ids;
+}
+
+function buildPartnerAssigneeClauses(partnerId: string): Record<string, unknown>[] {
+  const id = String(partnerId || '').trim();
+  if (!id) return [];
+
+  const clauses: Record<string, unknown>[] = [{ assignedAdminId: id }];
+  if (mongoose.isValidObjectId(id)) {
+    clauses.push({ assignedAdminId: new mongoose.Types.ObjectId(id) });
+  }
+  return clauses;
+}
+
+function normalizeTicketCompanyId(companyId: unknown): string {
+  if (!companyId) return '';
+  if (typeof companyId === 'object' && companyId !== null && '_id' in companyId) {
+    return String((companyId as { _id: unknown })._id);
+  }
+  return String(companyId);
+}
+
+async function partnerCanAccessAssignedTicket(
+  session: AdminSessionLike,
+  ticket: { assignedAdminId?: unknown; companyId?: unknown },
+): Promise<boolean> {
+  const partnerId = String(session.referralUserId || session.userId || '');
+  if (!partnerId || !ticket.assignedAdminId) return false;
+
+  if (String(ticket.assignedAdminId) === partnerId) {
+    return true;
+  }
+
+  const companyId = normalizeTicketCompanyId(ticket.companyId);
+  if (!companyId) return false;
+
+  const allowedCompanyIds = await getPartnerAllowedCompanyIds(session);
+  if (!allowedCompanyIds.includes(companyId)) {
+    return false;
+  }
+
+  const internalAdminIds = await getInternalAdminAssigneeIds();
+  const assigneeId = String(ticket.assignedAdminId);
+  return internalAdminIds.some((id) => String(id) === assigneeId);
+}
 
 export function isPartnerPaymentApiPath(pathname: string): boolean {
   return PARTNER_PAYMENT_API_PREFIXES.some(
@@ -234,12 +303,22 @@ export async function partnerTicketsFilter(
     return { assignedAdminId: new mongoose.Types.ObjectId('000000000000000000000000') };
   }
 
-  const clauses: Record<string, unknown>[] = [{ assignedAdminId: String(partnerId) }];
-  if (mongoose.isValidObjectId(partnerId)) {
-    clauses.push({ assignedAdminId: new mongoose.Types.ObjectId(partnerId) });
+  const orClauses = buildPartnerAssigneeClauses(String(partnerId));
+  const companyIds = await getPartnerAllowedCompanyIds(session);
+  const internalAdminIds = await getInternalAdminAssigneeIds();
+
+  if (companyIds.length > 0 && internalAdminIds.length > 0) {
+    orClauses.push({
+      companyId: { $in: companyIds.map((id) => new mongoose.Types.ObjectId(id)) },
+      assignedAdminId: { $in: internalAdminIds },
+    });
   }
 
-  return clauses.length > 1 ? { $or: clauses } : clauses[0];
+  if (!orClauses.length) {
+    return { assignedAdminId: new mongoose.Types.ObjectId('000000000000000000000000') };
+  }
+
+  return { $or: orClauses };
 }
 
 export async function canSessionAccessTicket(
@@ -250,9 +329,7 @@ export async function canSessionAccessTicket(
   if (session.isSuperAdmin) return true;
 
   if (isPartnerSession(session)) {
-    const partnerId = session.referralUserId || session.userId;
-    if (!partnerId || !ticket.assignedAdminId) return false;
-    return String(ticket.assignedAdminId) === String(partnerId);
+    return partnerCanAccessAssignedTicket(session, ticket);
   }
 
   if (!session.userId || !ticket.assignedAdminId) return false;

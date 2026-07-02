@@ -358,6 +358,7 @@ export default function SupportRequestsPage() {
 
   useEffect(() => {
     if (isPartner) {
+      setActiveOnlyFilter(false);
       setAssignableAdmins([]);
       return;
     }
@@ -376,7 +377,11 @@ export default function SupportRequestsPage() {
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
         ...(searchTerm && { search: searchTerm }),
-        ...(activeOnlyFilter ? { activeOnly: 'true' } : statusFilter ? { status: statusFilter } : {}),
+        ...(!isPartner && activeOnlyFilter
+          ? { activeOnly: 'true' }
+          : statusFilter
+            ? { status: statusFilter }
+            : {}),
         ...(assigneeFilter === 'unassigned' ? { unassignedOnly: 'true' } : {}),
         ...(assigneeFilter === 'me' && currentAdminId
           ? { assignedAdminId: currentAdminId }
@@ -397,9 +402,8 @@ export default function SupportRequestsPage() {
         const selectedId = selectedTicketIdRef.current;
         if (isPartner && selectedId) {
           const stillListed = nextRequests.some((request) => request._id === selectedId);
-          const pinnedTicket = resolvedActiveTicketRef.current;
-          if (!stillListed && pinnedTicket?._id === selectedId) {
-            nextRequests = [pinnedTicket, ...nextRequests];
+          if (!stillListed) {
+            updateTicketInUrl(null);
           }
         }
         setRequests(nextRequests);
@@ -426,6 +430,7 @@ export default function SupportRequestsPage() {
     categoryFilter,
     currentAdminId,
     isPartner,
+    updateTicketInUrl,
   ]);
 
   const scheduleSilentRefresh = useCallback(() => {
@@ -681,9 +686,9 @@ export default function SupportRequestsPage() {
   const hasActiveFilters = Boolean(
     searchTerm ||
       statusFilter ||
-      activeOnlyFilter ||
+      (!isPartner && activeOnlyFilter) ||
       categoryFilter ||
-      assigneeFilter !== 'all',
+      (!isPartner && assigneeFilter !== 'all'),
   );
 
   const clearFilters = useCallback(() => {
