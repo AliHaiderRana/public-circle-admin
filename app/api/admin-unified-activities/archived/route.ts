@@ -34,7 +34,37 @@ type ArchivePayload = {
 };
 
 const ARCHIVE_PREFIX = 'admin-activity-archives';
-const S3_FETCH_BATCH_SIZE = 6;
+
+// In-memory cache: avoids re-fetching S3 on every request within the TTL window.
+// Archive files change at most once/day (via cron), so 5 minutes is very safe.
+type CacheEntry = {
+  panelItems: UnifiedActivityRow[];
+  pcItems: UnifiedActivityRow[];
+  cachedAt: number;
+};
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const archiveCache = new Map<string, CacheEntry>();
+
+function getCacheKey(adminEmail: string, dateFrom: string, dateTo: string, source: string, category: string): string {
+  return `${adminEmail}|${dateFrom}|${dateTo}|${source}|${category}`;
+}
+
+function getFromCache(key: string): CacheEntry | null {
+  const entry = archiveCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.cachedAt > CACHE_TTL_MS) {
+    archiveCache.delete(key);
+    return null;
+  }
+  return entry;
+}
+
+function setInCache(key: string, value: Omit<CacheEntry, 'cachedAt'>): void {
+  if (archiveCache.size >= 200) {
+    archiveCache.delete(archiveCache.keys().next().value!);
+  }
+  archiveCache.set(key, { ...value, cachedAt: Date.now() });
+}
 
 function normalizeSource(raw: string): 'all' | 'admin_panel' | 'public_circle' {
   if (raw === 'admin_panel' || raw === 'public_circle') return raw;
@@ -221,22 +251,16 @@ function filterPcItem(
 async function fetchArchivePayloads(
   months: string[],
   fileName: string
-): Promise<ArchivePayload[]> {
-  const payloads: ArchivePayload[] = [];
-
-  for (let i = 0; i < months.length; i += S3_FETCH_BATCH_SIZE) {
-    const batch = months.slice(i, i + S3_FETCH_BATCH_SIZE);
-    const batchPayloads = await Promise.all(
-      batch.map((month) =>
-        downloadJsonFromS3<ArchivePayload>({
-          s3Path: `${ARCHIVE_PREFIX}/${month}/${fileName}`,
-        })
-      )
-    );
-    payloads.push(...batchPayloads);
-  }
-
-  return payloads;
+): Promise<(ArchivePayload | null)[]> {
+  // Fetch all months in parallel — S3 handles 5500+ GET/sec per prefix so this is safe.
+  // downloadJsonFromS3 returns null for missing months (404), handled downstream via `?.items || []`.
+  return Promise.all(
+    months.map((month) =>
+      downloadJsonFromS3<ArchivePayload>({
+        s3Path: `${ARCHIVE_PREFIX}/${month}/${fileName}`,
+      })
+    )
+  );
 }
 
 function sortActivities(
@@ -276,80 +300,93 @@ export async function GET(request: Request) {
       ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS
     );
 
-    let panelItems: UnifiedActivityRow[] = [];
-    let pcItems: UnifiedActivityRow[] = [];
-    const months: string[] = [];
+    // months array for the response metadata (cheap string ops, always computed)
+    const months: string[] = warehouse
+      ? enumerateMonthsInRange(warehouse.dateFrom, warehouse.dateTo)
+      : [];
 
-    if (warehouse) {
-      const warehouseMonths = enumerateMonthsInRange(warehouse.dateFrom, warehouse.dateTo);
-      months.push(...warehouseMonths);
+    // Cache key covers everything that affects which records are returned (sort is excluded
+    // because we sort in-memory after a cache hit, which is negligible cost).
+    const cacheKey = getCacheKey(adminEmail, dateFrom, dateTo, source, category);
+    const cached = getFromCache(cacheKey);
 
-      const [panelPayloads, pcPayloads] = await Promise.all([
-        includePanel
-          ? fetchArchivePayloads(warehouseMonths, 'admin-panel-activities.json')
-          : Promise.resolve([]),
-        includePc
-          ? fetchArchivePayloads(warehouseMonths, 'impersonation-activities.json')
-          : Promise.resolve([]),
-      ]);
+    let panelItems: UnifiedActivityRow[];
+    let pcItems: UnifiedActivityRow[];
 
-      panelItems = panelPayloads
-        .flatMap((payload) => payload?.items || [])
-        .filter((item) =>
-          filterPanelItem(item, {
-            adminEmail,
-            panelCategory,
-            dateFrom: warehouse.dateFrom,
-            dateTo: warehouse.dateTo,
-          })
-        )
-        .map(mapPanelItem);
+    if (cached) {
+      panelItems = cached.panelItems;
+      pcItems = cached.pcItems;
+    } else {
+      panelItems = [];
+      pcItems = [];
 
-      pcItems = pcPayloads
-        .flatMap((payload) => payload?.items || [])
-        .filter((item) =>
-          filterPcItem(item, {
-            adminEmail,
-            pcCategory,
-            dateFrom: warehouse.dateFrom,
-            dateTo: warehouse.dateTo,
-          })
-        )
-        .map(mapPcItem);
+      if (warehouse) {
+        const [panelPayloads, pcPayloads] = await Promise.all([
+          includePanel
+            ? fetchArchivePayloads(months, 'admin-panel-activities.json')
+            : Promise.resolve([]),
+          includePc
+            ? fetchArchivePayloads(months, 'impersonation-activities.json')
+            : Promise.resolve([]),
+        ]);
+
+        panelItems = panelPayloads
+          .flatMap((payload) => payload?.items || [])
+          .filter((item) =>
+            filterPanelItem(item, {
+              adminEmail,
+              panelCategory,
+              dateFrom: warehouse.dateFrom,
+              dateTo: warehouse.dateTo,
+            })
+          )
+          .map(mapPanelItem);
+
+        pcItems = pcPayloads
+          .flatMap((payload) => payload?.items || [])
+          .filter((item) =>
+            filterPcItem(item, {
+              adminEmail,
+              pcCategory,
+              dateFrom: warehouse.dateFrom,
+              dateTo: warehouse.dateTo,
+            })
+          )
+          .map(mapPcItem);
+      }
+
+      if (live) {
+        await dbConnect();
+        const liveResult = await fetchUnifiedAdminActivitiesInRange({
+          AdminActivity,
+          AdminImpersonationActivity,
+          sort,
+          source,
+          adminEmail,
+          dateFrom: live.dateFrom,
+          dateTo: live.dateTo,
+          category,
+          hideNoise: true,
+        });
+
+        if (includePanel) {
+          panelItems = [
+            ...panelItems,
+            ...liveResult.activities.filter((row) => row.source === 'admin_panel'),
+          ];
+        }
+        if (includePc) {
+          pcItems = [
+            ...pcItems,
+            ...liveResult.activities.filter((row) => row.source === 'public_circle'),
+          ];
+        }
+      }
+
+      setInCache(cacheKey, { panelItems, pcItems });
     }
 
-    if (live) {
-      await dbConnect();
-      const liveResult = await fetchUnifiedAdminActivitiesInRange({
-        AdminActivity,
-        AdminImpersonationActivity,
-        sort,
-        source,
-        adminEmail,
-        dateFrom: live.dateFrom,
-        dateTo: live.dateTo,
-        category,
-        hideNoise: true,
-      });
-
-      if (includePanel) {
-        panelItems = [
-          ...panelItems,
-          ...liveResult.activities.filter((row) => row.source === 'admin_panel'),
-        ];
-      }
-      if (includePc) {
-        pcItems = [
-          ...pcItems,
-          ...liveResult.activities.filter((row) => row.source === 'public_circle'),
-        ];
-      }
-    }
-
-    const activities = sortActivities(
-      [...panelItems, ...pcItems],
-      sort
-    );
+    const activities = sortActivities([...panelItems, ...pcItems], sort);
 
     if (summaryOnly) {
       return NextResponse.json({
