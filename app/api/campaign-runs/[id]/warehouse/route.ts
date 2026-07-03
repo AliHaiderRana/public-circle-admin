@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import CampaignRun from '@/lib/models/CampaignRun';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import { isPartnerSession, canPartnerAccessCompany } from '@/lib/partner-access.util';
+import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
 
 export async function GET(
   request: Request,
@@ -40,12 +42,37 @@ export async function GET(
       return NextResponse.json({ error: 'Campaign run not found' }, { status: 404 });
     }
 
+    if (isPartnerSession(session)) {
+      const companyId = String(
+        (campaignRun.company as { _id?: unknown })?._id || campaignRun.company,
+      );
+      if (!(await canPartnerAccessCompany(session, companyId))) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
+
     if (!campaignRun.isDataStoredOnWarehouse) {
       return NextResponse.json({ error: 'Campaign run data is not stored in warehouse' }, { status: 400 });
     }
 
     // For now, return empty data since warehouse endpoint requires server connection
     // In a real implementation, this would fetch from data warehouse
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logPartnerPortalActivity(auditSession, {
+        action: PARTNER_PORTAL_ACTIONS.VIEW_CAMPAIGN_RUN_WAREHOUSE,
+        resourceType: 'campaign_run',
+        resourceId: campaignRunId,
+        details: {
+          campaignRunId,
+          page,
+          limit,
+          filter: filter || undefined,
+        },
+        summary: `Partner viewed warehouse data for campaign run ${campaignRunId}`,
+      });
+    }
+
     return NextResponse.json({
       items: [],
       totalRecords: 0,

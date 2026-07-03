@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { PARTNER_HOME_PATH } from '@/lib/partner-routes.util';
 
 interface AuthContextType {
   user: any;
@@ -84,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = (userData: any) => {
     setUser(userData);
-    router.push('/dashboard');
+    router.push(userData?.isPartner ? PARTNER_HOME_PATH : '/dashboard');
     void checkAuth();
   };
 

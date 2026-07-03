@@ -5,6 +5,10 @@ import User from '@/lib/models/User';
 import CompanyContact from '@/lib/models/CompanyContact';
 import Campaign from '@/lib/models/Campaign';
 import { USER_KIND, CAMPAIGN_STATUS } from '@/lib/constants';
+import { getServerSession } from '@/lib/auth';
+import { canPartnerAccessCompany, isPartnerSession } from '@/lib/partner-access.util';
+import { toAdminAuditSession } from '@/lib/auth';
+import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
 
 const COMPANY_CONTACT_STATUS = {
   ACTIVE: "ACTIVE",
@@ -16,6 +20,11 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const session = await getServerSession();
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const { id } = await params;
     
@@ -37,6 +46,23 @@ export async function GET(
         { error: 'Company not found!' },
         { status: 404 }
       );
+    }
+
+    if (isPartnerSession(session)) {
+      const allowed = await canPartnerAccessCompany(session, id);
+      if (!allowed) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+
+      const auditSession = toAdminAuditSession(session);
+      if (auditSession) {
+        await logPartnerPortalActivity(auditSession, {
+          action: PARTNER_PORTAL_ACTIONS.VIEW_COMPANY,
+          resourceType: 'company',
+          resourceId: id,
+          details: { companyName: company.name },
+        });
+      }
     }
 
     const [

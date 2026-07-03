@@ -58,6 +58,10 @@ const schema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    autoAssignSupportTicketsToReferralUsers: {
+      type: Boolean,
+      default: false,
+    },
     supportAlertEmails: {
       type: [String],
       default: [],

@@ -11,7 +11,11 @@ import { User, Lock, Mail, CheckCircle, AlertCircle, Loader2, Eye, EyeOff } from
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { formatAdminDisplayName } from '@/lib/support-admin.util';
 
+import { useAuth } from '@/context/AuthContext';
+
 export default function ProfilePage() {
+  const { user: authUser } = useAuth();
+  const isPartnerView = Boolean(authUser?.isPartner);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -99,6 +103,41 @@ export default function ProfilePage() {
       setLoadingPassword(false);
     }
   };
+
+  if (isPartnerView) {
+    return (
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Profile</h2>
+          <p className="text-neutral-500 mt-1">
+            Your partner portal account. Update your password in the referral app.
+          </p>
+        </div>
+        <Card className="border-0 shadow-md">
+          <CardHeader>
+            <CardTitle>Account</CardTitle>
+            <CardDescription>Read-only partner session details</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label>Name</Label>
+              <p className="text-sm font-medium mt-1">{name || suggestedName || '—'}</p>
+            </div>
+            <div>
+              <Label>Email</Label>
+              <p className="text-sm font-medium mt-1">{email || '—'}</p>
+            </div>
+            <div>
+              <Label>Role</Label>
+              <p className="text-sm font-medium mt-1">
+                {authUser?.referralRole === 'SALES_PERSON' ? 'Sales Partner' : 'Marketing Partner'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">

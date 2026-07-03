@@ -1,6 +1,8 @@
 "use client";
 
 import ProtectedRoute from "@/components/ProtectedRoute";
+import PartnerRouteGuard from "@/components/PartnerRouteGuard";
+import { BrandLogo, getPartnerPortalSubtitle } from "@/components/BrandLogo";
 import NotificationDropdown from "@/components/NotificationDropdown";
 import { AdminNotificationSoundProvider } from "@/components/AdminNotificationSoundProvider";
 import { useAuth } from "@/context/AuthContext";
@@ -27,6 +29,7 @@ import {
   Languages,
   Info,
   Sparkles,
+  Handshake,
   Inbox,
   Bell,
   MailWarning,
@@ -96,6 +99,12 @@ const sidebarItems: SidebarItem[] = [
     icon: Shield,
     superAdminOnly: true,
   },
+  {
+    name: "Referral Users",
+    href: "/dashboard/third-party-users",
+    icon: Handshake,
+    superAdminOnly: true,
+  },
   { name: "Changelog", href: "/dashboard/changelog", icon: Sparkles },
   { name: "Profile", href: "/dashboard/profile", icon: UserCircle },
   {
@@ -111,6 +120,15 @@ const sidebarItems: SidebarItem[] = [
     superAdminOnly: true,
   },
 ];
+
+const partnerSidebarHrefs = new Set([
+  "/dashboard/companies",
+  "/dashboard/users",
+  "/dashboard/campaigns",
+  "/dashboard/campaign-runs",
+  "/dashboard/support-requests",
+  "/dashboard/profile",
+]);
 
 function isSidebarItemActive(pathname: string, href: string) {
   if (href === "/dashboard") {
@@ -152,6 +170,10 @@ export default function DashboardLayout({
     void leaveSupportChatRoom(activeTicketId);
   }, [isSupportInboxPage]);
 
+  const portalSubtitle = user?.isPartner
+    ? getPartnerPortalSubtitle(user?.referralRole)
+    : "Admin";
+
   return (
     <ProtectedRoute>
       <AdminNotificationSoundProvider>
@@ -159,36 +181,29 @@ export default function DashboardLayout({
       <div className="flex h-screen bg-background text-foreground">
         <aside
           className={cn(
-            "fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 lg:shrink-0",
+            "fixed inset-y-0 left-0 z-40 flex h-screen w-64 min-h-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out lg:static lg:h-full lg:translate-x-0 lg:shrink-0",
             isSidebarOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
-          <div className="hidden border-b border-sidebar-border p-6 lg:block">
-            <div className="flex items-center gap-3">
-              <img
-                src="/logo-single.png"
-                alt="Public Circle Admin"
-                className="h-8 w-8 rounded-lg object-cover"
-              />
-              <h1 className="text-lg font-semibold text-sidebar-foreground">
-                Public Circle Admin
-              </h1>
-            </div>
+          <div className="hidden border-b border-sidebar-border px-5 py-5 lg:block">
+            <BrandLogo
+              subtitle={portalSubtitle}
+              subtitleClassName="text-sidebar-foreground/55"
+            />
           </div>
-          <div className="border-b border-sidebar-border p-4 lg:hidden">
-            <div className="flex items-center gap-3">
-              <img
-                src="/logo-single.png"
-                alt="Public Circle Admin"
-                className="h-6 w-6 rounded-lg object-cover"
-              />
-              <h1 className="text-base font-semibold">Public Circle Admin</h1>
-            </div>
+          <div className="border-b border-sidebar-border px-4 py-4 lg:hidden">
+            <BrandLogo
+              subtitle={portalSubtitle}
+              subtitleClassName="text-sidebar-foreground/55"
+            />
           </div>
 
-          <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+          <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
             {sidebarItems
               .filter((item) => {
+                if (user?.isPartner) {
+                  return partnerSidebarHrefs.has(item.href);
+                }
                 if (item.superAdminOnly && !user?.isSuperAdmin) return false;
                 return true;
               })
@@ -223,9 +238,9 @@ export default function DashboardLayout({
               })}
           </nav>
 
-          <div className="border-t border-sidebar-border p-4">
-            <div className="mb-3 flex items-center gap-3 px-2">
-              <div className="flex size-9 items-center justify-center rounded-full bg-sidebar-accent text-sidebar-accent-foreground">
+          <div className="mt-auto shrink-0 border-t border-sidebar-border px-4 pb-3 pt-3">
+            <div className="mb-2 flex items-center gap-3 px-1">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-sidebar-accent-foreground">
                 <Users className="size-4" />
               </div>
               <div className="min-w-0 flex-1">
@@ -234,16 +249,20 @@ export default function DashboardLayout({
                 </p>
                 <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
                 <p className="text-xs text-muted-foreground">
-                  {user?.isSuperAdmin ? "Super Admin" : "Admin"}
+                  {user?.isPartner
+                    ? getPartnerPortalSubtitle(user?.referralRole)
+                    : user?.isSuperAdmin
+                      ? "Super Admin"
+                      : "Admin"}
                 </p>
               </div>
             </div>
             <Button
               variant="ghost"
-              className="w-full justify-start gap-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              className="relative z-10 h-9 w-full justify-start gap-3 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
               onClick={logout}
             >
-              <LogOut className="size-4" />
+              <LogOut className="size-4 shrink-0" />
               Logout
             </Button>
           </div>
@@ -274,18 +293,17 @@ export default function DashboardLayout({
                   )}
                   <span className="sr-only">Toggle menu</span>
                 </Button>
-                <div className="flex items-center gap-2 lg:hidden">
-                  <img
-                    src="/logo-single.png"
-                    alt="Public Circle Admin"
-                    className="size-6 rounded-lg object-cover"
-                  />
-                  <span className="text-sm font-semibold">
-                    Public Circle Admin
-                  </span>
+                <div className="lg:hidden">
+                  <BrandLogo variant="icon" iconClassName="h-7 w-7" />
                 </div>
               </div>
-              <NotificationDropdown />
+              {!user?.isPartner && <NotificationDropdown />}
+              {user?.isPartner && (
+                <NotificationDropdown
+                  partnerMode
+                  partnerReferralUserId={user?.referralUserId || user?.id}
+                />
+              )}
             </div>
           </header>
 
@@ -303,7 +321,7 @@ export default function DashboardLayout({
                 isSupportInboxPage && "flex min-h-0 flex-1 flex-col overflow-hidden",
               )}
             >
-              {children}
+              <PartnerRouteGuard>{children}</PartnerRouteGuard>
             </div>
           </main>
         </div>

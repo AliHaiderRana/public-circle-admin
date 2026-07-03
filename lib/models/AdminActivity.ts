@@ -11,6 +11,8 @@ const schema = new mongoose.Schema(
     adminEmail: { type: String, required: true, index: true },
     adminName: { type: String, default: '' },
     actorWasSuperAdmin: { type: Boolean, default: false },
+    actorIsPartner: { type: Boolean, default: false, index: true },
+    referralRole: { type: String, default: null },
     action: { type: String, required: true, index: true },
     category: { type: String, required: true, index: true },
     resourceType: { type: String, default: null },

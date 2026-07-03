@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
+import { denyPartnerWrite } from '@/lib/partner-access.util';
 import { internalApiFetch } from '@/lib/internal-api.server';
 
 type RouteParams = { params: Promise<{ companyId: string; messageId: string }> };
@@ -9,6 +10,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const writeDenied = denyPartnerWrite(session);
+  if (writeDenied) return writeDenied;
 
   const { companyId, messageId } = await params;
   const body = await request.json();
@@ -49,6 +53,9 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const writeDenied = denyPartnerWrite(session);
+  if (writeDenied) return writeDenied;
 
   const { companyId, messageId } = await params;
 

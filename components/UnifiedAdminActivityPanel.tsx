@@ -242,12 +242,24 @@ export default function UnifiedAdminActivityPanel({
                 {UNIFIED_SOURCE_LABELS[row.source]}
               </Badge>
               <Badge variant="outline">{row.categoryLabel}</Badge>
-              {row.actorWasSuperAdmin && !adminEmailFilter && (
+              {row.actorIsPartner ? (
+                <Badge variant="outline" className="font-normal border-amber-300/80 text-amber-900 dark:text-amber-200">
+                  {row.referralRole === 'SALES_PERSON'
+                    ? 'Sales partner'
+                    : row.referralRole === 'MARKETING_AFFILIATE'
+                      ? 'Marketing partner'
+                      : 'Support partner'}
+                </Badge>
+              ) : row.actorWasSuperAdmin && !adminEmailFilter ? (
                 <Badge className="gap-1">
                   <Shield className="h-3 w-3" />
                   Super admin
                 </Badge>
-              )}
+              ) : !adminEmailFilter && row.source === 'admin_panel' ? (
+                <Badge variant="secondary" className="font-normal">
+                  Support admin
+                </Badge>
+              ) : null}
               {!adminEmailFilter && (
                 <span className="text-muted-foreground">
                   {row.adminName?.trim()

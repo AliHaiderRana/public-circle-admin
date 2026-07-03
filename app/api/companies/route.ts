@@ -4,6 +4,11 @@ import Company from '@/lib/models/Company';
 import Campaign from '@/lib/models/Campaign';
 import CompanyContact from '@/lib/models/CompanyContact';
 import { getServerSession } from '@/lib/auth';
+import {
+  isPartnerSession,
+  partnerCompaniesFilter,
+  sanitizeCompanyForPartner,
+} from '@/lib/partner-access.util';
 
 type CompanyDoc = {
   _id: { toString(): string };
@@ -103,6 +108,10 @@ export async function GET(request: Request) {
 
     const query: Record<string, unknown> = {};
 
+    if (isPartnerSession(session)) {
+      Object.assign(query, await partnerCompaniesFilter(session));
+    }
+
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -124,9 +133,9 @@ export async function GET(request: Request) {
 
     const [totalCount, distinctCountries, distinctSizes, distinctCities] = await Promise.all([
       Company.countDocuments(query),
-      Company.distinct('country'),
-      Company.distinct('companySize'),
-      Company.distinct('city'),
+      Company.distinct('country', query),
+      Company.distinct('companySize', query),
+      Company.distinct('city', query),
     ]);
 
     let companies;
@@ -145,8 +154,12 @@ export async function GET(request: Request) {
       companies = await attachCounts(pageCompanies as CompanyDoc[]);
     }
 
+    const responseCompanies = isPartnerSession(session)
+      ? companies.map((company) => sanitizeCompanyForPartner(company as Record<string, unknown>))
+      : companies;
+
     return NextResponse.json({
-      companies,
+      companies: responseCompanies,
       pagination: {
         page,
         limit,

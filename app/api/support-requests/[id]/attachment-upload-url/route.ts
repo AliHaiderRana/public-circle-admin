@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import SupportRequest from '@/lib/models/SupportRequest';
 import { getServerSession } from '@/lib/auth';
+import { canSessionAccessTicket } from '@/lib/partner-access.util';
 import { internalApiFetch } from '@/lib/internal-api.server';
-import { canAdminAccessTicket } from '@/lib/support-access.util';
 
 export async function POST(
   request: Request,
@@ -19,11 +19,11 @@ export async function POST(
 
   try {
     await dbConnect();
-    const ticket = await SupportRequest.findById(id).select('assignedAdminId').lean();
+    const ticket = await SupportRequest.findById(id).select('assignedAdminId companyId').lean();
     if (!ticket) {
       return NextResponse.json({ error: 'Support request not found' }, { status: 404 });
     }
-    if (!canAdminAccessTicket(session, ticket)) {
+    if (!(await canSessionAccessTicket(session, ticket))) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

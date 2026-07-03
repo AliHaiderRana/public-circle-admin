@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
+import dbConnect from '@/lib/db';
+import SupportRequest from '@/lib/models/SupportRequest';
 import { getServerSession } from '@/lib/auth';
 import { internalApiFetch } from '@/lib/internal-api.server';
+import { canSessionAccessTicket } from '@/lib/partner-access.util';
 import {
   markSupportTicketSeenInAdminDb,
   normalizeSupportRequestId,
@@ -19,6 +22,17 @@ export async function POST(request: Request) {
 
     if (!supportRequestId) {
       return NextResponse.json({ error: 'supportRequestId is required' }, { status: 400 });
+    }
+
+    await dbConnect();
+    const ticket = await SupportRequest.findById(supportRequestId)
+      .select('assignedAdminId companyId')
+      .lean();
+    if (!ticket) {
+      return NextResponse.json({ error: 'Support request not found' }, { status: 404 });
+    }
+    if (!(await canSessionAccessTicket(session, ticket))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const [result] = await Promise.all([

@@ -55,6 +55,8 @@ export async function GET(request: Request) {
       adminEmail: row.adminEmail,
       adminName: row.adminName,
       actorWasSuperAdmin: row.actorWasSuperAdmin,
+      actorIsPartner: row.actorIsPartner,
+      referralRole: row.referralRole,
       action: row.action,
       category: row.category,
       resourceType: row.resourceType,

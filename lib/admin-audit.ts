@@ -229,6 +229,26 @@ export function buildAuditSummary(
         ? `Permanently deleted support ticket${sq}${counts}${companySuffix(d.companyName)}`
         : `Permanently deleted support chat${sq}${counts}${companySuffix(d.companyName)}`;
     }
+    case ADMIN_AUDIT_ACTION.SUPPORT_MESSAGE_REPLY: {
+      const subject = typeof d.subject === 'string' ? d.subject.trim() : '';
+      const sq = subject ? ` “${subject}”` : '';
+      const companyPart = companySuffix(d.companyName);
+      const actor =
+        typeof d.actorName === 'string' && d.actorName.trim()
+          ? d.actorName.trim()
+          : d.actorIsPartner
+            ? 'Support partner'
+            : 'Support admin';
+      if (d.internal) {
+        return `${actor} added an internal note on support request${sq}${companyPart}`;
+      }
+      const preview =
+        typeof d.messagePreview === 'string' && d.messagePreview.trim()
+          ? ` — “${d.messagePreview.trim().slice(0, 80)}${d.messagePreview.trim().length > 80 ? '…' : ''}”`
+          : '';
+      const attachmentSuffix = d.hasAttachment ? ' (with attachment)' : '';
+      return `${actor} replied to customer on support request${sq}${preview}${attachmentSuffix}${companyPart}`;
+    }
     case ADMIN_AUDIT_ACTION.SUPPORT_REQUEST_UPDATE: {
       const subject = typeof d.subject === 'string' ? d.subject.trim() : '';
       const categoryLabel =
@@ -378,8 +398,15 @@ export function buildAuditSummary(
         typeof d.companyName === 'string' ? d.companyName.trim() : '';
       const userLabel = name && email ? `${name} (${email})` : email || name || String(d.userId ?? 'user');
       const companySuffix = companyName ? ` at “${companyName}”` : '';
-      return `Started “Login as user” for ${userLabel}${companySuffix}`;
+      const prefix = d.referralRole ? 'Partner ' : '';
+      return `${prefix}started “Login as user” for ${userLabel}${companySuffix}`;
     }
+    case ADMIN_AUDIT_ACTION.PARTNER_PORTAL_LOGIN:
+      return 'Partner signed in to customer portal';
+    case ADMIN_AUDIT_ACTION.PARTNER_PORTAL_VIEW_COMPANY:
+      return typeof d.companyName === 'string' && d.companyName.trim()
+        ? `Partner viewed company “${d.companyName.trim()}”`
+        : 'Partner viewed company details';
     default:
       return action.replace(/\./g, ' ').replace(/_/g, ' ');
   }
@@ -409,6 +436,8 @@ export async function logAdminActivity(
       adminEmail: session.email,
       adminName: session.name ?? '',
       actorWasSuperAdmin: Boolean(session.isSuperAdmin),
+      actorIsPartner: Boolean(session.isPartner),
+      referralRole: session.referralRole ?? null,
       action: entry.action,
       category: entry.category,
       resourceType: entry.resourceType ?? null,
