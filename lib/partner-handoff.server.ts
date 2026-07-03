@@ -19,7 +19,7 @@ export type PartnerHandoffResult = {
 };
 
 export async function completePartnerHandoff(handoffToken: string): Promise<PartnerHandoffResult> {
-  const claims = verifyPartnerHandoffToken(handoffToken);
+  const claims = await verifyPartnerHandoffToken(handoffToken);
   const partner = await getReferralPartnerById(claims.referralUserId);
 
   if (!partner || partner.emailAddress.toLowerCase() !== claims.email.toLowerCase()) {
@@ -54,7 +54,7 @@ export async function completePartnerHandoff(handoffToken: string): Promise<Part
   if (auditSession) {
     await logPartnerPortalActivity(auditSession, {
       action: PARTNER_PORTAL_ACTIONS.LOGIN,
-      summary: 'Partner signed in via referral app handoff',
+      summary: 'Partner signed in via Venndii Referral App handoff',
     });
   }
 

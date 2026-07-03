@@ -40,7 +40,7 @@ export async function GET() {
   if (error) return error;
 
   try {
-    const response = await fetch(`${getBackendApiUrl()}/system/dlq`, {
+    const response = await fetch(`${await getBackendApiUrl()}/system/dlq`, {
       headers: await getBackendAuthHeaders(),
       cache: 'no-store',
     });

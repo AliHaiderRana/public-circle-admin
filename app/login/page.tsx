@@ -35,7 +35,7 @@ function LoginPageContent() {
   useEffect(() => {
     if (searchParams.get("error") === "partner_handoff") {
       setError(
-        "Your partner sign-in link expired or is invalid. Open Support & Customers again from the referral app.",
+        "Your partner sign-in link expired or is invalid. Open Support & Customers again from the Venndii Referral App.",
       );
     }
   }, [searchParams]);
@@ -112,7 +112,10 @@ function LoginPageContent() {
           <Card className="border shadow-sm">
             <CardHeader className="space-y-1 pb-4">
               <CardTitle className="text-lg">Sign in</CardTitle>
-              <CardDescription>Enter your email and password.</CardDescription>
+              <CardDescription>
+                For internal admins only. Referral partners must use Support &amp; Customers in the
+                Venndii Referral App.
+              </CardDescription>
             </CardHeader>
 
             <CardContent>

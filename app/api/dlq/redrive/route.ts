@@ -12,7 +12,7 @@ export async function POST() {
   if (error) return error;
 
   try {
-    const response = await fetch(`${getBackendApiUrl()}/system/dlq/redrive`, {
+    const response = await fetch(`${await getBackendApiUrl()}/system/dlq/redrive`, {
       method: 'POST',
       headers: await getBackendAuthHeaders({
         'Content-Type': 'application/json',

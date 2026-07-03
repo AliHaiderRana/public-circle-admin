@@ -1,10 +1,7 @@
 import jwt from 'jsonwebtoken';
+import { getPartnerPortalSsoSecret } from '@/lib/integration-settings.service';
 
 export const PARTNER_SSO_PURPOSE = 'partner_admin_handoff';
-
-export function getPartnerSsoSecret(): string {
-  return process.env.PARTNER_PORTAL_SSO_SECRET?.trim() || '';
-}
 
 export type PartnerHandoffClaims = {
   purpose: string;
@@ -13,8 +10,8 @@ export type PartnerHandoffClaims = {
   role: string;
 };
 
-export function verifyPartnerHandoffToken(token: string): PartnerHandoffClaims {
-  const secret = getPartnerSsoSecret();
+export async function verifyPartnerHandoffToken(token: string): Promise<PartnerHandoffClaims> {
+  const secret = await getPartnerPortalSsoSecret();
   if (!secret) {
     throw new Error('Partner SSO is not configured');
   }

@@ -183,9 +183,9 @@ export default function ThirdPartyUsersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Referral app users</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Venndii Referral App users</h2>
         <p className="text-muted-foreground mt-1 max-w-3xl">
-          Third-party users synced from the referral app. Manage portal access and open audit
+          Third-party users synced from the Venndii Referral App. Manage portal access and open audit
           trails for sales and marketing partners.
         </p>
       </div>

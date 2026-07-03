@@ -110,7 +110,7 @@ export default function ProfilePage() {
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Profile</h2>
           <p className="text-neutral-500 mt-1">
-            Your partner portal account. Update your password in the referral app.
+            Your partner portal account. Update your password in the Venndii Referral App.
           </p>
         </div>
         <Card className="border-0 shadow-md">

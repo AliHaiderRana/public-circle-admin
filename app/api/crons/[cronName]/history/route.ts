@@ -24,7 +24,7 @@ export async function GET(
     }
 
     const response = await fetch(
-      `${getBackendApiUrl()}/crons/${cronName}/history?page=${page}&limit=${limit}`,
+      `${await getBackendApiUrl()}/crons/${cronName}/history?page=${page}&limit=${limit}`,
       {
         headers: await getBackendAuthHeaders(),
       }

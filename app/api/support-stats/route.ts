@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import SupportRequest from '@/lib/models/SupportRequest';
 import { getServerSession } from '@/lib/auth';
-import { internalApiFetch } from '@/lib/internal-api.server';
 import { SUPPORT_REQUEST_STATUS } from '@/lib/constants';
 import { assignedTicketsFilterForAdmin } from '@/lib/support-access.util';
 import {
@@ -100,21 +99,30 @@ export async function GET() {
   }
 
   try {
-    const response = await internalApiFetch('/support-chat/stats', {
-      timeoutMs: 12000,
-    });
-    const payload = await response.json().catch(() => ({}));
+    await dbConnect();
+    const activeStatuses = [
+      SUPPORT_REQUEST_STATUS.OPEN,
+      SUPPORT_REQUEST_STATUS.IN_PROGRESS,
+    ];
+    const [chatAgg, openSupportRequests, unassignedTickets] = await Promise.all([
+      SupportRequest.aggregate([
+        { $group: { _id: null, unreadChatMessages: { $sum: '$unreadByAdmin' } } },
+      ]),
+      SupportRequest.countDocuments({ status: { $in: activeStatuses } }),
+      SupportRequest.countDocuments({
+        status: { $in: activeStatuses },
+        $or: [{ assignedAdminId: null }, { assignedAdminId: { $exists: false } }],
+      }),
+    ]);
 
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: payload?.errorMessage || payload?.error || 'Failed to fetch support stats' },
-        { status: response.status },
-      );
-    }
-
-    const data = payload?.data ?? payload;
     const pendingCustomerRequests = await getPendingCustomerRequestsCount();
-    const merged = { ...data, pendingCustomerRequests };
+    const merged = {
+      unreadChatMessages: chatAgg[0]?.unreadChatMessages ?? 0,
+      openSupportRequests,
+      unassignedTickets,
+      pendingCustomerRequests,
+    };
+
     setSupportStatsCache({
       data: merged,
       expiresAt: now + CACHE_TTL_MS,

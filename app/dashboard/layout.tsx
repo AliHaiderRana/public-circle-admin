@@ -29,6 +29,7 @@ import {
   Languages,
   Info,
   Sparkles,
+  Plug,
   Handshake,
   Inbox,
   Bell,
@@ -111,6 +112,12 @@ const sidebarItems: SidebarItem[] = [
     name: "System Notifications",
     href: "/dashboard/system-notifications",
     icon: Bell,
+    superAdminOnly: true,
+  },
+  {
+    name: "Integrations",
+    href: "/dashboard/integrations",
+    icon: Plug,
     superAdminOnly: true,
   },
   {

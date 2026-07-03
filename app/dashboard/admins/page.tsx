@@ -144,7 +144,7 @@ export default function AdminsPage() {
           <h2 className="text-3xl font-bold tracking-tight">Admin Users</h2>
           <p className="text-neutral-500">
             Create and remove administrator accounts, and review audit trails for support staff.
-            Referral app users are managed on the{' '}
+            Venndii Referral App users are managed on the{' '}
             <Link href="/dashboard/third-party-users" className="text-primary underline-offset-4 hover:underline">
               Referral Users
             </Link>{' '}

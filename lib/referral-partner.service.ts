@@ -127,32 +127,35 @@ async function getDownlineReferralUserIds(
   return downline;
 }
 
-export async function validateReferralPartnerCredentials(
+export async function findReferralPartnerAccountByEmail(
   email: string,
-  password: string,
 ): Promise<ReferralUserDoc | null> {
   const conn = await getReferralDbConnection();
   const User = getReferralUserModel(conn);
 
   const normalizedEmail = email.trim();
+  if (!normalizedEmail) {
+    return null;
+  }
+
   const user = (await User.findOne({
-    emailAddress: { $regex: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+    emailAddress: {
+      $regex: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+    },
     status: { $nin: ['DELETED', 'DISABLED'] },
+    role: { $in: [...PARTNER_ROLES] },
   }).lean()) as ReferralUserDoc | null;
 
-  if (!user) {
-    return null;
-  }
+  return user;
+}
 
-  if (!user.password) {
-    return null;
-  }
+export async function validateReferralPartnerCredentials(
+  email: string,
+  password: string,
+): Promise<ReferralUserDoc | null> {
+  const user = await findReferralPartnerAccountByEmail(email);
 
-  if (user.password !== password) {
-    return null;
-  }
-
-  if (!PARTNER_ROLES.has(user.role)) {
+  if (!user || !user.password || user.password !== password) {
     return null;
   }
 

@@ -20,13 +20,7 @@ import { formatAssignmentHistoryForAdmin } from '@/lib/support-assignment.util';
 import { canSessionAccessTicket, denyPartnerSupportTicketPatch } from '@/lib/partner-access.util';
 import { getReferralPartnersForCompany } from '@/lib/referral-partner.service';
 import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
-
-const SERVER_API_URL =
-  process.env.SERVER_API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:3001';
-const INTERNAL_API_KEY =
-  process.env.INTERNAL_API_KEY || 'internal_admin_cron_key_2024';
+import { getBackendApiUrl, getBackendInternalApiKey } from '@/lib/backend-api.server';
 
 export async function GET(
   _request: Request,
@@ -217,11 +211,11 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const response = await fetch(`${SERVER_API_URL}/internal/support-requests/${id}`, {
+    const response = await fetch(`${await getBackendApiUrl()}/internal/support-requests/${id}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        'X-Internal-API-Key': INTERNAL_API_KEY,
+        'X-Internal-API-Key': await getBackendInternalApiKey(),
       },
       body: JSON.stringify({
         ...(status ? { status } : {}),

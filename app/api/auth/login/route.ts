@@ -4,9 +4,7 @@ import AdminUser from '@/lib/models/AdminUser';
 import jwt from 'jsonwebtoken';
 import { serialize } from 'cookie';
 import { ADMIN_JWT_SECRET } from '@/lib/admin-jwt';
-import { validateReferralPartnerCredentials } from '@/lib/referral-partner.service';
-import { toAdminAuditSession } from '@/lib/auth';
-import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
+import { findReferralPartnerAccountByEmail } from '@/lib/referral-partner.service';
 
 function issueAuthCookie(token: string) {
   return serialize('admin_token', token, {
@@ -55,74 +53,34 @@ export async function POST(request: Request) {
       return response;
     }
 
-    let partnerUser = null;
     try {
-      partnerUser = await validateReferralPartnerCredentials(email, password);
+      const referralPartner = await findReferralPartnerAccountByEmail(email);
+      if (referralPartner) {
+        return NextResponse.json(
+          {
+            error:
+              'Referral partners cannot sign in on this page. Open Support & Customers from the Venndii Referral App.',
+          },
+          { status: 403 },
+        );
+      }
     } catch (partnerError) {
-      console.error('[auth/login] partner credential lookup failed:', partnerError);
+      console.error('[auth/login] referral partner lookup failed:', partnerError);
       if (
         partnerError instanceof Error &&
         partnerError.message.includes('REFERRAL_APP_MONGODB_URL')
       ) {
-        return NextResponse.json({ error: 'Partner login is unavailable' }, { status: 503 });
+        return NextResponse.json({ error: 'Login is temporarily unavailable' }, { status: 503 });
       }
       return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 
-    if (!partnerUser) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
-    }
-
-    const partnerName =
-      [partnerUser.firstName, partnerUser.lastName].filter(Boolean).join(' ') ||
-      partnerUser.emailAddress;
-
-    const token = jwt.sign(
-      {
-        userId: String(partnerUser._id),
-        email: partnerUser.emailAddress,
-        name: partnerName,
-        isSuperAdmin: false,
-        isPartner: true,
-        referralUserId: String(partnerUser._id),
-        referralRole: partnerUser.role,
-      },
-      ADMIN_JWT_SECRET,
-      { expiresIn: '1d' },
-    );
-
-    const response = NextResponse.json({
-      message: 'Login successful',
-      user: {
-        id: String(partnerUser._id),
-        email: partnerUser.emailAddress,
-        name: partnerName,
-        isSuperAdmin: false,
-        isPartner: true,
-        referralUserId: String(partnerUser._id),
-        referralRole: partnerUser.role,
-      },
-    });
-    response.headers.append('Set-Cookie', issueAuthCookie(token));
-
-    const auditSession = toAdminAuditSession({
-      userId: String(partnerUser._id),
-      email: partnerUser.emailAddress,
-      name: partnerName,
-      isSuperAdmin: false,
-      isPartner: true,
-      referralRole: partnerUser.role,
-    });
-    if (auditSession) {
-      await logPartnerPortalActivity(auditSession, {
-        action: PARTNER_PORTAL_ACTIONS.LOGIN,
-        summary: 'Partner signed in to customer portal',
-      });
-    }
-
-    return response;
+    return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
   } catch (error) {
     console.error('[auth/login] failed:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
+
+
+
