@@ -35,7 +35,7 @@ export type IntegrationDocSection = {
   id: string;
   title: string;
   summary: string;
-  relatedUrlField?: 'adminPortalUrl' | 'serverBaseUrl' | 'referralAppUrl';
+  relatedUrlField?: 'adminPortalUrl' | 'serverBaseUrl';
   prerequisites: string[];
   configRequirements: ConfigRequirement[];
   flow: IntegrationFlowStep[];
@@ -45,8 +45,6 @@ export type IntegrationDocSection = {
 export type IntegrationDocsInput = {
   adminPortalUrl?: string;
   serverBaseUrl?: string;
-  referralAppUrl?: string;
-  referralApiUrl?: string;
   adminPortal?: {
     enabled?: boolean;
     referralEnabled?: boolean;
@@ -66,8 +64,6 @@ export type IntegrationDocsResponse = {
   bases: {
     adminPortalUrl: string;
     serverBaseUrl: string;
-    referralAppUrl: string;
-    referralApiUrl: string;
   };
   sections: IntegrationDocSection[];
 };
@@ -83,6 +79,8 @@ export function getIntegrationCallerLabel(caller: IntegrationCaller): string {
   return CALLER_LABELS[caller];
 }
 
+const REFERRAL_API_ORIGIN_PLACEHOLDER = '{referral-api-origin}';
+
 function trimUrl(value: string | undefined, fallback: string): string {
   const trimmed = value?.trim();
   return trimmed ? trimmed.replace(/\/$/, '') : fallback;
@@ -91,7 +89,9 @@ function trimUrl(value: string | undefined, fallback: string): string {
 function joinPath(base: string, path: string): string {
   if (path.startsWith('http')) return path;
   const normalized = path.startsWith('/') ? path : `/${path}`;
-  return `${base.replace(/\/$/, '')}${normalized}`;
+  const origin = base.trim().replace(/\/$/, '');
+  if (!origin) return normalized;
+  return `${origin}${normalized}`;
 }
 
 function api(
@@ -125,8 +125,7 @@ export function buildIntegrationDocs(input: IntegrationDocsInput = {}): Integrat
     input.serverBaseUrl ?? input.publicCircleServer?.serverBaseUrl,
     'https://api.example.com',
   );
-  const referralAppUrl = trimUrl(input.referralAppUrl, 'http://localhost:3030');
-  const referralApiUrl = trimUrl(input.referralApiUrl, 'http://localhost:4000/api/v1');
+  const referralApiDocBase = REFERRAL_API_ORIGIN_PLACEHOLDER;
 
   const partnerEnabled = Boolean(input.adminPortal?.enabled);
   const referralHandoffEnabled = Boolean(input.adminPortal?.referralEnabled);
@@ -221,7 +220,7 @@ export function buildIntegrationDocs(input: IntegrationDocsInput = {}): Integrat
           'handoff-mint',
           'venndii-referral-app',
           'POST',
-          referralApiUrl,
+          referralApiDocBase,
           '/auth/admin-portal-handoff',
           'Bearer referral access token (partner role)',
           'Create a 120-second SSO handoff JWT for the logged-in partner.',
@@ -251,7 +250,7 @@ export function buildIntegrationDocs(input: IntegrationDocsInput = {}): Integrat
           'integrations-read',
           'venndii-referral-be',
           'GET',
-          referralApiUrl,
+          referralApiDocBase,
           '/integrations',
           'Super-admin referral JWT',
           'Read shared Integration-Settings (including SSO secret) from referral app UI.',
@@ -316,7 +315,7 @@ export function buildIntegrationDocs(input: IntegrationDocsInput = {}): Integrat
           'partner-stats-fe',
           'venndii-referral-app',
           'GET',
-          referralApiUrl,
+          referralApiDocBase,
           '/auth/partner-support-stats',
           'Bearer referral access token (partner role)',
           'Unread chat messages and open support request counts for sidebar badges.',
@@ -490,8 +489,6 @@ export function buildIntegrationDocs(input: IntegrationDocsInput = {}): Integrat
     bases: {
       adminPortalUrl,
       serverBaseUrl,
-      referralAppUrl,
-      referralApiUrl,
     },
     sections: sections.map((section) => ({
       ...section,

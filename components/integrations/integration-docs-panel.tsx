@@ -272,7 +272,7 @@ export function IntegrationDocsPanel({
           Integration reference
         </CardTitle>
         <CardDescription>
-          Live documentation for the URLs and toggles above. Paths update as you type.
+          API reference for the admin and server integrations configured above.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -284,14 +284,6 @@ export function IntegrationDocsPanel({
           <div>
             <p className="text-muted-foreground">Public Circle server base</p>
             <code className="break-all">{docs.bases.serverBaseUrl}</code>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Referral app (default)</p>
-            <code className="break-all">{docs.bases.referralAppUrl}</code>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Referral API (default)</p>
-            <code className="break-all">{docs.bases.referralApiUrl}</code>
           </div>
         </div>
 

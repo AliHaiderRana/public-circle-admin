@@ -27,14 +27,6 @@ export async function GET(request: Request) {
     const input: IntegrationDocsInput = {
       adminPortalUrl: pickQueryUrl(searchParams, 'adminPortalUrl'),
       serverBaseUrl: pickQueryUrl(searchParams, 'serverBaseUrl'),
-      referralAppUrl:
-        pickQueryUrl(searchParams, 'referralAppUrl') ||
-        process.env.REFERRAL_APP_WEB_URL ||
-        process.env.NEXT_PUBLIC_REFERRAL_APP_URL,
-      referralApiUrl:
-        pickQueryUrl(searchParams, 'referralApiUrl') ||
-        process.env.REFERRAL_APP_API_URL ||
-        process.env.NEXT_PUBLIC_REFERRAL_APP_API_URL,
       adminPortal: {
         enabled: searchParams.has('partnerEnabled')
           ? searchParams.get('partnerEnabled') === 'true'

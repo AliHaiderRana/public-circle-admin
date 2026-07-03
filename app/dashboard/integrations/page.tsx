@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -71,15 +71,102 @@ function randomApiKey(): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+function isServerSettingsDirty(
+  current: PublicCircleServerSettings,
+  saved: PublicCircleServerSettings,
+): boolean {
+  return (
+    current.enabled !== saved.enabled ||
+    current.serverBaseUrl.trim() !== saved.serverBaseUrl.trim() ||
+    current.internalApiKey !== saved.internalApiKey
+  );
+}
+
+function isPartnerPortalDirty(
+  current: AdminPortalSettings,
+  saved: AdminPortalSettings,
+): boolean {
+  return (
+    current.enabled !== saved.enabled ||
+    current.adminPortalUrl.trim() !== saved.adminPortalUrl.trim() ||
+    current.partnerPortalSsoSecret !== saved.partnerPortalSsoSecret ||
+    current.referralBackendApiKey !== saved.referralBackendApiKey
+  );
+}
+
+function IntegrationSaveFooter({
+  dirty,
+  saving,
+  message,
+  onSave,
+  saveLabel,
+}: {
+  dirty: boolean;
+  saving: boolean;
+  message: string | null;
+  onSave: () => void;
+  saveLabel: string;
+}) {
+  const statusText =
+    message && !dirty
+      ? message
+      : dirty
+        ? 'Unsaved changes — save to apply.'
+        : 'No pending changes.';
+
+  return (
+    <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+      <p
+        className={`text-sm ${
+          message?.includes('Failed') && !dirty
+            ? 'text-destructive'
+            : dirty
+              ? 'font-medium text-amber-700 dark:text-amber-400'
+              : 'text-muted-foreground'
+        }`}
+      >
+        {statusText}
+      </p>
+      <Button
+        onClick={onSave}
+        disabled={!dirty || saving}
+        variant={dirty ? 'default' : 'secondary'}
+        size="sm"
+        className="sm:ml-auto"
+      >
+        {saving ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : dirty ? (
+          <span className="mr-2 size-2 shrink-0 animate-pulse rounded-full bg-amber-300" />
+        ) : null}
+        {saveLabel}
+      </Button>
+    </div>
+  );
+}
+
 export default function IntegrationsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [settings, setSettings] = useState<IntegrationSettings>(emptySettings());
+  const [savedSettings, setSavedSettings] = useState<IntegrationSettings>(emptySettings());
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [savingServer, setSavingServer] = useState(false);
+  const [savingPartner, setSavingPartner] = useState(false);
+  const [serverSaveMessage, setServerSaveMessage] = useState<string | null>(null);
+  const [partnerSaveMessage, setPartnerSaveMessage] = useState<string | null>(null);
   const [toggleConfirm, setToggleConfirm] = useState<ToggleConfirm | null>(null);
   const [regenerateKeyConfirm, setRegenerateKeyConfirm] = useState(false);
+
+  const serverDirty = useMemo(
+    () => isServerSettingsDirty(settings.publicCircleServer, savedSettings.publicCircleServer),
+    [settings.publicCircleServer, savedSettings.publicCircleServer],
+  );
+
+  const partnerDirty = useMemo(
+    () => isPartnerPortalDirty(settings.adminPortal, savedSettings.adminPortal),
+    [settings.adminPortal, savedSettings.adminPortal],
+  );
 
   useEffect(() => {
     if (!authLoading && user && !user.isSuperAdmin) {
@@ -107,13 +194,15 @@ export default function IntegrationsPage() {
       const res = await fetch('/api/integrations');
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load integrations');
-      setSettings({
+      const loaded: IntegrationSettings = {
         adminPortal: { ...emptySettings().adminPortal, ...(data.adminPortal ?? {}) },
         publicCircleServer: {
           ...emptySettings().publicCircleServer,
           ...(data.publicCircleServer ?? {}),
         },
-      });
+      };
+      setSettings(loaded);
+      setSavedSettings(loaded);
     } catch (error) {
       console.error(error);
     } finally {
@@ -121,30 +210,70 @@ export default function IntegrationsPage() {
     }
   }
 
-  async function handleSave() {
-    setSaving(true);
-    setSaveMessage(null);
+  async function handleSaveServer() {
+    setSavingServer(true);
+    setServerSaveMessage(null);
     try {
       const res = await fetch('/api/integrations', {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
+        body: JSON.stringify({
+          scope: 'publicCircleServer',
+          ...settings.publicCircleServer,
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to save integrations');
-      setSettings({
-        adminPortal: { ...emptySettings().adminPortal, ...(data.adminPortal ?? {}) },
-        publicCircleServer: {
-          ...emptySettings().publicCircleServer,
-          ...(data.publicCircleServer ?? {}),
-        },
-      });
-      setSaveMessage('Integration settings saved. Partner access updates after save.');
+      if (!res.ok) throw new Error(data.error || 'Failed to save server integration');
+      const nextServer = {
+        ...emptySettings().publicCircleServer,
+        ...(data.publicCircleServer ?? {}),
+      };
+      setSettings((prev) => ({
+        ...prev,
+        publicCircleServer: nextServer,
+      }));
+      setSavedSettings((prev) => ({
+        ...prev,
+        publicCircleServer: nextServer,
+      }));
+      setServerSaveMessage('Server integration settings saved.');
     } catch (error) {
       console.error(error);
-      setSaveMessage('Failed to save integration settings.');
+      setServerSaveMessage('Failed to save server integration settings.');
     } finally {
-      setSaving(false);
+      setSavingServer(false);
+    }
+  }
+
+  async function handleSavePartner() {
+    setSavingPartner(true);
+    setPartnerSaveMessage(null);
+    try {
+      const res = await fetch('/api/integrations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scope: 'adminPortal',
+          ...settings.adminPortal,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save partner portal settings');
+      const nextPartner = { ...emptySettings().adminPortal, ...(data.adminPortal ?? {}) };
+      setSettings((prev) => ({
+        ...prev,
+        adminPortal: nextPartner,
+      }));
+      setSavedSettings((prev) => ({
+        ...prev,
+        adminPortal: nextPartner,
+      }));
+      setPartnerSaveMessage('Partner portal settings saved. Partner access updates after save.');
+    } catch (error) {
+      console.error(error);
+      setPartnerSaveMessage('Failed to save partner portal settings.');
+    } finally {
+      setSavingPartner(false);
     }
   }
 
@@ -205,8 +334,8 @@ export default function IntegrationsPage() {
           Integrations
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Configure integration settings and review the live API reference below. Changes apply after
-          you click Save integrations.
+          Each integration has its own save button. Toggle changes are not live until you save that
+          section.
         </p>
       </div>
 
@@ -266,6 +395,13 @@ export default function IntegrationsPage() {
                   }))
                 }
                 helperText="Sent as X-Internal-API-Key when admin calls the Public Circle server."
+              />
+              <IntegrationSaveFooter
+                dirty={serverDirty}
+                saving={savingServer}
+                message={serverSaveMessage}
+                onSave={handleSaveServer}
+                saveLabel="Save server settings"
               />
             </CardContent>
           </Card>
@@ -359,26 +495,15 @@ export default function IntegrationsPage() {
                   Regenerate integration key
                 </Button>
               </div>
+              <IntegrationSaveFooter
+                dirty={partnerDirty}
+                saving={savingPartner}
+                message={partnerSaveMessage}
+                onSave={handleSavePartner}
+                saveLabel="Save partner portal settings"
+              />
             </CardContent>
           </Card>
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            {saveMessage ? (
-              <p
-                className={`text-sm ${saveMessage.includes('Failed') ? 'text-destructive' : 'text-muted-foreground'}`}
-              >
-                {saveMessage}
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Toggle changes are not live until you save.
-              </p>
-            )}
-            <Button onClick={handleSave} disabled={saving} className="sm:ml-auto">
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Save integrations
-            </Button>
-          </div>
 
           <IntegrationDocsPanel
             adminPortalUrl={partner.adminPortalUrl}
