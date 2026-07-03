@@ -98,6 +98,7 @@ export function BrandLogo({
 }
 
 export function getPartnerPortalSubtitle(referralRole?: string): string {
+  if (referralRole === 'ADMIN') return 'Referral admin';
   if (referralRole === 'SALES_PERSON') return 'Sales partner';
   if (referralRole === 'MARKETING_AFFILIATE') return 'Marketing partner';
   return 'Partner workspace';

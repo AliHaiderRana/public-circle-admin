@@ -130,7 +130,11 @@ export default function ProfilePage() {
             <div>
               <Label>Role</Label>
               <p className="text-sm font-medium mt-1">
-                {authUser?.referralRole === 'SALES_PERSON' ? 'Sales Partner' : 'Marketing Partner'}
+                {authUser?.referralRole === 'ADMIN'
+                  ? 'Referral Admin'
+                  : authUser?.referralRole === 'SALES_PERSON'
+                    ? 'Sales Partner'
+                    : 'Marketing Partner'}
               </p>
             </div>
           </CardContent>

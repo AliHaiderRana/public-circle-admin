@@ -21,6 +21,7 @@ export type AssignablePartnerOption = {
 };
 
 export function formatReferralPartnerRole(role: string) {
+  if (role === 'ADMIN') return 'Referral admin';
   return role === 'SALES_PERSON' ? 'Sales person' : 'Marketing affiliate';
 }
 

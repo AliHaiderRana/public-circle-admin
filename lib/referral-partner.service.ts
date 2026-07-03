@@ -3,8 +3,9 @@ import dbConnect from '@/lib/db';
 import Company from '@/lib/models/Company';
 import ThirdPartyUser, { THIRD_PARTY_PORTAL_ACCESS } from '@/lib/models/ThirdPartyUser';
 import { getReferralDbConnection } from '@/lib/referral-db';
+import { REFERRAL_PORTAL_ROLES, type ReferralPortalRole } from '@/lib/referral-portal-roles.util';
 
-const PARTNER_ROLES = new Set(['SALES_PERSON', 'MARKETING_AFFILIATE']);
+const PARTNER_ROLES = new Set<string>(REFERRAL_PORTAL_ROLES);
 const ACTIVE_REFERRAL_CODE_STATUS = 'ACTIVE';
 
 type ReferralUserDoc = {
@@ -17,7 +18,21 @@ type ReferralUserDoc = {
   status: string;
 };
 
-async function hasActivePortalAccess(referralUserId: string): Promise<boolean> {
+async function hasActivePortalAccess(
+  referralUserId: string,
+  role?: string,
+): Promise<boolean> {
+  if (role === 'ADMIN') {
+    const conn = await getReferralDbConnection();
+    const User = getReferralUserModel(conn);
+    const user = (await User.findById(referralUserId)
+      .select('step status role')
+      .lean()) as { step?: number; status?: string; role?: string } | null;
+    if (!user || user.role !== 'ADMIN') return false;
+    if (user.status === 'DELETED' || user.status === 'DISABLED') return false;
+    return Number(user.step ?? 0) >= 4;
+  }
+
   await dbConnect();
   const thirdParty = await ThirdPartyUser.findOne({
     referralUserId: new mongoose.Types.ObjectId(referralUserId),
@@ -159,7 +174,7 @@ export async function validateReferralPartnerCredentials(
     return null;
   }
 
-  const accessAllowed = await hasActivePortalAccess(String(user._id));
+  const accessAllowed = await hasActivePortalAccess(String(user._id), user.role);
   if (!accessAllowed) {
     return null;
   }
@@ -170,11 +185,6 @@ export async function validateReferralPartnerCredentials(
 export async function getReferralPartnerById(
   referralUserId: string,
 ): Promise<ReferralUserDoc | null> {
-  const accessAllowed = await hasActivePortalAccess(referralUserId);
-  if (!accessAllowed) {
-    return null;
-  }
-
   const conn = await getReferralDbConnection();
   const User = getReferralUserModel(conn);
   const user = (await User.findOne({
@@ -182,6 +192,14 @@ export async function getReferralPartnerById(
     status: { $nin: ['DELETED', 'DISABLED'] },
     role: { $in: Array.from(PARTNER_ROLES) },
   }).lean()) as ReferralUserDoc | null;
+
+  if (!user) return null;
+
+  const accessAllowed = await hasActivePortalAccess(referralUserId, user.role);
+  if (!accessAllowed) {
+    return null;
+  }
+
   return user;
 }
 
@@ -198,12 +216,24 @@ export async function getPartnerStripeCustomerIds({
   const PurchaseHistory = getPurchaseHistoryModel(conn);
   const User = getReferralUserModel(conn);
 
-  const referralUserIds = [referralUserId];
-  if (referralRole === 'SALES_PERSON') {
+  const referralUserIdSet = new Set<string>([referralUserId]);
+  if (referralRole === 'ADMIN') {
+    const allUsers = await User.find({
+      status: { $nin: ['DELETED', 'DISABLED'] },
+    })
+      .select('_id')
+      .lean();
+    for (const row of allUsers) {
+      referralUserIdSet.add(String(row._id));
+    }
+  } else if (referralRole === 'SALES_PERSON') {
     const downline = await getDownlineReferralUserIds(conn, referralUserId);
-    referralUserIds.push(...downline);
+    for (const id of downline) {
+      referralUserIdSet.add(id);
+    }
   }
 
+  const referralUserIds = Array.from(referralUserIdSet);
   const objectIds = referralUserIds.map((id) => new mongoose.Types.ObjectId(id));
 
   const [linkedCustomers, referralCodes, affiliateUser] = await Promise.all([
@@ -267,7 +297,7 @@ export type CompanyReferralPartner = {
   id: string;
   email: string;
   name: string;
-  role: 'SALES_PERSON' | 'MARKETING_AFFILIATE';
+  role: ReferralPortalRole;
 };
 
 function formatReferralPartnerUser(user: ReferralUserDoc): CompanyReferralPartner {
@@ -275,7 +305,7 @@ function formatReferralPartnerUser(user: ReferralUserDoc): CompanyReferralPartne
     id: String(user._id),
     email: user.emailAddress,
     name: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.emailAddress,
-    role: user.role as 'SALES_PERSON' | 'MARKETING_AFFILIATE',
+    role: user.role as CompanyReferralPartner['role'],
   };
 }
 
@@ -384,7 +414,7 @@ export async function getReferralPartnersByCompanyIds(
 
   const partners = (await User.find({
     _id: { $in: [...allPartnerUserIds].map((id) => new mongoose.Types.ObjectId(id)) },
-    role: { $in: ['SALES_PERSON', 'MARKETING_AFFILIATE'] },
+    role: { $in: [...REFERRAL_PORTAL_ROLES] },
     status: { $nin: ['DELETED', 'DISABLED'] },
   }).lean()) as ReferralUserDoc[];
 
