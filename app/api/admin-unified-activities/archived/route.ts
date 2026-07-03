@@ -3,7 +3,7 @@ import dbConnect from '@/lib/db';
 import AdminActivity from '@/lib/models/AdminActivity';
 import AdminImpersonationActivity from '@/lib/models/AdminImpersonationActivity';
 import { requireSuperAdminSession } from '@/lib/auth';
-import { downloadJsonFromS3 } from '@/lib/s3-json';
+import { downloadJsonFromS3, listS3CommonPrefixes } from '@/lib/s3-json';
 import {
   ADMIN_AUDIT_CATEGORY_LABELS,
   ADMIN_AUDIT_CATEGORY,
@@ -279,6 +279,18 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
+
+    // listMonths=1: return the archive months that actually exist in S3,
+    // so the client can fetch month-by-month and show real progress.
+    if (searchParams.get('listMonths') === '1') {
+      const prefixes = await listS3CommonPrefixes({ prefix: `${ARCHIVE_PREFIX}/` });
+      const availableMonths = prefixes
+        .map((p) => p.match(/(\d{4}-\d{2})\/$/)?.[1])
+        .filter((m): m is string => Boolean(m))
+        .sort();
+      return NextResponse.json({ months: availableMonths });
+    }
+
     const { dateFrom, dateTo, error: rangeError } = resolveWarehouseDateRange(searchParams);
     if (rangeError) {
       return NextResponse.json({ error: rangeError }, { status: 400 });

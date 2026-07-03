@@ -1,5 +1,6 @@
 import {
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -128,6 +129,44 @@ export async function downloadJsonFromS3<T = unknown>({
     if (isNotFoundError(err)) return null;
     throw err;
   }
+}
+
+/** Folder-like common prefixes directly under `prefix` (e.g. archive month folders). */
+export async function listS3CommonPrefixes({
+  prefix,
+  delimiter = '/',
+}: {
+  prefix: string;
+  delimiter?: string;
+}): Promise<string[]> {
+  const bucket = getBucket();
+  const client = createS3Client();
+
+  if (!bucket || !client) {
+    throw new Error('S3 is not configured (S3BUCKET, AWS credentials)');
+  }
+
+  const prefixes: string[] = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const response = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        Delimiter: delimiter,
+        ContinuationToken: continuationToken,
+      })
+    );
+    for (const item of response.CommonPrefixes ?? []) {
+      if (item.Prefix) prefixes.push(item.Prefix);
+    }
+    continuationToken = response.IsTruncated
+      ? response.NextContinuationToken
+      : undefined;
+  } while (continuationToken);
+
+  return prefixes;
 }
 
 export async function uploadJsonToS3WithRetry({

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -49,11 +49,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Progress } from '@/components/ui/progress';
 import {
   ArrowLeft,
   Building2,
   ChevronDown,
   ChevronRight,
+  Database,
   Filter,
   LayoutDashboard,
   RefreshCw,
@@ -431,11 +433,14 @@ export default function AdminActivityGroupedPanel({
   const [sessionActions, setSessionActions] = useState<Record<string, UnifiedActivityRow[]>>({});
   const [loadingSessions, setLoadingSessions] = useState<Set<string>>(new Set());
 
-  const [archivedRows, setArchivedRows] = useState<UnifiedActivityRow[]>([]);
-  const [archivedLoading, setArchivedLoading] = useState(false);
-  const [archivedError, setArchivedError] = useState<string | null>(null);
-  const [archivedPage, setArchivedPage] = useState(1);
-  const [archivedLimit, setArchivedLimit] = useState(25);
+  const [warehouseOpen, setWarehouseOpen] = useState(false);
+  const [warehouseRows, setWarehouseRows] = useState<UnifiedActivityRow[]>([]);
+  const [warehouseLoading, setWarehouseLoading] = useState(false);
+  const [warehouseError, setWarehouseError] = useState<string | null>(null);
+  const [warehouseProgress, setWarehouseProgress] = useState({ loaded: 0, total: 0 });
+  const [warehousePage, setWarehousePage] = useState(1);
+  const [warehouseLimit, setWarehouseLimit] = useState(25);
+  const warehouseFetchToken = useRef<{ cancelled: boolean } | null>(null);
 
   const categoryOptions = useMemo(() => buildUnifiedCategoryOptions(source), [source]);
 
@@ -465,12 +470,19 @@ export default function AdminActivityGroupedPanel({
     category !== 'all' ||
     sort !== 'desc';
 
-  // No dateFrom = show all history (S3 archive + live). Explicit recent dateFrom = live grouped view.
-  const needsArchive = useMemo(
+  // First day still in the live DB — everything before this lives only in the S3 warehouse.
+  const liveStartDate = useMemo(
+    () => getLiveActivityStartDate(ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS),
+    []
+  );
+  const liveStartDateLabel = useMemo(
     () =>
-      !dateFrom ||
-      dateFrom < getLiveActivityStartDate(ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS),
-    [dateFrom]
+      new Date(`${liveStartDate}T00:00:00`).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }),
+    [liveStartDate]
   );
 
   const buildBaseParams = useCallback(() => {
@@ -516,29 +528,66 @@ export default function AdminActivityGroupedPanel({
     }
   }, [buildBaseParams, page, limit, refreshKey]);
 
-  const fetchArchivedData = useCallback(async () => {
-    setArchivedLoading(true);
-    setArchivedError(null);
+  // Warehouse modal: list existing archive months, then fetch them in small batches
+  // so we can show real progress and render rows as they arrive.
+  const loadWarehouse = useCallback(async () => {
+    const token = { cancelled: false };
+    warehouseFetchToken.current = token;
+    setWarehouseLoading(true);
+    setWarehouseError(null);
+    setWarehouseRows([]);
+    setWarehousePage(1);
+    setWarehouseProgress({ loaded: 0, total: 0 });
+
     try {
-      const today = new Date().toISOString().slice(0, 10);
-      const params = new URLSearchParams({ source, category, sort });
-      if (dateFrom) params.set('dateFrom', dateFrom);
-      // Always pass dateTo so splitWarehouseAndLiveRanges includes the live DB range.
-      // Without this, the archived route's default caps dateTo at archiveEnd and skips recent data.
-      params.set('dateTo', dateTo || today);
-      if (adminEmail) params.set('adminEmail', adminEmail);
-      const res = await fetch(`/api/admin-unified-activities/archived?${params}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || 'Failed to load activity');
-      setArchivedRows(json.activities ?? []);
-      setArchivedPage(1);
+      const listRes = await fetch('/api/admin-unified-activities/archived?listMonths=1');
+      const listJson = await listRes.json();
+      if (!listRes.ok) throw new Error(listJson?.error || 'Failed to list archive months');
+      if (token.cancelled) return;
+
+      const months: string[] = [...(listJson.months ?? [])].sort();
+      if (sort === 'desc') months.reverse();
+      setWarehouseProgress({ loaded: 0, total: months.length });
+
+      const BATCH = 4;
+      const collected: UnifiedActivityRow[] = [];
+      for (let i = 0; i < months.length; i += BATCH) {
+        if (token.cancelled) return;
+        const batch = months.slice(i, i + BATCH);
+        const results = await Promise.all(
+          batch.map(async (month) => {
+            const params = new URLSearchParams({ month, source, category, sort });
+            if (adminEmail) params.set('adminEmail', adminEmail);
+            const res = await fetch(`/api/admin-unified-activities/archived?${params}`);
+            const json = await res.json();
+            if (!res.ok) throw new Error(json?.error || `Failed to load archive for ${month}`);
+            return (json.activities ?? []) as UnifiedActivityRow[];
+          })
+        );
+        if (token.cancelled) return;
+        collected.push(...results.flat());
+        setWarehouseRows([...collected]);
+        setWarehouseProgress({ loaded: Math.min(i + BATCH, months.length), total: months.length });
+      }
     } catch (err) {
-      setArchivedRows([]);
-      setArchivedError(err instanceof Error ? err.message : 'Failed to load activity');
+      if (!token.cancelled) {
+        setWarehouseError(err instanceof Error ? err.message : 'Failed to load warehouse data');
+      }
     } finally {
-      setArchivedLoading(false);
+      if (!token.cancelled) setWarehouseLoading(false);
     }
-  }, [source, category, sort, dateFrom, dateTo, adminEmail]);
+  }, [source, category, sort, adminEmail]);
+
+  const openWarehouseModal = useCallback(() => {
+    setWarehouseOpen(true);
+    void loadWarehouse();
+  }, [loadWarehouse]);
+
+  const closeWarehouseModal = useCallback(() => {
+    if (warehouseFetchToken.current) warehouseFetchToken.current.cancelled = true;
+    setWarehouseOpen(false);
+    setWarehouseLoading(false);
+  }, []);
 
   useEffect(() => {
     setPage(1);
@@ -553,28 +602,18 @@ export default function AdminActivityGroupedPanel({
   }, [category, categoryOptions]);
 
   useEffect(() => {
-    if (needsArchive) return;
     void fetchTimeline();
-  }, [needsArchive, fetchTimeline]);
+  }, [fetchTimeline]);
 
-  useEffect(() => {
-    if (!needsArchive) {
-      setArchivedRows([]);
-      setArchivedError(null);
-      return;
-    }
-    void fetchArchivedData();
-  }, [needsArchive, fetchArchivedData]);
-
-  const archivedTotalPages = useMemo(
-    () => Math.max(1, Math.ceil(archivedRows.length / archivedLimit)),
-    [archivedRows.length, archivedLimit]
+  const warehouseTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(warehouseRows.length / warehouseLimit)),
+    [warehouseRows.length, warehouseLimit]
   );
 
-  const paginatedArchivedRows = useMemo(() => {
-    const start = (archivedPage - 1) * archivedLimit;
-    return archivedRows.slice(start, start + archivedLimit);
-  }, [archivedRows, archivedPage, archivedLimit]);
+  const paginatedWarehouseRows = useMemo(() => {
+    const start = (warehousePage - 1) * warehouseLimit;
+    return warehouseRows.slice(start, start + warehouseLimit);
+  }, [warehouseRows, warehousePage, warehouseLimit]);
 
   const loadSessionActions = useCallback(
     async (sessionId: string) => {
@@ -638,16 +677,10 @@ export default function AdminActivityGroupedPanel({
     setSort('desc');
   };
 
-  const isLoading = needsArchive ? archivedLoading : loading;
-
   const handleRefresh = () => {
     setSessionModal(null);
     setSessionActions({});
-    if (needsArchive) {
-      void fetchArchivedData();
-    } else {
-      setRefreshKey((k) => k + 1);
-    }
+    setRefreshKey((k) => k + 1);
   };
 
   const modalSessionId = sessionModal?.sessionId ?? '';
@@ -734,9 +767,9 @@ export default function AdminActivityGroupedPanel({
           size="sm"
           className="h-8 gap-1.5 shrink-0"
           onClick={handleRefresh}
-          disabled={isLoading}
+          disabled={loading}
         >
-          <RefreshCw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
+          <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
           Refresh
         </Button>
       </div>
@@ -881,79 +914,20 @@ export default function AdminActivityGroupedPanel({
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <CardTitle className="text-base font-semibold">Activity timeline</CardTitle>
             <CardDescription className="text-xs m-0">
-              {isLoading
-                ? 'Loading…'
-                : needsArchive
-                  ? `${archivedRows.length.toLocaleString()} entries`
-                  : `${total.toLocaleString()} entries`}
+              {loading ? 'Loading…' : `${total.toLocaleString()} entries`}
             </CardDescription>
-            {!needsArchive && (
-              <div className="hidden sm:flex items-center gap-3 text-sm border-l pl-4">
-                <CompactStat label="Panel" value={panelTotal} loading={loading} />
-                <CompactStat label="Sessions" value={sessionTotal} loading={loading} />
-                <CompactStat label="PC" value={pcActionTotal} loading={loading} />
-              </div>
-            )}
+            <div className="hidden sm:flex items-center gap-3 text-sm border-l pl-4">
+              <CompactStat label="Panel" value={panelTotal} loading={loading} />
+              <CompactStat label="Sessions" value={sessionTotal} loading={loading} />
+              <CompactStat label="PC" value={pcActionTotal} loading={loading} />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
             <ActivityTableHeader />
             <TableBody>
-              {needsArchive ? (
-                archivedLoading ? (
-                  Array.from({ length: 8 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell colSpan={5} className="py-3">
-                        <Skeleton className="h-12 w-full" />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : archivedError ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="py-10">
-                      <div className="flex flex-col items-center justify-center text-center gap-3">
-                        <p className="text-sm font-medium text-destructive">{archivedError}</p>
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => void fetchArchivedData()}
-                          disabled={archivedLoading}
-                        >
-                          Retry
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : archivedRows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="py-10">
-                      <div className="flex flex-col items-center justify-center text-center gap-2">
-                        <ScrollText className="h-10 w-10 text-muted-foreground/50" />
-                        <p className="text-sm font-medium">No activity found</p>
-                        <p className="text-xs text-muted-foreground max-w-sm">
-                          {hasActiveFilters
-                            ? 'Try clearing filters or widening the date range.'
-                            : 'This admin has not recorded any actions yet.'}
-                        </p>
-                        {hasActiveFilters && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="mt-2 h-8"
-                            onClick={clearFilters}
-                          >
-                            Clear filters
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginatedArchivedRows.map((row) => renderActivityRow(row))
-                )
-              ) : loading ? (
+              {loading ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <TableRow key={i}>
                     <TableCell colSpan={5} className="py-3">
@@ -1051,39 +1025,37 @@ export default function AdminActivityGroupedPanel({
             </TableBody>
           </Table>
 
-          {(!needsArchive || archivedRows.length > 0) && (
-            <>
-              <Separator />
-              <div className="px-4 py-3">
-                {needsArchive ? (
-                  <AdminActivityPagination
-                    page={archivedPage}
-                    totalPages={archivedTotalPages}
-                    total={archivedRows.length}
-                    limit={archivedLimit}
-                    loading={archivedLoading}
-                    compact={false}
-                    onPageChange={setArchivedPage}
-                    onLimitChange={(next) => {
-                      setArchivedLimit(next);
-                      setArchivedPage(1);
-                    }}
-                  />
-                ) : (
-                  <AdminActivityPagination
-                    page={page}
-                    totalPages={totalPages}
-                    total={total}
-                    limit={limit}
-                    loading={loading}
-                    compact={false}
-                    onPageChange={setPage}
-                    onLimitChange={setLimit}
-                  />
-                )}
-              </div>
-            </>
-          )}
+          <Separator />
+          <div className="px-4 py-3">
+            <AdminActivityPagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              limit={limit}
+              loading={loading}
+              compact={false}
+              onPageChange={setPage}
+              onLimitChange={setLimit}
+            />
+          </div>
+          <div className="border-t bg-muted/30 px-4 py-2.5 rounded-b-xl">
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <Database className="h-3.5 w-3.5 shrink-0" />
+                Showing activity since {liveStartDateLabel}. Older records are stored in the data
+                warehouse.
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1.5 text-xs"
+                onClick={openWarehouseModal}
+              >
+                Load older activity
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -1145,6 +1117,113 @@ export default function AdminActivityGroupedPanel({
               </TableBody>
             </Table>
           </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={warehouseOpen}
+        onOpenChange={(open) => {
+          if (!open) closeWarehouseModal();
+        }}
+      >
+        <DialogContent className="flex max-h-[min(90vh,900px)] w-[min(96vw,1100px)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
+          <DialogHeader className="space-y-3 border-b px-6 py-4 pr-14 text-left">
+            <DialogTitle className="flex items-center gap-2">
+              <Database className="h-4 w-4 text-muted-foreground" />
+              Older activity (data warehouse)
+            </DialogTitle>
+            <DialogDescription>
+              All archived activity before {liveStartDateLabel}, loaded from the data warehouse.
+              Current source and category filters are applied.
+            </DialogDescription>
+            {warehouseLoading && (
+              <div className="space-y-1.5">
+                <Progress
+                  value={
+                    warehouseProgress.total > 0
+                      ? (warehouseProgress.loaded / warehouseProgress.total) * 100
+                      : undefined
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  {warehouseProgress.total > 0
+                    ? `Loading archive… ${warehouseProgress.loaded} / ${warehouseProgress.total} months · ${warehouseRows.length.toLocaleString()} records so far`
+                    : 'Finding archive months…'}
+                </p>
+              </div>
+            )}
+            {!warehouseLoading && !warehouseError && (
+              <p className="text-xs text-muted-foreground">
+                {warehouseRows.length.toLocaleString()} record{warehouseRows.length === 1 ? '' : 's'} found
+              </p>
+            )}
+          </DialogHeader>
+
+          <ScrollArea className="h-[min(60vh,640px)]">
+            <Table>
+              <ActivityTableHeader />
+              <TableBody>
+                {warehouseError ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-10">
+                      <div className="flex flex-col items-center justify-center text-center gap-3">
+                        <p className="text-sm font-medium text-destructive">{warehouseError}</p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => void loadWarehouse()}
+                          disabled={warehouseLoading}
+                        >
+                          Retry
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : warehouseRows.length === 0 && warehouseLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell colSpan={5} className="py-3">
+                        <Skeleton className="h-12 w-full" />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : warehouseRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-12">
+                      <div className="flex flex-col items-center justify-center text-center gap-2">
+                        <Database className="h-10 w-10 text-muted-foreground/50" />
+                        <p className="text-sm font-medium">No archived activity found</p>
+                        <p className="text-xs text-muted-foreground max-w-sm">
+                          Nothing in the data warehouse matches the current source and category
+                          filters for this admin.
+                        </p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedWarehouseRows.map((row) => renderActivityRow(row))
+                )}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+
+          {warehouseRows.length > 0 && (
+            <div className="border-t px-4 py-3">
+              <AdminActivityPagination
+                page={warehousePage}
+                totalPages={warehouseTotalPages}
+                total={warehouseRows.length}
+                limit={warehouseLimit}
+                loading={false}
+                compact={false}
+                onPageChange={setWarehousePage}
+                onLimitChange={(next) => {
+                  setWarehouseLimit(next);
+                  setWarehousePage(1);
+                }}
+              />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
