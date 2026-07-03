@@ -2,10 +2,12 @@ import { getReferralDbConnection } from '@/lib/referral-db';
 
 export type AdminPortalIntegration = {
   enabled: boolean;
+  referralEnabled: boolean;
   adminPortalUrl: string;
   partnerPortalSsoSecret: string;
   partnerSidebarLabel: string;
   partnerSidebarEnabled: boolean;
+  referralBackendApiKey: string;
 };
 
 export type PublicCircleServerIntegration = {
@@ -28,10 +30,12 @@ export function emptyIntegrationSettings(): IntegrationSettings {
   return {
     adminPortal: {
       enabled: false,
+      referralEnabled: false,
       adminPortalUrl: '',
       partnerPortalSsoSecret: '',
       partnerSidebarLabel: 'Support & Customers',
       partnerSidebarEnabled: true,
+      referralBackendApiKey: '',
     },
     publicCircleServer: {
       enabled: false,
@@ -52,6 +56,10 @@ function normalizeSettings(doc: {
   return {
     adminPortal: {
       enabled: adminPortal.enabled ?? defaults.adminPortal.enabled,
+      referralEnabled:
+        adminPortal.referralEnabled ??
+        adminPortal.enabled ??
+        defaults.adminPortal.referralEnabled,
       adminPortalUrl: adminPortal.adminPortalUrl?.trim() ?? defaults.adminPortal.adminPortalUrl,
       partnerPortalSsoSecret:
         adminPortal.partnerPortalSsoSecret?.trim() ?? defaults.adminPortal.partnerPortalSsoSecret,
@@ -59,6 +67,8 @@ function normalizeSettings(doc: {
         adminPortal.partnerSidebarLabel?.trim() ?? defaults.adminPortal.partnerSidebarLabel,
       partnerSidebarEnabled:
         adminPortal.partnerSidebarEnabled ?? defaults.adminPortal.partnerSidebarEnabled,
+      referralBackendApiKey:
+        adminPortal.referralBackendApiKey?.trim() ?? defaults.adminPortal.referralBackendApiKey,
     },
     publicCircleServer: {
       enabled: publicCircleServer.enabled ?? defaults.publicCircleServer.enabled,

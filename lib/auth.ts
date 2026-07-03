@@ -7,6 +7,7 @@ import type { AdminAuditSession } from '@/lib/admin-audit.constants';
 import { ADMIN_JWT_SECRET } from '@/lib/admin-jwt';
 import { isPartnerSession } from '@/lib/partner-access.util';
 import { getReferralPartnerById } from '@/lib/referral-partner.service';
+import { isPartnerHandoffEnabled } from '@/lib/partner-handoff-settings.server';
 
 function readBearerToken(request?: Request): string | null {
   if (!request) return null;
@@ -27,6 +28,10 @@ export async function getServerSession(request?: Request) {
     const decoded = jwt.verify(token, ADMIN_JWT_SECRET) as any;
 
     if (decoded.isPartner && decoded.referralUserId) {
+      if (!(await isPartnerHandoffEnabled())) {
+        return null;
+      }
+
       const partner = await getReferralPartnerById(String(decoded.referralUserId));
       if (!partner) {
         return null;

@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { ADMIN_JWT_SECRET } from '@/lib/admin-jwt';
 import { verifyPartnerHandoffToken } from '@/lib/partner-sso.util';
 import { getReferralPartnerById } from '@/lib/referral-partner.service';
+import { assertPartnerHandoffEnabled } from '@/lib/partner-handoff-settings.server';
 import { toAdminAuditSession } from '@/lib/auth';
 import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
 
@@ -19,6 +20,8 @@ export type PartnerHandoffResult = {
 };
 
 export async function completePartnerHandoff(handoffToken: string): Promise<PartnerHandoffResult> {
+  await assertPartnerHandoffEnabled();
+
   const claims = await verifyPartnerHandoffToken(handoffToken);
   const partner = await getReferralPartnerById(claims.referralUserId);
 

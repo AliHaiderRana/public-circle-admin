@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import dbConnect from '@/lib/db';
 import AppConfig from '@/lib/models/AppConfig';
 import { clearServerSecretsCache } from '@/lib/server-secrets.server';
@@ -10,17 +11,42 @@ import {
   getIntegrationSettings,
 } from '@/lib/integration-settings.service';
 
-function normalizeAdminPortal(
+function resolveReferralBackendApiKey(
+  incoming: string | undefined,
+  existing: string | undefined,
+): string {
+  const fromPayload = incoming?.trim();
+  if (fromPayload) return fromPayload;
+
+  const fromDb = existing?.trim();
+  if (fromDb) return fromDb;
+
+  const fromEnv = process.env.REFERRAL_BACKEND_API_KEY?.trim();
+  if (fromEnv) return fromEnv;
+
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function normalizeAdminManagedPortal(
   value: Partial<AdminPortalIntegration> | undefined,
+  existing: AdminPortalIntegration,
 ): AdminPortalIntegration {
   const defaults = emptyIntegrationSettings().adminPortal;
+
   return {
-    enabled: value?.enabled ?? defaults.enabled,
-    adminPortalUrl: value?.adminPortalUrl?.trim() ?? defaults.adminPortalUrl,
+    enabled: value?.enabled ?? existing.enabled ?? defaults.enabled,
+    referralEnabled: existing.referralEnabled ?? defaults.referralEnabled,
+    adminPortalUrl: value?.adminPortalUrl?.trim() ?? existing.adminPortalUrl ?? defaults.adminPortalUrl,
     partnerPortalSsoSecret:
-      value?.partnerPortalSsoSecret?.trim() ?? defaults.partnerPortalSsoSecret,
-    partnerSidebarLabel: value?.partnerSidebarLabel?.trim() ?? defaults.partnerSidebarLabel,
-    partnerSidebarEnabled: value?.partnerSidebarEnabled ?? defaults.partnerSidebarEnabled,
+      value?.partnerPortalSsoSecret?.trim() ||
+      existing.partnerPortalSsoSecret ||
+      defaults.partnerPortalSsoSecret,
+    partnerSidebarLabel: existing.partnerSidebarLabel ?? defaults.partnerSidebarLabel,
+    partnerSidebarEnabled: existing.partnerSidebarEnabled ?? defaults.partnerSidebarEnabled,
+    referralBackendApiKey: resolveReferralBackendApiKey(
+      value?.referralBackendApiKey,
+      existing.referralBackendApiKey,
+    ),
   };
 }
 
@@ -37,8 +63,9 @@ function normalizePublicCircleServer(
 
 async function writeIntegrationSettings(settings: IntegrationSettings): Promise<IntegrationSettings> {
   const conn = await import('@/lib/referral-db').then((m) => m.getReferralDbConnection());
+  const current = await getIntegrationSettings();
   const normalized: IntegrationSettings = {
-    adminPortal: normalizeAdminPortal(settings.adminPortal),
+    adminPortal: normalizeAdminManagedPortal(settings.adminPortal, current.adminPortal),
     publicCircleServer: normalizePublicCircleServer(settings.publicCircleServer),
   };
 
@@ -99,8 +126,8 @@ export async function savePublicCircleServerIntegration(
 export async function saveAdminPortalIntegration(
   adminPortal: AdminPortalIntegration,
 ): Promise<IntegrationSettings> {
-  const normalized = normalizeAdminPortal(adminPortal);
   const current = await getIntegrationSettings();
+  const normalized = normalizeAdminManagedPortal(adminPortal, current.adminPortal);
 
   return writeIntegrationSettings({
     adminPortal: normalized,
@@ -111,8 +138,9 @@ export async function saveAdminPortalIntegration(
 export async function saveManagedIntegrationSettings(
   settings: IntegrationSettings,
 ): Promise<IntegrationSettings> {
+  const current = await getIntegrationSettings();
   const normalized: IntegrationSettings = {
-    adminPortal: normalizeAdminPortal(settings.adminPortal),
+    adminPortal: normalizeAdminManagedPortal(settings.adminPortal, current.adminPortal),
     publicCircleServer: normalizePublicCircleServer(settings.publicCircleServer),
   };
 

@@ -295,6 +295,17 @@ export async function partnerCompaniesFilter(
   };
 }
 
+export async function partnerTicketsFilterForReferralUser(
+  referralUserId: string,
+  referralRole = 'MARKETING_AFFILIATE',
+): Promise<Record<string, unknown>> {
+  return partnerTicketsFilter({
+    isPartner: true,
+    referralUserId,
+    referralRole,
+  });
+}
+
 export async function partnerTicketsFilter(
   session: AdminSessionLike,
 ): Promise<Record<string, unknown>> {
