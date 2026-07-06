@@ -21,7 +21,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { IntegrationDocsPanel } from '@/components/integrations/integration-docs-panel';
+import { PartnerSocketEventsPanel } from '@/components/integrations/partner-socket-events-panel';
 import { SecretInput } from '@/components/integrations/secret-input';
+import {
+  mergePartnerSocketEvents,
+  type PartnerSocketEvent,
+} from '@/lib/partner-socket-events.catalog';
 
 type AdminPortalSettings = {
   enabled: boolean;
@@ -31,6 +36,10 @@ type AdminPortalSettings = {
   partnerSidebarLabel: string;
   partnerSidebarEnabled: boolean;
   referralBackendApiKey: string;
+  partnerRealtimeSocketUrl?: string;
+  partnerSocketAuthValidator?: string;
+  partnerRealtimeSocketKey?: string;
+  adminIntegrationEndpoints?: PartnerSocketEvent[];
 };
 
 type PublicCircleServerSettings = {
@@ -157,6 +166,11 @@ export default function IntegrationsPage() {
   const [partnerSaveMessage, setPartnerSaveMessage] = useState<string | null>(null);
   const [toggleConfirm, setToggleConfirm] = useState<ToggleConfirm | null>(null);
   const [regenerateKeyConfirm, setRegenerateKeyConfirm] = useState(false);
+  const [regenerateSocketKeyConfirm, setRegenerateSocketKeyConfirm] = useState(false);
+  const [socketEvents, setSocketEvents] = useState<PartnerSocketEvent[]>([]);
+  const [savedSocketEvents, setSavedSocketEvents] = useState<PartnerSocketEvent[]>([]);
+  const [savingSocketEvents, setSavingSocketEvents] = useState(false);
+  const [socketSaveMessage, setSocketSaveMessage] = useState<string | null>(null);
 
   const serverDirty = useMemo(
     () => isServerSettingsDirty(settings.publicCircleServer, savedSettings.publicCircleServer),
@@ -167,6 +181,31 @@ export default function IntegrationsPage() {
     () => isPartnerPortalDirty(settings.adminPortal, savedSettings.adminPortal),
     [settings.adminPortal, savedSettings.adminPortal],
   );
+
+  const socketEventsDirty = useMemo(() => {
+    const current = {
+      events: socketEvents,
+      partnerRealtimeSocketUrl: settings.adminPortal.partnerRealtimeSocketUrl ?? '',
+      partnerSocketAuthValidator: settings.adminPortal.partnerSocketAuthValidator ?? '',
+      partnerRealtimeSocketKey: settings.adminPortal.partnerRealtimeSocketKey ?? '',
+    };
+    const saved = {
+      events: savedSocketEvents,
+      partnerRealtimeSocketUrl: savedSettings.adminPortal.partnerRealtimeSocketUrl ?? '',
+      partnerSocketAuthValidator: savedSettings.adminPortal.partnerSocketAuthValidator ?? '',
+      partnerRealtimeSocketKey: savedSettings.adminPortal.partnerRealtimeSocketKey ?? '',
+    };
+    return JSON.stringify(current) !== JSON.stringify(saved);
+  }, [
+    socketEvents,
+    savedSocketEvents,
+    settings.adminPortal.partnerRealtimeSocketUrl,
+    settings.adminPortal.partnerSocketAuthValidator,
+    settings.adminPortal.partnerRealtimeSocketKey,
+    savedSettings.adminPortal.partnerRealtimeSocketUrl,
+    savedSettings.adminPortal.partnerSocketAuthValidator,
+    savedSettings.adminPortal.partnerRealtimeSocketKey,
+  ]);
 
   useEffect(() => {
     if (!authLoading && user && !user.isSuperAdmin) {
@@ -203,6 +242,11 @@ export default function IntegrationsPage() {
       };
       setSettings(loaded);
       setSavedSettings(loaded);
+      const mergedSocketEvents = mergePartnerSocketEvents(
+        loaded.adminPortal.adminIntegrationEndpoints,
+      );
+      setSocketEvents(mergedSocketEvents);
+      setSavedSocketEvents(mergedSocketEvents);
     } catch (error) {
       console.error(error);
     } finally {
@@ -274,6 +318,49 @@ export default function IntegrationsPage() {
       setPartnerSaveMessage('Failed to save partner portal settings.');
     } finally {
       setSavingPartner(false);
+    }
+  }
+
+  async function handleSaveSocketEvents() {
+    setSavingSocketEvents(true);
+    setSocketSaveMessage(null);
+    try {
+      const res = await fetch('/api/integrations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scope: 'adminPortal',
+          adminIntegrationEndpoints: socketEvents,
+          partnerRealtimeSocketUrl: settings.adminPortal.partnerRealtimeSocketUrl,
+          partnerSocketAuthValidator: settings.adminPortal.partnerSocketAuthValidator,
+          partnerRealtimeSocketKey: settings.adminPortal.partnerRealtimeSocketKey,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save socket events');
+      const merged = mergePartnerSocketEvents(data.adminPortal?.adminIntegrationEndpoints);
+      setSocketEvents(merged);
+      setSavedSocketEvents(merged);
+      setSettings((prev) => ({
+        ...prev,
+        adminPortal: { ...prev.adminPortal, adminIntegrationEndpoints: merged },
+      }));
+      setSavedSettings((prev) => ({
+        ...prev,
+        adminPortal: {
+          ...prev.adminPortal,
+          adminIntegrationEndpoints: merged,
+          partnerRealtimeSocketUrl: data.adminPortal?.partnerRealtimeSocketUrl ?? '',
+          partnerSocketAuthValidator: data.adminPortal?.partnerSocketAuthValidator ?? '',
+          partnerRealtimeSocketKey: data.adminPortal?.partnerRealtimeSocketKey ?? '',
+        },
+      }));
+      setSocketSaveMessage('Partner socket events saved.');
+    } catch (error) {
+      console.error(error);
+      setSocketSaveMessage('Failed to save partner socket events.');
+    } finally {
+      setSavingSocketEvents(false);
     }
   }
 
@@ -408,10 +495,10 @@ export default function IntegrationsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Referral partner portal</CardTitle>
+              <CardTitle>Integration settings</CardTitle>
               <CardDescription>
                 Admin-side handoff acceptance. Both this toggle and referral app → Integrations must
-                be enabled for partners to access this portal. Sidebar settings live in the referral
+                be enabled for partners to access this portal. Sidebar label lives in the referral
                 app only.
               </CardDescription>
             </CardHeader>
@@ -505,6 +592,43 @@ export default function IntegrationsPage() {
             </CardContent>
           </Card>
 
+          <PartnerSocketEventsPanel
+            events={socketEvents}
+            saving={savingSocketEvents}
+            dirty={socketEventsDirty}
+            onChange={setSocketEvents}
+            onSave={() => void handleSaveSocketEvents()}
+            adminPortalUrl={partner.adminPortalUrl}
+            partnerRealtimeSocketUrl={settings.adminPortal.partnerRealtimeSocketUrl}
+            partnerSocketAuthValidator={settings.adminPortal.partnerSocketAuthValidator}
+            partnerRealtimeSocketKey={settings.adminPortal.partnerRealtimeSocketKey}
+            onPartnerRealtimeSocketUrlChange={(value) =>
+              setSettings((prev) => ({
+                ...prev,
+                adminPortal: { ...prev.adminPortal, partnerRealtimeSocketUrl: value },
+              }))
+            }
+            onPartnerSocketAuthValidatorChange={(value) =>
+              setSettings((prev) => ({
+                ...prev,
+                adminPortal: { ...prev.adminPortal, partnerSocketAuthValidator: value },
+              }))
+            }
+            onRegenerateSocketKey={() => setRegenerateSocketKeyConfirm(true)}
+          />
+
+          {socketSaveMessage ? (
+            <p
+              className={`text-sm ${
+                socketSaveMessage.includes('Failed')
+                  ? 'text-destructive'
+                  : 'text-muted-foreground'
+              }`}
+            >
+              {socketSaveMessage}
+            </p>
+          ) : null}
+
           <IntegrationDocsPanel
             adminPortalUrl={partner.adminPortalUrl}
             serverBaseUrl={server.serverBaseUrl}
@@ -556,6 +680,35 @@ export default function IntegrationsPage() {
                   },
                 }));
                 setRegenerateKeyConfirm(false);
+              }}
+            >
+              Regenerate
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={regenerateSocketKeyConfirm} onOpenChange={setRegenerateSocketKeyConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Regenerate partner socket key?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The referral app must use the new key after you save. Live badge counts will fail until
+              both sides are updated.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setSettings((prev) => ({
+                  ...prev,
+                  adminPortal: {
+                    ...prev.adminPortal,
+                    partnerRealtimeSocketKey: randomApiKey(),
+                  },
+                }));
+                setRegenerateSocketKeyConfirm(false);
               }}
             >
               Regenerate

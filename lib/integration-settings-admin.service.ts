@@ -3,6 +3,10 @@ import dbConnect from '@/lib/db';
 import AppConfig from '@/lib/models/AppConfig';
 import { clearServerSecretsCache } from '@/lib/server-secrets.server';
 import {
+  mergePartnerSocketEvents,
+  type PartnerSocketEvent,
+} from '@/lib/partner-socket-events.catalog';
+import {
   type AdminPortalIntegration,
   type IntegrationSettings,
   type PublicCircleServerIntegration,
@@ -27,6 +31,19 @@ function resolveReferralBackendApiKey(
   return crypto.randomBytes(32).toString('hex');
 }
 
+function resolvePartnerRealtimeSocketKey(
+  incoming: string | undefined,
+  existing: string | undefined,
+): string {
+  const fromPayload = incoming?.trim();
+  if (fromPayload) return fromPayload;
+
+  const fromDb = existing?.trim();
+  if (fromDb) return fromDb;
+
+  return crypto.randomBytes(32).toString('hex');
+}
+
 function normalizeAdminManagedPortal(
   value: Partial<AdminPortalIntegration> | undefined,
   existing: AdminPortalIntegration,
@@ -37,12 +54,29 @@ function normalizeAdminManagedPortal(
     enabled: value?.enabled ?? existing.enabled ?? defaults.enabled,
     referralEnabled: existing.referralEnabled ?? defaults.referralEnabled,
     adminPortalUrl: value?.adminPortalUrl?.trim() ?? existing.adminPortalUrl ?? defaults.adminPortalUrl,
+    adminApiBaseUrl: existing.adminApiBaseUrl ?? defaults.adminApiBaseUrl,
     partnerPortalSsoSecret:
       value?.partnerPortalSsoSecret?.trim() ||
       existing.partnerPortalSsoSecret ||
       defaults.partnerPortalSsoSecret,
     partnerSidebarLabel: existing.partnerSidebarLabel ?? defaults.partnerSidebarLabel,
     partnerSidebarEnabled: existing.partnerSidebarEnabled ?? defaults.partnerSidebarEnabled,
+    partnerRealtimeSocketUrl:
+      value?.partnerRealtimeSocketUrl?.trim() ??
+      existing.partnerRealtimeSocketUrl ??
+      defaults.partnerRealtimeSocketUrl,
+    partnerSocketAuthValidator:
+      value?.partnerSocketAuthValidator?.trim() ??
+      existing.partnerSocketAuthValidator ??
+      defaults.partnerSocketAuthValidator,
+    partnerRealtimeSocketKey: resolvePartnerRealtimeSocketKey(
+      value?.partnerRealtimeSocketKey,
+      existing.partnerRealtimeSocketKey,
+    ),
+    adminIntegrationEndpoints: mergePartnerSocketEvents(
+      (value?.adminIntegrationEndpoints as PartnerSocketEvent[] | undefined) ??
+        (existing.adminIntegrationEndpoints as PartnerSocketEvent[] | undefined),
+    ),
     referralBackendApiKey: resolveReferralBackendApiKey(
       value?.referralBackendApiKey,
       existing.referralBackendApiKey,

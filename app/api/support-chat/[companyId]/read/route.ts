@@ -3,6 +3,7 @@ import { getServerSession, toAdminAuditSession } from '@/lib/auth';
 import { canPartnerAccessCompany, isPartnerSession } from '@/lib/partner-access.util';
 import { internalApiFetch } from '@/lib/internal-api.server';
 import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
+import { schedulePartnerRealtimeStatsForCompany } from '@/lib/partner-realtime-push.server';
 
 export async function PATCH(
   _request: Request,
@@ -45,6 +46,8 @@ export async function PATCH(
         summary: 'Partner marked support chat thread as read',
       });
     }
+
+    void schedulePartnerRealtimeStatsForCompany(companyId);
 
     return NextResponse.json({ success: true });
   } catch {

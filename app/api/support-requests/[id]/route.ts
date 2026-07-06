@@ -21,6 +21,7 @@ import { canSessionAccessTicket, denyPartnerSupportTicketPatch } from '@/lib/par
 import { getReferralPartnersForCompany } from '@/lib/referral-partner.service';
 import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
 import { getBackendApiUrl, getBackendInternalApiKey } from '@/lib/backend-api.server';
+import { schedulePartnerRealtimeStatsForTicket } from '@/lib/partner-realtime-push.server';
 
 export async function GET(
   _request: Request,
@@ -308,6 +309,22 @@ export async function PATCH(
         select: 'firstName lastName emailAddress',
       })
       .lean();
+
+    void schedulePartnerRealtimeStatsForTicket({
+      supportRequestId: id,
+      companyId: companyId || null,
+      assignedAdminId:
+        assignedAdminId !== undefined
+          ? assignedAdminId
+            ? String(assignedAdminId)
+            : null
+          : existingTicket.assignedAdminId
+            ? String(existingTicket.assignedAdminId)
+            : null,
+      previousAssignedAdminId: existingTicket.assignedAdminId
+        ? String(existingTicket.assignedAdminId)
+        : null,
+    });
 
     return NextResponse.json({
       ...(refreshed ?? supportRequest),

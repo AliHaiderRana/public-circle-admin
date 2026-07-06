@@ -16,6 +16,7 @@ import {
 } from '@/lib/admin-audit';
 import { SUPPORT_REQUEST_CATEGORY_LABELS } from '@/lib/constants';
 import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
+import { schedulePartnerRealtimeStatsForTicket } from '@/lib/partner-realtime-push.server';
 import { enrichSupportChatMessagesWithSenderRoles } from '@/lib/support-message-sender.util';
 export async function GET(
   request: Request,
@@ -139,9 +140,9 @@ export async function POST(
       );
     }
 
-    const message = payload.data ?? payload;
+    const createdMessage = payload.data ?? payload;
     const [enrichedMessage] = await enrichSupportChatMessagesWithSenderRoles(
-      message && typeof message === 'object' ? [message] : [],
+      createdMessage && typeof createdMessage === 'object' ? [createdMessage] : [],
     );
 
     const auditSession = toAdminAuditSession(session);
@@ -176,7 +177,13 @@ export async function POST(
       });
     }
 
-    return NextResponse.json(enrichedMessage ?? message, { status: 201 });
+    void schedulePartnerRealtimeStatsForTicket({
+      supportRequestId: id,
+      companyId: ticket.companyId ? String(ticket.companyId) : null,
+      assignedAdminId: ticket.assignedAdminId ? String(ticket.assignedAdminId) : null,
+    });
+
+    return NextResponse.json(enrichedMessage ?? createdMessage, { status: 201 });
   } catch {
     return NextResponse.json({ error: 'Failed to send message' }, { status: 500 });
   }

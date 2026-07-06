@@ -1,12 +1,21 @@
 import { getReferralDbConnection } from '@/lib/referral-db';
+import {
+  mergePartnerSocketEvents,
+  type PartnerSocketEvent,
+} from '@/lib/partner-socket-events.catalog';
 
 export type AdminPortalIntegration = {
   enabled: boolean;
   referralEnabled: boolean;
   adminPortalUrl: string;
+  adminApiBaseUrl: string;
   partnerPortalSsoSecret: string;
   partnerSidebarLabel: string;
   partnerSidebarEnabled: boolean;
+  partnerRealtimeSocketUrl: string;
+  partnerSocketAuthValidator: string;
+  partnerRealtimeSocketKey: string;
+  adminIntegrationEndpoints?: PartnerSocketEvent[];
   referralBackendApiKey: string;
 };
 
@@ -32,9 +41,13 @@ export function emptyIntegrationSettings(): IntegrationSettings {
       enabled: false,
       referralEnabled: false,
       adminPortalUrl: '',
+      adminApiBaseUrl: '',
       partnerPortalSsoSecret: '',
       partnerSidebarLabel: 'Support & Customers',
       partnerSidebarEnabled: true,
+      partnerRealtimeSocketUrl: '',
+      partnerSocketAuthValidator: '',
+      partnerRealtimeSocketKey: '',
       referralBackendApiKey: '',
     },
     publicCircleServer: {
@@ -61,12 +74,23 @@ function normalizeSettings(doc: {
         adminPortal.enabled ??
         defaults.adminPortal.referralEnabled,
       adminPortalUrl: adminPortal.adminPortalUrl?.trim() ?? defaults.adminPortal.adminPortalUrl,
+      adminApiBaseUrl: adminPortal.adminApiBaseUrl?.trim() ?? defaults.adminPortal.adminApiBaseUrl,
       partnerPortalSsoSecret:
         adminPortal.partnerPortalSsoSecret?.trim() ?? defaults.adminPortal.partnerPortalSsoSecret,
       partnerSidebarLabel:
         adminPortal.partnerSidebarLabel?.trim() ?? defaults.adminPortal.partnerSidebarLabel,
       partnerSidebarEnabled:
         adminPortal.partnerSidebarEnabled ?? defaults.adminPortal.partnerSidebarEnabled,
+      partnerRealtimeSocketUrl:
+        adminPortal.partnerRealtimeSocketUrl?.trim() ?? defaults.adminPortal.partnerRealtimeSocketUrl,
+      partnerSocketAuthValidator:
+        adminPortal.partnerSocketAuthValidator?.trim() ??
+        defaults.adminPortal.partnerSocketAuthValidator,
+      partnerRealtimeSocketKey:
+        adminPortal.partnerRealtimeSocketKey?.trim() ?? defaults.adminPortal.partnerRealtimeSocketKey,
+      adminIntegrationEndpoints: mergePartnerSocketEvents(
+        adminPortal.adminIntegrationEndpoints as PartnerSocketEvent[] | undefined,
+      ),
       referralBackendApiKey:
         adminPortal.referralBackendApiKey?.trim() ?? defaults.adminPortal.referralBackendApiKey,
     },
