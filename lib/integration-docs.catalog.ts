@@ -150,12 +150,12 @@ export function buildIntegrationDocs(input: IntegrationDocsInput = {}): Integrat
   const sections: IntegrationDocSection[] = [
     {
       id: 'partner-handoff',
-      title: 'Partner admin portal handoff (SSO)',
+      title: 'Partner admin portal handoff (API key)',
       summary:
         'Lets sales and marketing partners open the Public Circle Admin support inbox from the Venndii Referral App without a separate password.',
       relatedUrlField: 'adminPortalUrl',
       prerequisites: [
-        'Partner SSO secret must be identical in Public Circle Admin and Venndii Referral App → Integrations.',
+        'Partner API key must be identical in Public Circle Admin and Venndii Referral App → Integrations.',
         'Partner handoff must be enabled in both admin and referral app.',
         'Referral partners are blocked from password login on the admin login page.',
       ],
@@ -182,10 +182,10 @@ export function buildIntegrationDocs(input: IntegrationDocsInput = {}): Integrat
         },
         {
           key: 'partnerPortalSsoSecret',
-          label: 'Partner SSO secret',
+          label: 'Partner API key',
           required: true,
           configured: ssoConfigured,
-          hint: 'Shared HMAC secret used to sign and verify the 120s handoff JWT.',
+          hint: 'Shared API key used to sign and verify the 120s handoff JWT.',
         },
       ],
       flow: [
@@ -202,7 +202,7 @@ export function buildIntegrationDocs(input: IntegrationDocsInput = {}): Integrat
         {
           step: 3,
           actor: 'venndii-referral-be',
-          description: 'Signs a JWT with purpose partner_admin_handoff using the shared SSO secret.',
+          description: 'Signs a JWT with purpose partner_admin_handoff using the shared API key.',
         },
         {
           step: 4,
@@ -223,7 +223,7 @@ export function buildIntegrationDocs(input: IntegrationDocsInput = {}): Integrat
           referralApiDocBase,
           '/auth/admin-portal-handoff',
           'Bearer referral access token (partner role)',
-          'Create a 120-second SSO handoff JWT for the logged-in partner.',
+          'Create a 120-second handoff JWT for the logged-in partner.',
           'Partner clicks Support & Customers (or custom sidebar label).',
         ),
         api(
@@ -253,7 +253,7 @@ export function buildIntegrationDocs(input: IntegrationDocsInput = {}): Integrat
           referralApiDocBase,
           '/integrations',
           'Super-admin referral JWT',
-          'Read shared Integration-Settings (including SSO secret) from referral app UI.',
+          'Read shared Integration-Settings (including partner API key) from referral app UI.',
           'Super admin opens Venndii Referral App → Integrations.',
         ),
         api(

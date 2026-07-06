@@ -98,8 +98,7 @@ function isPartnerPortalDirty(
   return (
     current.enabled !== saved.enabled ||
     current.adminPortalUrl.trim() !== saved.adminPortalUrl.trim() ||
-    current.partnerPortalSsoSecret !== saved.partnerPortalSsoSecret ||
-    current.referralBackendApiKey !== saved.referralBackendApiKey
+    current.partnerPortalSsoSecret !== saved.partnerPortalSsoSecret
   );
 }
 
@@ -165,7 +164,6 @@ export default function IntegrationsPage() {
   const [serverSaveMessage, setServerSaveMessage] = useState<string | null>(null);
   const [partnerSaveMessage, setPartnerSaveMessage] = useState<string | null>(null);
   const [toggleConfirm, setToggleConfirm] = useState<ToggleConfirm | null>(null);
-  const [regenerateKeyConfirm, setRegenerateKeyConfirm] = useState(false);
   const [regenerateSocketKeyConfirm, setRegenerateSocketKeyConfirm] = useState(false);
   const [socketEvents, setSocketEvents] = useState<PartnerSocketEvent[]>([]);
   const [savedSocketEvents, setSavedSocketEvents] = useState<PartnerSocketEvent[]>([]);
@@ -524,7 +522,8 @@ export default function IntegrationsPage() {
                 <div>
                   <Label htmlFor="partner-enabled">Enable partner handoff (admin portal)</Label>
                   <p className="text-sm text-muted-foreground">
-                    Allows this admin portal to accept partner SSO from the referral app.
+                    Allows this admin portal to accept partner handoff from the referral app using
+                    the shared API key.
                   </p>
                 </div>
                 <Switch
@@ -552,8 +551,8 @@ export default function IntegrationsPage() {
               </div>
 
               <SecretInput
-                id="partner-sso-secret"
-                label="Partner SSO secret"
+                id="partner-api-key"
+                label="Partner API key"
                 value={partner.partnerPortalSsoSecret}
                 onChange={(value) =>
                   setSettings((prev) => ({
@@ -561,27 +560,9 @@ export default function IntegrationsPage() {
                     adminPortal: { ...prev.adminPortal, partnerPortalSsoSecret: value },
                   }))
                 }
-                helperText="Shared with the referral app. Signs short-lived browser handoff tokens only — not used for server API calls."
+                helperText="Shared with the referral app. Used to sign short-lived partner handoff tokens."
               />
 
-              <div className="space-y-2">
-                <SecretInput
-                  id="referral-backend-api-key"
-                  label="Referral API integration key"
-                  value={partner.referralBackendApiKey}
-                  readOnly
-                  helperText="Separate from SSO. Used when the referral backend calls admin for badge counts and signup sync. Auto-generated on save if empty."
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setRegenerateKeyConfirm(true)}
-                >
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Regenerate integration key
-                </Button>
-              </div>
               <IntegrationSaveFooter
                 dirty={partnerDirty}
                 saving={savingPartner}
@@ -655,35 +636,6 @@ export default function IntegrationsPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={applyToggleConfirm}>Continue</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={regenerateKeyConfirm} onOpenChange={setRegenerateKeyConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Regenerate referral API integration key?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The referral backend must use the new key after you save. Badge counts and signup sync
-              will fail until the saved key is active on both sides.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setSettings((prev) => ({
-                  ...prev,
-                  adminPortal: {
-                    ...prev.adminPortal,
-                    referralBackendApiKey: randomApiKey(),
-                  },
-                }));
-                setRegenerateKeyConfirm(false);
-              }}
-            >
-              Regenerate
-            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

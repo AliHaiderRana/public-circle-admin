@@ -13,7 +13,7 @@ export type PartnerHandoffClaims = {
 export async function verifyPartnerHandoffToken(token: string): Promise<PartnerHandoffClaims> {
   const secret = await getPartnerPortalSsoSecret();
   if (!secret) {
-    throw new Error('Partner SSO is not configured');
+    throw new Error('Partner API key is not configured');
   }
 
   const decoded = jwt.verify(token, secret) as jwt.JwtPayload;

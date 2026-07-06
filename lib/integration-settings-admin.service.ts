@@ -19,16 +19,12 @@ function resolveReferralBackendApiKey(
   incoming: string | undefined,
   existing: string | undefined,
 ): string {
-  const fromPayload = incoming?.trim();
-  if (fromPayload) return fromPayload;
-
-  const fromDb = existing?.trim();
-  if (fromDb) return fromDb;
-
-  const fromEnv = process.env.REFERRAL_BACKEND_API_KEY?.trim();
-  if (fromEnv) return fromEnv;
-
-  return crypto.randomBytes(32).toString('hex');
+  return (
+    incoming?.trim() ||
+    existing?.trim() ||
+    process.env.REFERRAL_BACKEND_API_KEY?.trim() ||
+    ''
+  );
 }
 
 function resolvePartnerRealtimeSocketKey(
