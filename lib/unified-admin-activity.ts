@@ -19,6 +19,8 @@ export type UnifiedActivityRow = {
   createdAt: string;
   details: Record<string, unknown> | null;
   actorWasSuperAdmin?: boolean;
+  actorIsPartner?: boolean;
+  referralRole?: string | null;
   action?: string;
   resourceType?: string | null;
   resourceId?: string | null;

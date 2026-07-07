@@ -12,6 +12,7 @@ export const ADMIN_AUDIT_CATEGORY = {
   ADMIN_USER: 'admin_user',
   SYSTEM_CONFIG: 'system_config',
   IMPERSONATION: 'impersonation',
+  PARTNER_PORTAL: 'partner_portal',
   SUPPORT_REQUEST: 'support_request',
   SUPPORT_SETTINGS: 'support_settings',
   SYSTEM_NOTIFICATIONS: 'system_notifications',
@@ -50,12 +51,16 @@ export const ADMIN_AUDIT_ACTION = {
   ADMIN_PROFILE_UPDATE: 'admin_user.profile_update',
   SYSTEM_CONFIG_UPDATE: 'system_config.update',
   IMPERSONATE_START: 'impersonation.start',
+  PARTNER_PORTAL_LOGIN: 'partner_portal.login',
+  PARTNER_PORTAL_VIEW_COMPANY: 'partner_portal.view_company',
   SUPPORT_REQUEST_UPDATE: 'support_request.update',
+  SUPPORT_MESSAGE_REPLY: 'support_request.message_reply',
   SUPPORT_CHAT_DELETE: 'support_chat.delete',
   SUPPORT_SETTINGS_UPDATE: 'support_settings.update',
   SYSTEM_NOTIFICATIONS_UPDATE: 'system_notifications.update',
   DLQ_SETTINGS_UPDATE: 'dlq.settings_update',
   DLQ_REDRIVE: 'dlq.redrive',
+  DLQ_SYNC_FAILURES: 'dlq.sync_failures',
   SAMPLE_TEMPLATE_TEST_EMAIL: 'sample_template.test_email',
   EDITOR_ASSET_UPLOAD: 'editor_asset.upload',
   EDITOR_ASSET_ACTIVATE: 'editor_asset.activate',
@@ -70,6 +75,8 @@ export type AdminAuditSession = {
   email: string;
   name?: string;
   isSuperAdmin?: boolean;
+  isPartner?: boolean;
+  referralRole?: string;
 };
 
 export const ADMIN_AUDIT_CATEGORY_LABELS: Record<string, string> = {
@@ -84,8 +91,12 @@ export const ADMIN_AUDIT_CATEGORY_LABELS: Record<string, string> = {
   [ADMIN_AUDIT_CATEGORY.ADMIN_USER]: 'Admin user',
   [ADMIN_AUDIT_CATEGORY.SYSTEM_CONFIG]: 'System config',
   [ADMIN_AUDIT_CATEGORY.IMPERSONATION]: 'Impersonation',
+  [ADMIN_AUDIT_CATEGORY.PARTNER_PORTAL]: 'Partner portal',
   [ADMIN_AUDIT_CATEGORY.SUPPORT_REQUEST]: 'Support request',
   [ADMIN_AUDIT_CATEGORY.SUPPORT_SETTINGS]: 'Support request settings',
   [ADMIN_AUDIT_CATEGORY.SYSTEM_NOTIFICATIONS]: 'System notifications',
   [ADMIN_AUDIT_CATEGORY.DLQ]: 'Dead letter queue',
 };
+
+/** Activity older than this is moved from MongoDB to the S3 data warehouse. */
+export const ADMIN_ACTIVITY_WAREHOUSE_RETENTION_MONTHS = 6;

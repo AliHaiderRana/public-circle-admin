@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,215 +17,69 @@ import {
 } from '@/components/ui/dialog';
 import { AlertTriangle, Loader2, RefreshCw, RotateCcw } from 'lucide-react';
 import Link from 'next/link';
-import type { DlqMessageDetail, DlqStatus } from '@/app/api/dlq/route';
+import { cn } from '@/lib/utils';
+import DlqFailedMessagesPanel from '@/components/DlqFailedMessagesPanel';
+import type { DlqStatus } from '@/app/api/dlq/route';
 
-function formatDate(value: string | null) {
-  if (!value) return null;
-  return new Date(value).toLocaleString();
-}
-
-function formatFailureReason(reason: string | null) {
-  if (!reason) return 'No failure reason recorded.';
-  return reason;
-}
-
-type CampaignGroup = {
-  campaignId: string | null;
-  campaignName: string;
-  messages: DlqMessageDetail[];
-};
-
-type CompanyGroup = {
-  companyId: string | null;
-  companyName: string;
-  campaigns: CampaignGroup[];
-  messageCount: number;
-};
-
-function groupDlqMessages(messages: DlqMessageDetail[]): CompanyGroup[] {
-  const companyMap = new Map<string, CompanyGroup>();
-
-  for (const message of messages) {
-    const companyKey = message.companyId || '__unknown_company__';
-    const campaignKey = message.campaignId || '__unknown_campaign__';
-
-    if (!companyMap.has(companyKey)) {
-      companyMap.set(companyKey, {
-        companyId: message.companyId,
-        companyName: message.companyName || message.companyId || 'Unknown company',
-        campaigns: [],
-        messageCount: 0,
-      });
-    }
-
-    const companyGroup = companyMap.get(companyKey)!;
-    companyGroup.messageCount += 1;
-
-    let campaignGroup = companyGroup.campaigns.find(
-      (group) => (group.campaignId || '__unknown_campaign__') === campaignKey,
-    );
-
-    if (!campaignGroup) {
-      campaignGroup = {
-        campaignId: message.campaignId,
-        campaignName: message.campaignName || message.campaignId || 'Unknown campaign',
-        messages: [],
-      };
-      companyGroup.campaigns.push(campaignGroup);
-    }
-
-    campaignGroup.messages.push(message);
-  }
-
-  const sortByName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' });
-
-  return [...companyMap.values()]
-    .sort((a, b) => sortByName(a.companyName, b.companyName))
-    .map((company) => ({
-      ...company,
-      campaigns: company.campaigns
-        .sort((a, b) => sortByName(a.campaignName, b.campaignName))
-        .map((campaign) => ({
-          ...campaign,
-          messages: [...campaign.messages].sort((a, b) =>
-            sortByName(a.emailTo || '', b.emailTo || ''),
-          ),
-        })),
-    }));
-}
-
-function FailedMessageCard({
-  row,
-  maxRetriesBeforeDlq,
-}: {
-  row: DlqMessageDetail;
-  maxRetriesBeforeDlq?: number | null;
-}) {
-  const lastActivity = formatDate(row.lastFailedAt) || formatDate(row.queuedAt);
-
+function DlqQueueStatusSkeleton() {
   return (
-    <div className="rounded-lg border bg-white p-4 shadow-sm dark:bg-neutral-950">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 flex-1 space-y-3">
-          <div>
-            <p className="text-base font-semibold break-all">{row.emailTo || 'Unknown recipient'}</p>
-            {row.emailSubject && (
-              <p className="mt-1 text-sm text-neutral-500 break-words">{row.emailSubject}</p>
-            )}
-          </div>
-
-          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2.5 dark:border-red-900/40 dark:bg-red-950/20">
-            <p className="text-xs font-medium uppercase tracking-wide text-red-700 dark:text-red-300">
-              Failure reason
-            </p>
-            <p className="mt-1 text-sm text-red-800 break-words dark:text-red-200">
-              {formatFailureReason(row.failureReason)}
-            </p>
-            {row.failureStatusCode && (
-              <p className="mt-2 text-xs text-red-600 dark:text-red-400">
-                HTTP {row.failureStatusCode}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="shrink-0 space-y-2 text-sm lg:w-44 lg:text-right">
-          {typeof row.deliveryAttempts === 'number' && row.deliveryAttempts > 0 && (
-            <div>
-              <p className="text-neutral-500">Delivery attempts</p>
-              <p className="font-medium">
-                {row.deliveryAttempts}
-                {maxRetriesBeforeDlq ? ` / ${maxRetriesBeforeDlq}` : ''}
-              </p>
-              <p className="text-xs text-neutral-400">Recorded at API</p>
-            </div>
-          )}
-          <div>
-            <p className="text-neutral-500">
-              {row.lastFailedAt ? 'Last API failure' : 'Queued at'}
-            </p>
-            <p className="font-medium">{lastActivity || 'Unknown'}</p>
-          </div>
-        </div>
+    <div className="space-y-6">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading queue status from SQS…
+      </div>
+      <div className="space-y-6 animate-pulse">
+      <div className="flex items-end gap-3">
+        <Skeleton className="h-14 w-20" />
+        <Skeleton className="h-4 w-32 mb-2" />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-16 w-full" />
+      </div>
+      <div className="flex gap-3">
+        <Skeleton className="h-9 w-40" />
+      </div>
       </div>
     </div>
   );
 }
 
-function GroupedFailedMessages({
-  messages,
-  maxRetriesBeforeDlq,
-}: {
-  messages: DlqMessageDetail[];
-  maxRetriesBeforeDlq?: number | null;
-}) {
-  const groupedMessages = useMemo(() => groupDlqMessages(messages), [messages]);
-
+function DlqMessagesSkeleton() {
   return (
-    <div className="space-y-6">
-      {groupedMessages.map((company) => (
-        <section
-          key={company.companyId || company.companyName}
-          className="rounded-xl border bg-muted/20 p-4 space-y-4"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
-            <div className="flex flex-wrap items-center gap-2">
-              {company.companyId ? (
-                <Link
-                  href={`/dashboard/companies/${company.companyId}`}
-                  className="text-lg font-semibold hover:underline underline-offset-2"
-                >
-                  {company.companyName}
-                </Link>
-              ) : (
-                <h3 className="text-lg font-semibold">{company.companyName}</h3>
-              )}
-              <Badge variant="secondary">
-                {company.messageCount} message{company.messageCount === 1 ? '' : 's'}
-              </Badge>
-            </div>
+    <div className="space-y-4 animate-pulse">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading messages from SQS…
+      </div>
+      <Skeleton className="h-4 w-64" />
+      <div className="flex gap-3">
+        <Skeleton className="h-9 flex-1 max-w-sm" />
+        <Skeleton className="h-9 w-28" />
+      </div>
+      <div className="rounded-md border overflow-hidden">
+        <div className="border-b bg-muted/40 px-4 py-3 flex gap-4">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-4 w-32" />
+        </div>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-4 border-b last:border-0 px-4 py-3">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-4 w-12" />
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-4 flex-1" />
           </div>
-
-          <div className="space-y-5 pl-0 sm:pl-2">
-            {company.campaigns.map((campaign) => (
-              <div
-                key={campaign.campaignId || `${company.companyId}-${campaign.campaignName}`}
-                className="space-y-3"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  {campaign.campaignId ? (
-                    <Link
-                      href={`/dashboard/campaigns/${campaign.campaignId}`}
-                      className="text-sm font-medium text-neutral-800 hover:underline underline-offset-2 dark:text-neutral-200"
-                    >
-                      {campaign.campaignName}
-                    </Link>
-                  ) : (
-                    <p className="text-sm font-medium text-neutral-800 dark:text-neutral-200">
-                      {campaign.campaignName}
-                    </p>
-                  )}
-                  <Badge variant="outline" className="font-normal">
-                    {campaign.messages.length} failed
-                  </Badge>
-                </div>
-
-                <div className="space-y-3 border-l-2 border-neutral-200 pl-4 dark:border-neutral-800">
-                  {campaign.messages.map((row) => (
-                    <FailedMessageCard
-                      key={row.messageId}
-                      row={row}
-                      maxRetriesBeforeDlq={maxRetriesBeforeDlq}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      ))}
+        ))}
+      </div>
     </div>
   );
+}
+
+function formatDate(value: string | null) {
+  if (!value) return '—';
+  return new Date(value).toLocaleString();
 }
 
 export default function DlqPage() {
@@ -248,16 +102,17 @@ export default function DlqPage() {
   }, [user, authLoading, router]);
 
   const fetchStatus = useCallback(async (options?: { silent?: boolean }) => {
-    if (!options?.silent) {
-      setLoading(true);
-    } else {
-      setRefreshing(true);
-    }
+    if (!options?.silent) setLoading(true);
+    else setRefreshing(true);
 
     setMessage(null);
 
     try {
-      const res = await fetch('/api/dlq', { cache: 'no-store' });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 25000);
+
+      const res = await fetch('/api/dlq', { cache: 'no-store', signal: controller.signal });
+      clearTimeout(timeout);
       const data = await res.json();
 
       if (!res.ok) {
@@ -267,8 +122,12 @@ export default function DlqPage() {
 
       setStatus(data);
       setLastRefreshedAt(new Date().toISOString());
-    } catch {
-      setMessage({ type: 'error', text: 'Failed to load DLQ status' });
+    } catch (err) {
+      const text =
+        err instanceof Error && err.name === 'AbortError'
+          ? 'DLQ load timed out — restart the server and try again.'
+          : 'Failed to load DLQ status';
+      setMessage({ type: 'error', text });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -276,9 +135,7 @@ export default function DlqPage() {
   }, []);
 
   useEffect(() => {
-    if (user?.isSuperAdmin) {
-      fetchStatus();
-    }
+    if (user?.isSuperAdmin) fetchStatus();
   }, [user, fetchStatus]);
 
   const handleRedrive = async () => {
@@ -294,10 +151,9 @@ export default function DlqPage() {
         return;
       }
 
-      const resentCount = data.data?.resentCount ?? 0;
       setMessage({
         type: 'success',
-        text: `${data.message || 'Redrive complete'} (${resentCount} message(s) moved back to SQS)`,
+        text: `${data.message || 'Redrive complete'} (${data.data?.resentCount ?? 0} message(s) moved back to SQS)`,
       });
       setConfirmRedriveOpen(false);
       await fetchStatus({ silent: true });
@@ -317,37 +173,41 @@ export default function DlqPage() {
   }
 
   const messageCount = status?.dlqMessageCount;
+  const messagesInFlight = status?.dlqMessagesInFlight ?? 0;
   const hasMessages = typeof messageCount === 'number' && messageCount > 0;
+  const peekIncomplete =
+    hasMessages &&
+    status?.peekComplete === false;
+
+  const isInitialLoad = loading && !status;
+  const isRefreshing = refreshing && !!status;
 
   return (
-    <div className="max-w-6xl space-y-6">
+    <div className="max-w-7xl space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Dead Letter Queue</h2>
           <p className="text-neutral-500">
-            Monitor failed outbound campaign emails and redrive messages back to SQS. Alert
-            recipients are managed under{' '}
+            Failed outbound campaign emails. Alert recipients:{' '}
             <Link href="/dashboard/system-notifications" className="underline underline-offset-2">
               System Notifications
             </Link>
-            .
           </p>
         </div>
-        <Button variant="outline" onClick={() => fetchStatus({ silent: true })} disabled={refreshing}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh count
+        <Button variant="outline" onClick={() => fetchStatus({ silent: true })} disabled={loading || refreshing}>
+          <RefreshCw className={cn('mr-2 h-4 w-4', (loading || refreshing) && 'animate-spin')} />
+          {loading || refreshing ? 'Loading…' : 'Refresh'}
         </Button>
       </div>
 
       {message && (
         <div
-          className={`rounded-lg border p-4 text-sm ${
-            message.type === 'success'
-              ? 'border-green-200 bg-green-50 text-green-700'
-              : message.type === 'error'
-                ? 'border-red-200 bg-red-50 text-red-700'
-                : 'border-blue-200 bg-blue-50 text-blue-700'
-          }`}
+          className={cn(
+            'rounded-lg border p-4 text-sm',
+            message.type === 'success' && 'border-green-200 bg-green-50 text-green-700',
+            message.type === 'error' && 'border-red-200 bg-red-50 text-red-700',
+            message.type === 'info' && 'border-blue-200 bg-blue-50 text-blue-700',
+          )}
         >
           {message.text}
         </div>
@@ -359,27 +219,55 @@ export default function DlqPage() {
             <div>
               <CardTitle>Queue status</CardTitle>
               <CardDescription>
-                Approximate number of failed outbound email messages currently in the DLQ.
+                Live SQS counts — available messages waiting in the queue, and in-flight messages
+                temporarily hidden while being read.
               </CardDescription>
             </div>
             {status?.environment && <Badge variant="outline">{status.environment}</Badge>}
           </div>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {loading ? (
-            <Skeleton className="h-24 w-full" />
+        <CardContent className="space-y-6 relative">
+          {isInitialLoad ? (
+            <DlqQueueStatusSkeleton />
           ) : (
-            <>
-              <div className="flex items-end gap-3">
-                <div
-                  className={`text-5xl font-bold tracking-tight ${
-                    hasMessages ? 'text-red-600' : 'text-green-600'
-                  }`}
-                >
-                  {typeof messageCount === 'number' ? messageCount : '—'}
+            <div className={cn('space-y-6', isRefreshing && 'opacity-50 pointer-events-none')}>
+              <div className="flex flex-wrap items-end gap-6">
+                <div>
+                  <div
+                    className={cn(
+                      'text-5xl font-bold tracking-tight tabular-nums',
+                      hasMessages ? 'text-red-600' : 'text-green-600',
+                    )}
+                  >
+                    {typeof messageCount === 'number' ? messageCount : '—'}
+                  </div>
+                  <div className="mt-1 text-sm text-neutral-500">available</div>
                 </div>
-                <div className="pb-2 text-sm text-neutral-500">messages in DLQ</div>
+                <div>
+                  <div
+                    className={cn(
+                      'text-3xl font-semibold tracking-tight tabular-nums',
+                      messagesInFlight > 0 ? 'text-blue-600' : 'text-neutral-400',
+                    )}
+                  >
+                    {messagesInFlight}
+                  </div>
+                  <div className="mt-1 text-sm text-neutral-500">in flight</div>
+                </div>
               </div>
+
+              {messagesInFlight > 0 && (
+                <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                  {messagesInFlight} message{messagesInFlight === 1 ? '' : 's'} are in flight — temporarily
+                  hidden while SQS delivers them to a consumer. Wait ~30 seconds and refresh.
+                </div>
+              )}
+
+              {peekIncomplete && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  Could not load all messages yet. Try refreshing in a few seconds.
+                </div>
+              )}
 
               {status?.countError && (
                 <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -390,34 +278,26 @@ export default function DlqPage() {
               <div className="grid gap-3 text-sm sm:grid-cols-2">
                 <div className="rounded-md border bg-muted/30 px-3 py-2">
                   <div className="text-neutral-500">Last alert sent</div>
-                  <div className="font-medium">{formatDate(status?.dlqLastAlertAt ?? null) || 'Never'}</div>
+                  <div className="font-medium">{formatDate(status?.dlqLastAlertAt ?? null)}</div>
                 </div>
                 <div className="rounded-md border bg-muted/30 px-3 py-2">
-                  <div className="text-neutral-500">Count refreshed</div>
-                  <div className="font-medium">{formatDate(lastRefreshedAt) || '—'}</div>
+                  <div className="text-neutral-500">Refreshed</div>
+                  <div className="font-medium">{formatDate(lastRefreshedAt)}</div>
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  onClick={() => setConfirmRedriveOpen(true)}
-                  disabled={!hasMessages || redriving}
-                >
-                  {redriving ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                  )}
+              <div className="flex flex-wrap gap-3">
+                <Button onClick={() => setConfirmRedriveOpen(true)} disabled={!hasMessages || redriving}>
+                  {redriving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
                   Redrive DLQ to SQS
                 </Button>
               </div>
-
-              <p className="text-xs text-neutral-500">
-                Redrive moves all DLQ messages back to the main outbound queue for another
-                delivery attempt. Fix the underlying issue before redriving, or messages may
-                return to the DLQ again.
-              </p>
-            </>
+            </div>
+          )}
+          {isRefreshing && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/40 rounded-lg">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
           )}
         </CardContent>
       </Card>
@@ -426,36 +306,57 @@ export default function DlqPage() {
         <CardHeader>
           <CardTitle>Failed messages</CardTitle>
           <CardDescription>
-            Peek at messages currently in the DLQ. Failure reasons and delivery attempts are
-            recorded when{' '}
-            <code className="rounded bg-muted px-1 py-0.5">/campaigns/sst-email</code> returns an
-            error. Messages are retried up to {status?.maxRetriesBeforeDlq ?? 5} times before they
-            land here. Refreshing this page does not change the attempt count.
+            Click a row for full error details. Company, campaign, and run names link to their admin pages.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {loading ? (
-            <Skeleton className="h-48 w-full" />
+        <CardContent className="relative">
+          {isInitialLoad ? (
+            <DlqMessagesSkeleton />
           ) : status?.messagesError ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
               Could not load message details: {status.messagesError}
             </div>
+          ) : hasMessages && !status?.messages?.length ? (
+            <div className="space-y-3">
+              <p className="text-sm text-amber-800">
+                {messagesInFlight > 0 ? (
+                  <>
+                    {messageCount} available in the DLQ, but {messagesInFlight} are in flight and could not
+                    be loaded yet. Wait ~30 seconds and refresh.
+                  </>
+                ) : (
+                  <>
+                    {messageCount} message(s) reported in the DLQ but none could be loaded yet. Try
+                    refreshing.
+                  </>
+                )}
+              </p>
+              <Button variant="outline" size="sm" onClick={() => fetchStatus({ silent: true })} disabled={refreshing}>
+                <RefreshCw className={cn('mr-2 h-4 w-4', refreshing && 'animate-spin')} />
+                Load messages
+              </Button>
+            </div>
           ) : !status?.messages?.length ? (
             <p className="text-sm text-neutral-500">No failed messages in the DLQ right now.</p>
           ) : (
-            <GroupedFailedMessages
+            <DlqFailedMessagesPanel
               messages={status.messages}
+              totalInDlq={status.dlqMessageCount}
+              messagesInFlight={status.dlqMessagesInFlight}
+              peekComplete={status.peekComplete}
               maxRetriesBeforeDlq={status.maxRetriesBeforeDlq}
+              onRetryLoad={() => fetchStatus({ silent: true })}
+              retrying={refreshing}
             />
           )}
-          {typeof messageCount === 'number' &&
-            status?.messages &&
-            messageCount > status.messages.length && (
-              <p className="mt-3 text-xs text-neutral-500">
-                Showing {status.messages.length} of {messageCount} message(s). Refresh to peek
-                again.
-              </p>
-            )}
+          {isRefreshing && !isInitialLoad && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/40 rounded-lg">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Refreshing…
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -466,16 +367,12 @@ export default function DlqPage() {
             <CardTitle>How this works</CardTitle>
           </div>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm text-neutral-600">
+        <CardContent className="text-sm text-neutral-600">
           <p>
-            Campaign emails are sent through the outbound SQS queue. If{' '}
-            <code className="rounded bg-muted px-1 py-0.5">/campaigns/sst-email</code> fails
-            repeatedly, messages move to the DLQ.
-          </p>
-          <p>
-            The <strong>Get DLQ Info</strong> cron checks every 10 minutes and sends alert emails
-            when the DLQ count changes or messages return after a redrive. Configure who receives
-            those alerts in System Notifications.
+            Messages fail at <code className="rounded bg-muted px-1">/campaigns/sst-email</code>, retry up
+            to {status?.maxRetriesBeforeDlq ?? 5} times, then move to the DLQ. Fix the root cause before
+            redriving. Failure records in the database are reconciled with the DLQ automatically every 10
+            minutes by the DLQ monitor cron.
           </p>
         </CardContent>
       </Card>
@@ -485,8 +382,7 @@ export default function DlqPage() {
           <DialogHeader>
             <DialogTitle>Redrive DLQ messages to SQS?</DialogTitle>
             <DialogDescription>
-              This will move {messageCount ?? 0} message(s) from the Dead Letter Queue back to the
-              main outbound queue for reprocessing.
+              Move {messageCount ?? 0} message(s) back to the outbound queue for reprocessing.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -494,11 +390,7 @@ export default function DlqPage() {
               Cancel
             </Button>
             <Button onClick={handleRedrive} disabled={redriving}>
-              {redriving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <RotateCcw className="mr-2 h-4 w-4" />
-              )}
+              {redriving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
               Confirm redrive
             </Button>
           </DialogFooter>

@@ -9,7 +9,7 @@ export async function internalApiFetch(
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    return await fetch(`${getBackendApiUrl()}/internal${path}`, {
+    return await fetch(`${await getBackendApiUrl()}/internal${path}`, {
       ...fetchInit,
       signal: controller.signal,
       headers: await getBackendAuthHeaders({

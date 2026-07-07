@@ -58,6 +58,10 @@ const schema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    autoAssignSupportTicketsToReferralUsers: {
+      type: Boolean,
+      default: false,
+    },
     supportAlertEmails: {
       type: [String],
       default: [],
@@ -72,6 +76,8 @@ const schema = new mongoose.Schema(
     internalApiKey: { type: String, default: null },
     /** Optional — must match API ACCESS_TOKEN_SECRET for local token minting */
     accessTokenSecret: { type: String, default: null },
+    /** Public Circle API server base URL (managed in Integrations UI) */
+    serverBaseUrl: { type: String, default: null },
   },
   { timestamps: true }
 );

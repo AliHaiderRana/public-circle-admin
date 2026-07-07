@@ -56,6 +56,12 @@ import { SupportCountBadge } from '@/components/SupportCountBadge';
 import { TicketChatPanel } from '@/components/TicketChatPanel';
 import { SupportInboxShell } from '@/components/support/SupportInboxShell';
 import { SupportInboxFilters } from '@/components/support/SupportInboxFilters';
+import {
+  AssigneeSelectOptions,
+  assigneeSelectContentClassName,
+  formatReferralPartnerRole,
+  resolveAssigneeDisplayName,
+} from '@/components/support/AssigneeSelectOptions';
 import { TicketStatusTimeline } from '@/components/support/TicketStatusTimeline';
 import {
   ConfirmToggleDialog,
@@ -77,6 +83,7 @@ import {
 import {
   buildTicketHistoryForAdmin,
   type StatusTimelineEntry,
+  type SupportAuditTrailEntry,
 } from '@/lib/support-status-timeline.util';
 import type { AssignmentHistoryEntry } from '@/lib/support-assignment.util';
 import {
@@ -85,6 +92,13 @@ import {
   getSupportTicketPreviewText,
   getSupportTicketSubjectTitle,
 } from '@/lib/support-ticket-display.util';
+
+type LinkedReferralPartner = {
+  id: string;
+  email: string;
+  name: string;
+  role: 'SALES_PERSON' | 'MARKETING_AFFILIATE';
+};
 
 type SupportRequestRow = {
   _id: string;
@@ -103,7 +117,22 @@ type SupportRequestRow = {
   lastAdminReplyName?: string;
   companyId?: { _id?: string; name?: string } | string;
   userId?: { firstName?: string; lastName?: string; emailAddress?: string };
+  linkedReferralPartners?: LinkedReferralPartner[];
 };
+
+function formatReferralPartnersSummary(partners: LinkedReferralPartner[] | undefined) {
+  if (!partners?.length) return null;
+  return partners
+    .map((partner) => `${partner.name} (${formatReferralPartnerRole(partner.role)})`)
+    .join(' · ');
+}
+
+function pickAutoReferralAssignee(partners: LinkedReferralPartner[] | undefined): string | null {
+  if (!partners?.length) return null;
+  const salesPartner = partners.find((partner) => partner.role === 'SALES_PERSON');
+  if (salesPartner) return salesPartner.id;
+  return partners[0]?.id ?? null;
+}
 
 type AssignableAdmin = {
   id: string;
@@ -169,6 +198,7 @@ export default function SupportRequestsPage() {
   const currentAdminId = user?.id ? String(user.id) : undefined;
   const currentAdminName = formatAdminDisplayName(user?.name, user?.email);
   const isSuperAdmin = Boolean(user?.isSuperAdmin);
+  const isPartner = Boolean(user?.isPartner);
   const highlightRequestId = searchParams.get('highlight');
   const selectedTicketId = searchParams.get('ticket');
   const { stats, refresh: refreshStats } = useSupportStats();
@@ -248,7 +278,9 @@ export default function SupportRequestsPage() {
   const [manageAssignmentHistory, setManageAssignmentHistory] = useState<AssignmentHistoryEntry[]>(
     [],
   );
+  const [manageAuditTrail, setManageAuditTrail] = useState<SupportAuditTrailEntry[]>([]);
   const [manageOriginalAssigneeId, setManageOriginalAssigneeId] = useState('unassigned');
+  const [manageLinkedPartners, setManageLinkedPartners] = useState<LinkedReferralPartner[]>([]);
   const [chatAnchorMessageId, setChatAnchorMessageId] = useState<string | null>(null);
   const [manageSaveError, setManageSaveError] = useState('');
   const [manageDeleteConfirmOpen, setManageDeleteConfirmOpen] = useState(false);
@@ -263,6 +295,7 @@ export default function SupportRequestsPage() {
     setManageSaveError('');
     setManageStatusTimeline([]);
     setManageAssignmentHistory([]);
+    setManageAuditTrail([]);
   }, []);
 
   const manageRequestId = manageRequest?._id ?? '';
@@ -270,14 +303,16 @@ export default function SupportRequestsPage() {
   const manageRequestUpdatedAt = manageRequest?.updatedAt ?? '';
 
   const manageTicketHistory = useMemo(
-    () => buildTicketHistoryForAdmin(manageStatusTimeline, manageAssignmentHistory),
-    [manageStatusTimeline, manageAssignmentHistory],
+    () => buildTicketHistoryForAdmin(manageStatusTimeline, manageAssignmentHistory, manageAuditTrail),
+    [manageStatusTimeline, manageAssignmentHistory, manageAuditTrail],
   );
 
   useEffect(() => {
     if (!manageRequestId) {
       setManageStatusTimeline([]);
       setManageAssignmentHistory([]);
+      setManageAuditTrail([]);
+      setManageLinkedPartners([]);
       return;
     }
 
@@ -293,6 +328,16 @@ export default function SupportRequestsPage() {
         }
         if (Array.isArray(data.assignmentHistory)) {
           setManageAssignmentHistory(data.assignmentHistory);
+        }
+        if (Array.isArray(data.auditTrail)) {
+          setManageAuditTrail(data.auditTrail);
+        } else {
+          setManageAuditTrail([]);
+        }
+        if (Array.isArray(data.linkedReferralPartners)) {
+          setManageLinkedPartners(data.linkedReferralPartners);
+        } else {
+          setManageLinkedPartners([]);
         }
       })
       .catch(() => {
@@ -312,7 +357,8 @@ export default function SupportRequestsPage() {
   }, []);
 
   useEffect(() => {
-    if (!isSuperAdmin) {
+    if (isPartner) {
+      setActiveOnlyFilter(false);
       setAssignableAdmins([]);
       return;
     }
@@ -320,7 +366,7 @@ export default function SupportRequestsPage() {
       .then((res) => (res.ok ? res.json() : { admins: [] }))
       .then((data) => setAssignableAdmins(data.admins ?? []))
       .catch(() => setAssignableAdmins([]));
-  }, [isSuperAdmin]);
+  }, [isPartner]);
 
   const fetchRequests = useCallback(async (silent = false) => {
     if (!silent) {
@@ -331,7 +377,11 @@ export default function SupportRequestsPage() {
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
         ...(searchTerm && { search: searchTerm }),
-        ...(activeOnlyFilter ? { activeOnly: 'true' } : statusFilter ? { status: statusFilter } : {}),
+        ...(!isPartner && activeOnlyFilter
+          ? { activeOnly: 'true' }
+          : statusFilter
+            ? { status: statusFilter }
+            : {}),
         ...(assigneeFilter === 'unassigned' ? { unassignedOnly: 'true' } : {}),
         ...(assigneeFilter === 'me' && currentAdminId
           ? { assignedAdminId: currentAdminId }
@@ -348,7 +398,15 @@ export default function SupportRequestsPage() {
       const data = await res.json();
 
       if (data.requests) {
-        setRequests(data.requests);
+        let nextRequests = data.requests as SupportRequestRow[];
+        const selectedId = selectedTicketIdRef.current;
+        if (isPartner && selectedId) {
+          const stillListed = nextRequests.some((request) => request._id === selectedId);
+          if (!stillListed) {
+            updateTicketInUrl(null);
+          }
+        }
+        setRequests(nextRequests);
         setPagination(data.pagination);
       } else {
         setRequests([]);
@@ -371,6 +429,8 @@ export default function SupportRequestsPage() {
     assigneeFilter,
     categoryFilter,
     currentAdminId,
+    isPartner,
+    updateTicketInUrl,
   ]);
 
   const scheduleSilentRefresh = useCallback(() => {
@@ -626,9 +686,9 @@ export default function SupportRequestsPage() {
   const hasActiveFilters = Boolean(
     searchTerm ||
       statusFilter ||
-      activeOnlyFilter ||
+      (!isPartner && activeOnlyFilter) ||
       categoryFilter ||
-      assigneeFilter !== 'all',
+      (!isPartner && assigneeFilter !== 'all'),
   );
 
   const clearFilters = useCallback(() => {
@@ -801,17 +861,23 @@ export default function SupportRequestsPage() {
       closeDialog?: boolean;
       assignToCurrentAdmin?: boolean;
       forceResolve?: boolean;
+      assigneeIdOverride?: string;
     } = {},
   ) => {
     setUpdatingId(request._id);
     setManageSaveError('');
     try {
-      const selectedAdmin = assignableAdmins.find((a) => a.id === manageAssigneeId);
+      const selectedAssigneeName = resolveAssigneeDisplayName(
+        options.assigneeIdOverride ?? manageAssigneeId,
+        assignableAdmins,
+        manageLinkedPartners,
+      );
+      const selectedAssigneeId = options.assigneeIdOverride ?? manageAssigneeId;
       const originalAssignee = request.assignedAdminId
         ? String(request.assignedAdminId)
         : 'unassigned';
       const assigneeChanged =
-        isSuperAdmin && !options.assignToCurrentAdmin && manageAssigneeId !== originalAssignee;
+        isSuperAdmin && !options.assignToCurrentAdmin && selectedAssigneeId !== originalAssignee;
 
       const res = await fetch(`/api/support-requests/${request._id}`, {
         method: 'PATCH',
@@ -828,8 +894,8 @@ export default function SupportRequestsPage() {
               }
             : isSuperAdmin
             ? {
-                assignedAdminId: manageAssigneeId === 'unassigned' ? null : manageAssigneeId,
-                assignedAdminName: selectedAdmin?.name || '',
+                assignedAdminId: selectedAssigneeId === 'unassigned' ? null : selectedAssigneeId,
+                assignedAdminName: selectedAssigneeName,
                 ...(assigneeChanged
                   ? {
                       anchorMessageId: chatAnchorMessageId,
@@ -859,7 +925,8 @@ export default function SupportRequestsPage() {
           prev?._id === request._id ? { ...prev, ...merged } : prev,
         );
         if (assigneeChanged) {
-          setManageOriginalAssigneeId(manageAssigneeId);
+          setManageAssigneeId(selectedAssigneeId);
+          setManageOriginalAssigneeId(selectedAssigneeId);
         }
         setChatRefreshKey((key) => key + 1);
         refreshStats();
@@ -891,6 +958,16 @@ export default function SupportRequestsPage() {
     }
 
     await applyManageUpdate(manageRequest, { closeDialog: true });
+  };
+
+  const handleAutoAssignReferralUser = async () => {
+    if (!manageRequest || !isSuperAdmin) return;
+    const autoAssigneeId = pickAutoReferralAssignee(manageLinkedPartners);
+    if (!autoAssigneeId) {
+      setManageSaveError('No linked referral user available to auto-assign.');
+      return;
+    }
+    await applyManageUpdate(manageRequest, { assigneeIdOverride: autoAssigneeId });
   };
 
   const getStatusBadge = (status: string) => {
@@ -1056,6 +1133,7 @@ export default function SupportRequestsPage() {
               }}
               categoryOptions={categoryOptions}
               isSuperAdmin={isSuperAdmin}
+              isPartner={isPartner}
               assignableAdmins={assignableAdmins}
               currentAdminId={currentAdminId}
               openTicketCount={stats.openSupportRequests}
@@ -1147,6 +1225,12 @@ export default function SupportRequestsPage() {
                                     formatUser(request.userId),
                                   )}
                               </p>
+                              {isSuperAdmin && request.linkedReferralPartners?.length ? (
+                                <p className="mt-1 truncate text-[10px] text-muted-foreground">
+                                  Partners:{' '}
+                                  {formatReferralPartnersSummary(request.linkedReferralPartners)}
+                                </p>
+                              ) : null}
                               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                                 <span className="font-mono text-[10px] text-muted-foreground">
                                   {getTicketReferenceId(request)}
@@ -1176,16 +1260,18 @@ export default function SupportRequestsPage() {
                           </div>
                         </button>
                         <div className="flex shrink-0 items-start pt-2 pr-2">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="size-7"
-                            title="Manage ticket"
-                            onClick={() => openManage(request)}
-                          >
-                            <Settings2 className="size-3.5" />
-                          </Button>
+                          {isSuperAdmin ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-7"
+                              title="Manage ticket"
+                              onClick={() => openManage(request)}
+                            >
+                              <Settings2 className="size-3.5" />
+                            </Button>
+                          ) : null}
                         </div>
                       </li>
                     );
@@ -1271,14 +1357,16 @@ export default function SupportRequestsPage() {
                 userName={resolvedActiveTicket ? formatUser(resolvedActiveTicket.userId) : undefined}
                 currentAdminId={currentAdminId}
                 currentAdminName={currentAdminName}
+                assignableAdmins={assignableAdmins}
                 onActivity={handleChatActivity}
                 onTicketLoaded={handleTicketLoaded}
-                onOpenManage={openManageForActiveTicket}
+                onOpenManage={isSuperAdmin ? openManageForActiveTicket : undefined}
                 onCloseTicket={handleCloseActiveTicket}
                 onForceResolveTicket={
                   isSuperAdmin ? handleForceResolveActiveTicket : undefined
                 }
                 isSuperAdmin={isSuperAdmin}
+                isPartner={isPartner}
                 onTicketDeleted={() => {
                   if (selectedTicketId) {
                     setRequests((prev) => prev.filter((request) => request._id !== selectedTicketId));
@@ -1351,9 +1439,27 @@ export default function SupportRequestsPage() {
                     <div className="space-y-1 sm:col-span-2">
                       <dt className="text-muted-foreground">Assigned to</dt>
                       <dd className="font-medium">
-                        {manageRequest.assignedAdminName?.trim() || 'Unassigned'}
+                        {manageAssigneeId && manageAssigneeId !== 'unassigned'
+                          ? resolveAssigneeDisplayName(
+                              manageAssigneeId,
+                              assignableAdmins,
+                              manageLinkedPartners,
+                            )
+                          : manageRequest.assignedAdminName?.trim() || 'Unassigned'}
                       </dd>
                     </div>
+                    {isSuperAdmin ? (
+                      <div className="space-y-1 sm:col-span-2">
+                        <dt className="text-muted-foreground">Referral partners</dt>
+                        <dd className="font-medium">
+                          {formatReferralPartnersSummary(manageLinkedPartners) || (
+                            <span className="text-muted-foreground font-normal">
+                              No linked sales person or marketing affiliate
+                            </span>
+                          )}
+                        </dd>
+                      </div>
+                    ) : null}
                   </dl>
 
                   <Separator />
@@ -1377,7 +1483,8 @@ export default function SupportRequestsPage() {
                     <div className="space-y-1">
                       <Label>Ticket history</Label>
                       <p className="text-xs text-muted-foreground">
-                        Read-only audit trail — status changes, assignments, and who did what.
+                        Read-only audit trail — status changes, assignments, support staff actions,
+                        and partner activity.
                       </p>
                     </div>
                     <div className="rounded-lg border bg-muted/20 p-3">
@@ -1424,25 +1531,46 @@ export default function SupportRequestsPage() {
                     <>
                       <Separator />
                       <div className="space-y-2">
-                        <Label htmlFor="manage-assignee">Assigned admin</Label>
+                        <div className="space-y-1">
+                          <Label htmlFor="manage-assignee">Assign to</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Internal staff or the linked referral partner for this customer.
+                          </p>
+                        </div>
                         <Select
                           value={manageAssigneeId || 'unassigned'}
                           onValueChange={setManageAssigneeId}
                           disabled={updatingId === manageRequest._id}
                         >
-                          <SelectTrigger id="manage-assignee">
-                            <SelectValue placeholder="Unassigned" />
+                          <SelectTrigger id="manage-assignee" className="w-full">
+                            <SelectValue placeholder="Unassigned">
+                              {resolveAssigneeDisplayName(
+                                manageAssigneeId || 'unassigned',
+                                assignableAdmins,
+                                manageLinkedPartners,
+                              )}
+                            </SelectValue>
                           </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="unassigned">Unassigned</SelectItem>
-                            {assignableAdmins.map((admin) => (
-                              <SelectItem key={admin.id} value={admin.id}>
-                                {admin.name}
-                                {admin.isSuperAdmin ? ' (Super admin)' : ''}
-                              </SelectItem>
-                            ))}
+                          <SelectContent className={assigneeSelectContentClassName()}>
+                            <AssigneeSelectOptions
+                              assignableAdmins={assignableAdmins}
+                              partners={manageLinkedPartners}
+                            />
                           </SelectContent>
                         </Select>
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void handleAutoAssignReferralUser()}
+                            disabled={
+                              updatingId === manageRequest._id || manageLinkedPartners.length === 0
+                            }
+                          >
+                            Auto-assign referral user
+                          </Button>
+                        </div>
                       </div>
                     </>
                   ) : null}

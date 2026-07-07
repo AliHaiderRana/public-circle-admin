@@ -4,12 +4,19 @@ import SupportRequest from '@/lib/models/SupportRequest';
 import Company from '@/lib/models/Company';
 import User from '@/lib/models/User';
 import { getServerSession } from '@/lib/auth';
+import { toAdminAuditSession } from '@/lib/auth';
 import { SUPPORT_REQUEST_STATUS } from '@/lib/constants';
 import {
   formatSupportReferenceId,
   parseTicketIdSearchSuffix,
 } from '@/lib/support-admin.util';
-import { assignedTicketsFilterForAdmin } from '@/lib/support-access.util';
+import {
+  isPartnerSession,
+  ticketsFilterForSession,
+  canSessionAccessTicket,
+} from '@/lib/partner-access.util';
+import { getReferralPartnersByCompanyIds } from '@/lib/referral-partner.service';
+import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
 
 export async function GET(request: Request) {
   const session = await getServerSession();
@@ -33,10 +40,10 @@ export async function GET(request: Request) {
     const category = searchParams.get('category') || '';
 
     const query: Record<string, unknown> = {
-      ...assignedTicketsFilterForAdmin(session),
+      ...(await ticketsFilterForSession(session)),
     };
 
-    if (activeOnly) {
+    if (activeOnly && !isPartnerSession(session)) {
       query.status = {
         $in: [
           SUPPORT_REQUEST_STATUS.OPEN,
@@ -51,12 +58,12 @@ export async function GET(request: Request) {
       query.category = category;
     }
 
-    if (unassignedOnly) {
+    if (unassignedOnly && !isPartnerSession(session)) {
       query.$and = [
         ...(Array.isArray(query.$and) ? query.$and : []),
         { $or: [{ assignedAdminId: null }, { assignedAdminId: { $exists: false } }] },
       ];
-    } else if (session.isSuperAdmin) {
+    } else if (session.isSuperAdmin && !isPartnerSession(session)) {
       const assignedAdminId = searchParams.get('assignedAdminId') || '';
       if (assignedAdminId) {
         query.assignedAdminId = assignedAdminId;
@@ -115,6 +122,60 @@ export async function GET(request: Request) {
       ...request,
       referenceId: formatSupportReferenceId(String(request._id)),
     }));
+
+    if (session.isSuperAdmin && !isPartnerSession(session)) {
+      const companyIds = requestsWithReference
+        .map((request) => {
+          const company = request.companyId as { _id?: unknown } | unknown;
+          if (company && typeof company === 'object' && '_id' in company) {
+            return String(company._id);
+          }
+          return request.companyId ? String(request.companyId) : '';
+        })
+        .filter(Boolean);
+      const partnersByCompany = await getReferralPartnersByCompanyIds(companyIds);
+      const enriched = requestsWithReference.map((request) => {
+        const company = request.companyId as { _id?: unknown } | unknown;
+        const companyId =
+          company && typeof company === 'object' && '_id' in company
+            ? String(company._id)
+            : request.companyId
+              ? String(request.companyId)
+              : '';
+        return {
+          ...request,
+          linkedReferralPartners: companyId ? partnersByCompany[companyId] ?? [] : [],
+        };
+      });
+
+      return NextResponse.json({
+        requests: enriched,
+        pagination: {
+          page,
+          limit,
+          total: totalCount,
+          pages: Math.ceil(totalCount / limit),
+        },
+      });
+    }
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logPartnerPortalActivity(auditSession, {
+        action: PARTNER_PORTAL_ACTIONS.VIEW_SUPPORT_REQUESTS,
+        resourceType: 'support_request',
+        details: {
+          page,
+          limit,
+          search: search || undefined,
+          status: status || undefined,
+          activeOnly,
+          category: category || undefined,
+          totalCount,
+        },
+        summary: `Partner viewed support requests (${totalCount} total)`,
+      });
+    }
 
     return NextResponse.json({
       requests: requestsWithReference,

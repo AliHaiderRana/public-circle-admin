@@ -44,6 +44,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { DiskMaintenanceDetailsDialog } from "@/components/DiskMaintenanceDetailsDialog";
+import {
+  formatReclaimedKb,
+  isDiskMaintenanceCron,
+  type DiskMaintenanceMetadata,
+} from "@/lib/disk-maintenance-format";
 
 interface CronDetails {
   name: string;
@@ -67,6 +73,7 @@ interface HistoryItem {
   status: "SUCCESS" | "FAILED";
   error: string | null;
   errorStack: string | null;
+  metadata?: DiskMaintenanceMetadata | null;
   createdAt: string;
 }
 
@@ -92,6 +99,8 @@ export default function CronDetailPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [selectedError, setSelectedError] = useState<HistoryItem | null>(null);
+  const [selectedDiskDetails, setSelectedDiskDetails] =
+    useState<HistoryItem | null>(null);
   const [message, setMessage] = useState<{
     text: string;
     type: "success" | "error" | "info";
@@ -211,6 +220,7 @@ export default function CronDetailPage() {
       "0 4 * * *": "Daily at 4 AM",
       "0 6 * * *": "Daily at 6 AM",
       "0 0,12 * * *": "Twice daily (12 AM & 12 PM)",
+      "0 3 * * 0": "Weekly on Sunday at 3 AM",
     };
     return scheduleMap[schedule] || schedule;
   };
@@ -252,6 +262,18 @@ export default function CronDetailPage() {
       </div>
     );
   }
+
+  const isDiskMaintenance = isDiskMaintenanceCron(cronName);
+
+  const formatHistoryMetric = (item: HistoryItem) => {
+    if (isDiskMaintenance) {
+      return (
+        item.metadata?.reclaimedHuman ||
+        formatReclaimedKb(item.recordsUpdated)
+      );
+    }
+    return String(item.recordsUpdated);
+  };
 
   const successRate =
     totalCount > 0
@@ -407,7 +429,7 @@ export default function CronDetailPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-neutral-500">
-                Records Updated
+                {isDiskMaintenance ? "Space Reclaimed" : "Records Updated"}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -415,7 +437,9 @@ export default function CronDetailPage() {
                 <Database className="h-4 w-4 text-neutral-400" />
                 <div>
                   <div className="text-2xl font-bold">
-                    {cron.lastRecordsUpdated}
+                    {isDiskMaintenance
+                      ? formatReclaimedKb(cron.lastRecordsUpdated)
+                      : cron.lastRecordsUpdated}
                   </div>
                   <div className="text-xs text-neutral-500">Last run</div>
                 </div>
@@ -496,7 +520,9 @@ export default function CronDetailPage() {
                     <TableRow>
                       <TableHead className="w-[32%]">Start Time</TableHead>
                       <TableHead className="w-[16%]">Duration</TableHead>
-                      <TableHead className="w-[12%]">Records</TableHead>
+                      <TableHead className="w-[12%]">
+                        {isDiskMaintenance ? "Reclaimed" : "Records"}
+                      </TableHead>
                       <TableHead className="w-[18%]">Status</TableHead>
                       <TableHead className="w-[22%]">Actions</TableHead>
                     </TableRow>
@@ -524,7 +550,7 @@ export default function CronDetailPage() {
                           <div className="flex items-center gap-2">
                             <Database className="h-4 w-4 text-neutral-400" />
                             <span className="text-sm">
-                              {item.recordsUpdated}
+                              {formatHistoryMetric(item)}
                             </span>
                           </div>
                         </TableCell>
@@ -542,16 +568,28 @@ export default function CronDetailPage() {
                           )}
                         </TableCell>
                         <TableCell className="whitespace-normal">
-                          {item.error && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setSelectedError(item)}
-                            >
-                              <AlertCircle className="h-3 w-3 xl:mr-1" />
-                              <span className="hidden xl:inline">View Error</span>
-                            </Button>
-                          )}
+                          <div className="flex flex-wrap gap-2">
+                            {isDiskMaintenance && item.metadata ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSelectedDiskDetails(item)}
+                              >
+                                <Info className="h-3 w-3 xl:mr-1" />
+                                <span className="hidden xl:inline">Details</span>
+                              </Button>
+                            ) : null}
+                            {item.error && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSelectedError(item)}
+                              >
+                                <AlertCircle className="h-3 w-3 xl:mr-1" />
+                                <span className="hidden xl:inline">View Error</span>
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -641,6 +679,13 @@ export default function CronDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <DiskMaintenanceDetailsDialog
+        open={selectedDiskDetails !== null}
+        onOpenChange={(open) => !open && setSelectedDiskDetails(null)}
+        metadata={selectedDiskDetails?.metadata || null}
+        startTime={selectedDiskDetails?.startTime}
+      />
     </>
   );
 }

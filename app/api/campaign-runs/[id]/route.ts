@@ -4,7 +4,9 @@ import CampaignRun from '@/lib/models/CampaignRun';
 import Campaign from '@/lib/models/Campaign';
 import Company from '@/lib/models/Company';
 import EmailsSent from '@/lib/models/EmailsSent';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import { isPartnerSession, canPartnerAccessCompany } from '@/lib/partner-access.util';
+import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
 
 export async function GET(
   request: Request,
@@ -50,6 +52,15 @@ export async function GET(
         requestedId: campaignRunId,
         availableCampaignRuns: allCampaignRuns
       }, { status: 404 });
+    }
+
+    if (isPartnerSession(session)) {
+      const companyId = String(
+        (campaignRun.company as { _id?: unknown })?._id || campaignRun.company,
+      );
+      if (!(await canPartnerAccessCompany(session, companyId))) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
     }
 
     console.log('Campaign run details:', campaignRun);
@@ -162,6 +173,25 @@ export async function GET(
 
     console.log('Found email records:', emailRecords.length);
     console.log('Total emails:', totalEmails);
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logPartnerPortalActivity(auditSession, {
+        action: PARTNER_PORTAL_ACTIONS.VIEW_CAMPAIGN_RUN,
+        resourceType: 'campaign_run',
+        resourceId: campaignRunId,
+        details: {
+          campaignRunId,
+          companyId: String(
+            (campaignRun.company as { _id?: unknown })?._id || campaignRun.company,
+          ),
+          warehouse,
+          filter: filter || undefined,
+          search: search || undefined,
+        },
+        summary: `Partner viewed campaign run ${campaignRunId}`,
+      });
+    }
 
     return NextResponse.json({
       campaignRun: campaignRunWithCounts,

@@ -19,7 +19,7 @@ export async function GET(
       return NextResponse.json({ error: dlqAccess.error }, { status: 403 });
     }
 
-    const response = await fetch(`${getBackendApiUrl()}/crons/${cronName}`, {
+    const response = await fetch(`${await getBackendApiUrl()}/crons/${cronName}`, {
       headers: await getBackendAuthHeaders(),
     });
 

@@ -5,6 +5,7 @@ import Company from '@/lib/models/Company';
 import CampaignRun from '@/lib/models/CampaignRun';
 import EmailsSent from '@/lib/models/EmailsSent';
 import { getServerSession } from '@/lib/auth';
+import { isPartnerSession, resolvePartnerCompanyScope } from '@/lib/partner-access.util';
 
 export async function GET(request: Request) {
   const session = await getServerSession();
@@ -38,7 +39,13 @@ export async function GET(request: Request) {
       query.status = status;
     }
     
-    if (company) {
+    if (isPartnerSession(session)) {
+      const scope = await resolvePartnerCompanyScope(session, company || undefined);
+      if (scope.forbidden) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      Object.assign(query, scope.filter);
+    } else if (company) {
       query.company = company;
     }
     

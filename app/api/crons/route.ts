@@ -23,7 +23,7 @@ export async function GET() {
   }
 
   try {
-    const apiBaseUrl = getBackendApiUrl();
+    const apiBaseUrl = await getBackendApiUrl();
     const headers = await getBackendAuthHeaders();
     console.log("[API] Fetching crons from:", apiBaseUrl);
     const res = await fetch(`${apiBaseUrl}/crons`, { headers });
@@ -70,7 +70,7 @@ export async function GET() {
       { 
         error: "Failed to connect to backend", 
         details: error.message,
-        backendUrl: getBackendApiUrl(),
+        backendUrl: await getBackendApiUrl(),
       },
       { status: 500 }
     );
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    const res = await fetch(`${getBackendApiUrl()}/crons/seed`, {
+    const res = await fetch(`${await getBackendApiUrl()}/crons/seed`, {
       method: "POST",
       headers: await getBackendAuthHeaders({
         "Content-Type": "application/json",

@@ -36,6 +36,10 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  formatReclaimedKb,
+  isDiskMaintenanceCron,
+} from "@/lib/disk-maintenance-format";
 
 interface Cron {
   _id: string;
@@ -211,12 +215,20 @@ export default function CronsPage() {
       "0 4 * * *": "Daily at 4 AM",
       "0 6 * * *": "Daily at 6 AM",
       "0 0,12 * * *": "Twice daily (12 AM & 12 PM)",
+      "0 3 * * 0": "Weekly on Sunday at 3 AM",
     };
     return scheduleMap[schedule] || schedule;
   };
 
   const hasSchedule = (cron: Cron) =>
     !!cron.schedule && cron.schedule !== "unknown";
+
+  const formatCronMetric = (cron: Cron) => {
+    if (isDiskMaintenanceCron(cron.name)) {
+      return formatReclaimedKb(cron.lastRecordsUpdated);
+    }
+    return String(cron.lastRecordsUpdated);
+  };
 
   if (loading) {
     return (
@@ -349,7 +361,7 @@ export default function CronsPage() {
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">
-                          {cron.lastRecordsUpdated}
+                          {formatCronMetric(cron)}
                         </span>
                       </TableCell>
                       <TableCell>

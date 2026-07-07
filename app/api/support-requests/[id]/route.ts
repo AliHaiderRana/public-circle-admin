@@ -3,6 +3,7 @@ import dbConnect from '@/lib/db';
 import Company from '@/lib/models/Company';
 import User from '@/lib/models/User';
 import SupportRequest from '@/lib/models/SupportRequest';
+import AdminActivity from '@/lib/models/AdminActivity';
 import { getServerSession, toAdminAuditSession } from '@/lib/auth';
 import {
   SUPPORT_REQUEST_STATUS,
@@ -16,14 +17,11 @@ import {
 import { formatSupportReferenceId } from '@/lib/support-admin.util';
 import { buildStatusTimelineForAdmin } from '@/lib/support-status-timeline.util';
 import { formatAssignmentHistoryForAdmin } from '@/lib/support-assignment.util';
-import { canAdminAccessTicket } from '@/lib/support-access.util';
-
-const SERVER_API_URL =
-  process.env.SERVER_API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:3001';
-const INTERNAL_API_KEY =
-  process.env.INTERNAL_API_KEY || 'internal_admin_cron_key_2024';
+import { canSessionAccessTicket, denyPartnerSupportTicketPatch } from '@/lib/partner-access.util';
+import { getReferralPartnersForCompany } from '@/lib/referral-partner.service';
+import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
+import { getBackendApiUrl, getBackendInternalApiKey } from '@/lib/backend-api.server';
+import { schedulePartnerRealtimeStatsForTicket } from '@/lib/partner-realtime-push.server';
 
 export async function GET(
   _request: Request,
@@ -51,13 +49,75 @@ export async function GET(
       return NextResponse.json({ error: 'Support request not found' }, { status: 404 });
     }
 
-    if (!canAdminAccessTicket(session, request)) {
+    if (!(await canSessionAccessTicket(session, request))) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const companyId = request.companyId
+      ? String(
+          typeof request.companyId === 'object' && request.companyId !== null && '_id' in request.companyId
+            ? (request.companyId as { _id: unknown })._id
+            : request.companyId,
+        )
+      : '';
+
+    const linkedReferralPartners =
+      session.isSuperAdmin && companyId
+        ? await getReferralPartnersForCompany(companyId)
+        : [];
+
+    const auditTrail =
+      session.isSuperAdmin
+        ? (
+            await AdminActivity.find({
+              resourceType: 'support_request',
+              resourceId: id,
+            })
+              .sort({ createdAt: 1 })
+              .limit(100)
+              .lean()
+          ).map((row) => ({
+            id: String(row._id),
+            summary: String(row.summary ?? ''),
+            adminEmail: String(row.adminEmail ?? ''),
+            adminName: String(row.adminName ?? ''),
+            actorIsPartner: Boolean(row.actorIsPartner),
+            actorWasSuperAdmin: Boolean(row.actorWasSuperAdmin),
+            referralRole: row.referralRole != null ? String(row.referralRole) : null,
+            action: String(row.action ?? ''),
+            category: String(row.category ?? ''),
+            createdAt:
+              row.createdAt instanceof Date
+                ? row.createdAt.toISOString()
+                : String(row.createdAt ?? ''),
+          }))
+        : [];
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logPartnerPortalActivity(auditSession, {
+        action: PARTNER_PORTAL_ACTIONS.VIEW_SUPPORT_REQUEST,
+        resourceType: 'support_request',
+        resourceId: id,
+        details: {
+          companyId,
+          companyName:
+            typeof (request.companyId as { name?: unknown })?.name === 'string'
+              ? ((request.companyId as { name?: string }).name ?? '')
+              : '',
+          status: request.status,
+          category: request.category,
+          subject: request.subject,
+        },
+        summary: `Partner viewed support request ${formatSupportReferenceId(String(request._id))}`,
+      });
     }
 
     return NextResponse.json({
       ...request,
       referenceId: formatSupportReferenceId(String(request._id)),
+      linkedReferralPartners,
+      auditTrail,
       statusTimeline: buildStatusTimelineForAdmin({
         statusHistory: request.statusHistory as Parameters<typeof buildStatusTimelineForAdmin>[0]['statusHistory'],
         createdAt: request.createdAt,
@@ -83,6 +143,10 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await request.json();
+
+  const writeDenied = denyPartnerSupportTicketPatch(session, body);
+  if (writeDenied) return writeDenied;
+
   const {
     status,
     adminNotes,
@@ -144,15 +208,15 @@ export async function PATCH(
       return NextResponse.json({ error: 'Support request not found' }, { status: 404 });
     }
 
-    if (!canAdminAccessTicket(session, existingTicket)) {
+    if (!(await canSessionAccessTicket(session, existingTicket))) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const response = await fetch(`${SERVER_API_URL}/internal/support-requests/${id}`, {
+    const response = await fetch(`${await getBackendApiUrl()}/internal/support-requests/${id}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        'X-Internal-API-Key': INTERNAL_API_KEY,
+        'X-Internal-API-Key': await getBackendInternalApiKey(),
       },
       body: JSON.stringify({
         ...(status ? { status } : {}),
@@ -245,6 +309,22 @@ export async function PATCH(
         select: 'firstName lastName emailAddress',
       })
       .lean();
+
+    void schedulePartnerRealtimeStatsForTicket({
+      supportRequestId: id,
+      companyId: companyId || null,
+      assignedAdminId:
+        assignedAdminId !== undefined
+          ? assignedAdminId
+            ? String(assignedAdminId)
+            : null
+          : existingTicket.assignedAdminId
+            ? String(existingTicket.assignedAdminId)
+            : null,
+      previousAssignedAdminId: existingTicket.assignedAdminId
+        ? String(existingTicket.assignedAdminId)
+        : null,
+    });
 
     return NextResponse.json({
       ...(refreshed ?? supportRequest),

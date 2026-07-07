@@ -57,7 +57,7 @@ export async function POST(
 
   try {
     // Call the server API to trigger the cron using internal API key
-    const response = await fetch(`${getBackendApiUrl()}/crons/trigger/${name}`, {
+    const response = await fetch(`${await getBackendApiUrl()}/crons/trigger/${name}`, {
       method: 'POST',
       headers: await getBackendAuthHeaders({
         'Content-Type': 'application/json',

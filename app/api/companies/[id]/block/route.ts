@@ -5,6 +5,7 @@ import Company from '@/lib/models/Company';
 import User from '@/lib/models/User';
 import Campaign from '@/lib/models/Campaign';
 import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import { isPartnerSession } from '@/lib/partner-access.util';
 import {
   logAdminActivity,
   ADMIN_AUDIT_ACTION,
@@ -28,6 +29,9 @@ export async function POST(
     const session = await getServerSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (isPartnerSession(session)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { id } = await params;

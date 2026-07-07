@@ -133,6 +133,8 @@ function mapPanelRow(row: Record<string, unknown>): UnifiedActivityRow {
         ? (row.details as Record<string, unknown>)
         : null,
     actorWasSuperAdmin: Boolean(row.actorWasSuperAdmin),
+    actorIsPartner: Boolean(row.actorIsPartner),
+    referralRole: row.referralRole != null ? String(row.referralRole) : null,
     action: typeof row.action === 'string' ? row.action : undefined,
     resourceType: row.resourceType != null ? String(row.resourceType) : null,
     resourceId: row.resourceId != null ? String(row.resourceId) : null,
@@ -308,6 +310,72 @@ export async function fetchUnifiedAdminActivities({
       panelTotal,
       publicCircleTotal: pcTotal,
     },
+  };
+}
+
+/** Fetch all matching live activities in a date range (no pagination). */
+export async function fetchUnifiedAdminActivitiesInRange({
+  AdminActivity,
+  AdminImpersonationActivity,
+  sort,
+  source,
+  adminEmail,
+  userEmail = '',
+  userId = '',
+  companyId = '',
+  dateFrom,
+  dateTo,
+  category,
+  hideNoise = true,
+}: {
+  AdminActivity: mongoose.Model<unknown>;
+  AdminImpersonationActivity: mongoose.Model<unknown>;
+  sort: AuditSortOrder;
+  source: string;
+  adminEmail: string;
+  userEmail?: string;
+  userId?: string;
+  companyId?: string;
+  dateFrom: string;
+  dateTo: string;
+  category: string;
+  hideNoise?: boolean;
+}): Promise<{ activities: UnifiedActivityRow[]; panelTotal: number; publicCircleTotal: number }> {
+  const { panelCategory, pcCategory } = parseCategoryFilter(category, source);
+  const includePanel = source !== 'public_circle';
+  const includePc = source !== 'admin_panel';
+  const sortDir = sort === 'asc' ? 1 : -1;
+
+  const panelMatch = buildPanelMatch({ adminEmail, dateFrom, dateTo, panelCategory });
+  const pcMatch = buildPcMatch({
+    adminEmail,
+    userEmail,
+    userId,
+    companyId,
+    dateFrom,
+    dateTo,
+    pcCategory,
+    hideNoise,
+  });
+
+  const [panelRows, pcRows] = await Promise.all([
+    includePanel
+      ? AdminActivity.find(panelMatch).sort({ createdAt: sortDir }).lean()
+      : Promise.resolve([]),
+    includePc
+      ? AdminImpersonationActivity.find(pcMatch).sort({ createdAt: sortDir }).lean()
+      : Promise.resolve([]),
+  ]);
+
+  const panelMapped = (panelRows as Record<string, unknown>[]).map(mapPanelRow);
+  const pcMapped = (pcRows as Record<string, unknown>[])
+    .map(mapPcRow)
+    .filter((row): row is UnifiedActivityRow => row != null);
+
+  return {
+    activities: sortMerged([...panelMapped, ...pcMapped], sort),
+    panelTotal: panelMapped.length,
+    publicCircleTotal: pcMapped.length,
   };
 }
 

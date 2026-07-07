@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
+import { denyPartnerWrite } from '@/lib/partner-access.util';
 import { internalApiFetch } from '@/lib/internal-api.server';
 
 export async function PATCH(
@@ -10,6 +11,9 @@ export async function PATCH(
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const writeDenied = denyPartnerWrite(session);
+  if (writeDenied) return writeDenied;
 
   const { id, messageId } = await params;
 

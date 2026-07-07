@@ -14,6 +14,7 @@ export type AdminChatMessage = {
   senderType: string;
   senderName?: string;
   senderAdminId?: string;
+  senderRoleLabel?: string;
   message: string;
   createdAt: string;
   visibility?: 'CUSTOMER' | 'INTERNAL';

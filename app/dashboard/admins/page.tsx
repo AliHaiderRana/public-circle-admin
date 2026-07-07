@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,7 +33,8 @@ interface Admin {
 }
 
 export default function AdminsPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -47,6 +49,12 @@ export default function AdminsPage() {
   useEffect(() => {
     fetchAdmins();
   }, []);
+
+  useEffect(() => {
+    if (!authLoading && user && !user.isSuperAdmin) {
+      router.replace('/dashboard');
+    }
+  }, [authLoading, user, router]);
 
   const fetchAdmins = async () => {
     setLoading(true);
@@ -120,15 +128,28 @@ export default function AdminsPage() {
     return `/dashboard/admins/activity?${params.toString()}`;
   };
 
+  if (authLoading || !user?.isSuperAdmin) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Admin Users</h2>
           <p className="text-neutral-500">
-            Create and remove administrator accounts. Use{' '}
-            <strong>View activity</strong> on a row to see everything that admin did in the
-            admin panel and in Public Circle.
+            Create and remove administrator accounts, and review audit trails for support staff.
+            Venndii Referral App users are managed on the{' '}
+            <Link href="/dashboard/third-party-users" className="text-primary underline-offset-4 hover:underline">
+              Referral Users
+            </Link>{' '}
+            page. Use <strong>View activity</strong> on a row to see everything that person did in
+            the admin panel and in Public Circle.
           </p>
         </div>
         {user?.isSuperAdmin && (

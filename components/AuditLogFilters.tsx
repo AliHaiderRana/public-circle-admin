@@ -28,7 +28,7 @@ type AuditLogFiltersProps = {
   onDateToChange: (value: string) => void;
   sort: AuditSortOrder;
   onSortChange: (value: AuditSortOrder) => void;
-  onRefresh: () => void;
+  onRefresh?: () => void;
   refreshing?: boolean;
   children?: React.ReactNode;
   title?: string;
@@ -55,27 +55,35 @@ export default function AuditLogFilters({
   title = 'Filters',
   description = 'Narrow results by admin, date, and sort order.',
 }: AuditLogFiltersProps) {
+  const hasHeader = title || description || onRefresh;
+
   return (
     <Card>
-      <CardHeader className="pb-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-base">{title}</CardTitle>
-            <CardDescription>{description}</CardDescription>
+      {hasHeader && (
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            {(title || description) && (
+              <div>
+                {title && <CardTitle className="text-base">{title}</CardTitle>}
+                {description && <CardDescription>{description}</CardDescription>}
+              </div>
+            )}
+            {onRefresh && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-2"
+                onClick={onRefresh}
+                disabled={refreshing}
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            )}
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0 gap-2"
-            onClick={onRefresh}
-            disabled={refreshing}
-          >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        </div>
-      </CardHeader>
+        </CardHeader>
+      )}
       <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {showAdminEmail && onAdminEmailChange ? (
           <div className="space-y-2">

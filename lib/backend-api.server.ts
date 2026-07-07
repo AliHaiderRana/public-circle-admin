@@ -1,12 +1,8 @@
 import { getServerSecrets } from '@/lib/server-secrets.server';
 
-export function getBackendApiUrl(): string {
-  return (
-    process.env.API_BASE_URL ||
-    process.env.SERVER_API_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    'http://localhost:3001'
-  );
+export async function getBackendApiUrl(): Promise<string> {
+  const secrets = await getServerSecrets();
+  return secrets.serverBaseUrl;
 }
 
 export async function getBackendInternalApiKey(): Promise<string> {

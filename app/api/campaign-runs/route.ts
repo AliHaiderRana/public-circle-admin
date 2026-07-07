@@ -4,7 +4,15 @@ import CampaignRun from '@/lib/models/CampaignRun';
 import Campaign from '@/lib/models/Campaign';
 import Company from '@/lib/models/Company';
 import EmailsSent from '@/lib/models/EmailsSent';
-import { getServerSession } from '@/lib/auth';
+import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import {
+  isPartnerSession,
+  resolvePartnerCompanyScope,
+  getPartnerAllowedCompanyIds,
+  canPartnerAccessCompany,
+} from '@/lib/partner-access.util';
+import mongoose from 'mongoose';
+import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
 
 export async function GET(request: Request) {
   const session = await getServerSession();
@@ -88,6 +96,21 @@ export async function GET(request: Request) {
       }
     }
     
+    if (isPartnerSession(session)) {
+      let requestedCompanyId: string | undefined;
+      if (typeof query.company === 'string') {
+        requestedCompanyId = query.company;
+      } else if (companyFilter && /^[0-9a-fA-F]{24}$/.test(companyFilter)) {
+        requestedCompanyId = companyFilter;
+      }
+
+      const scope = await resolvePartnerCompanyScope(session, requestedCompanyId);
+      if (scope.forbidden) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      Object.assign(query, scope.filter);
+    }
+
     const skip = (page - 1) * limit;
     
     // Build sort object
@@ -181,8 +204,12 @@ export async function GET(request: Request) {
 
     // Get all unique companies and campaigns that have campaign runs for filter dropdowns
     const [uniqueCompanyIds, uniqueCampaignIds] = await Promise.all([
-      CampaignRun.distinct('company'),
-      CampaignRun.distinct('campaign')
+      CampaignRun.distinct('company', isPartnerSession(session)
+        ? { company: { $in: (await getPartnerAllowedCompanyIds(session)).map((id) => new mongoose.Types.ObjectId(id)) } }
+        : {}),
+      CampaignRun.distinct('campaign', isPartnerSession(session)
+        ? { company: { $in: (await getPartnerAllowedCompanyIds(session)).map((id) => new mongoose.Types.ObjectId(id)) } }
+        : {}),
     ]);
 
     const [allCompanies, allCampaigns] = await Promise.all([
@@ -193,6 +220,24 @@ export async function GET(request: Request) {
     // Deduplicate company and campaign names
     const uniqueCompanyNames = [...new Set(allCompanies.map(c => c.name).filter(Boolean))].sort();
     const uniqueCampaignNames = [...new Set(allCampaigns.map(c => c.campaignName).filter(Boolean))].sort();
+
+    const auditSession = toAdminAuditSession(session);
+    if (auditSession) {
+      await logPartnerPortalActivity(auditSession, {
+        action: PARTNER_PORTAL_ACTIONS.VIEW_CAMPAIGN_RUNS,
+        resourceType: 'campaign_run',
+        details: {
+          page,
+          limit,
+          search: search || undefined,
+          companyFilter: companyFilter || undefined,
+          campaignFilter: campaignFilter || undefined,
+          emailCountFilter: emailCountFilter || undefined,
+          total: actualTotal,
+        },
+        summary: `Partner viewed campaign runs (${actualTotal} total)`,
+      });
+    }
 
     return NextResponse.json({
       campaignRuns: paginatedResults,

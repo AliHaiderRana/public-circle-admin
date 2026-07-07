@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
-import AdminNotification from '@/lib/models/AdminNotification';
 import { getServerSession } from '@/lib/auth';
+import { notificationFilterForSession } from '@/lib/admin-notification-filter.util';
+import AdminNotification from '@/lib/models/AdminNotification';
 const DROPDOWN_NOTIFICATION_LIMIT = 5;
 
 export async function GET(request: Request) {
@@ -23,10 +24,20 @@ export async function GET(request: Request) {
 
     const skip = (page - 1) * limit;
 
-    const query: any = {};
+    const query: Record<string, unknown> = {};
+
+    const sessionFilter = notificationFilterForSession(session);
+    if (sessionFilter) {
+      Object.assign(query, sessionFilter);
+    }
     
     if (isRead !== null && isRead !== undefined && isRead !== '') {
       query.isRead = isRead === 'true';
+    }
+
+    const unreadQuery: Record<string, unknown> = { isRead: false };
+    if (sessionFilter) {
+      Object.assign(unreadQuery, sessionFilter);
     }
 
     const [notifications, totalCount, unreadCount] = await Promise.all([
@@ -36,7 +47,7 @@ export async function GET(request: Request) {
         .limit(limit)
         .lean(),
       AdminNotification.countDocuments(query),
-      AdminNotification.countDocuments({ isRead: false }),
+      AdminNotification.countDocuments(unreadQuery),
     ]);
 
     const displayItems = notifications;

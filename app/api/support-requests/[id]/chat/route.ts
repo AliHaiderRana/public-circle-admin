@@ -11,18 +11,12 @@ import {
 import { canAdminAccessTicket } from '@/lib/support-access.util';
 import { formatSupportReferenceId } from '@/lib/support-admin.util';
 import { SUPPORT_REQUEST_STATUS } from '@/lib/constants';
+import { getBackendApiUrl, getBackendInternalApiKey } from '@/lib/backend-api.server';
 
 const CHAT_DELETABLE_STATUSES = new Set<string>([
   SUPPORT_REQUEST_STATUS.RESOLVED,
   SUPPORT_REQUEST_STATUS.CLOSED,
 ]);
-
-const SERVER_API_URL =
-  process.env.SERVER_API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:3001';
-const INTERNAL_API_KEY =
-  process.env.INTERNAL_API_KEY || 'internal_admin_cron_key_2024';
 
 export async function DELETE(
   _request: Request,
@@ -54,11 +48,11 @@ export async function DELETE(
       );
     }
 
-    const response = await fetch(`${SERVER_API_URL}/internal/support-requests/${id}/chat`, {
+    const response = await fetch(`${await getBackendApiUrl()}/internal/support-requests/${id}/chat`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
-        'X-Internal-API-Key': INTERNAL_API_KEY,
+        'X-Internal-API-Key': await getBackendInternalApiKey(),
       },
       body: JSON.stringify({ adminId: session.userId }),
     });

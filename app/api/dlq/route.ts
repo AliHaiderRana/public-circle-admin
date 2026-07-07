@@ -12,6 +12,7 @@ export type DlqMessageDetail = {
   campaignId: string | null;
   campaignName: string | null;
   campaignRunId: string | null;
+  campaignRunStartedAt: string | null;
   deliveryAttempts: number | null;
   index: number | null;
   queuedAt: string | null;
@@ -22,9 +23,12 @@ export type DlqMessageDetail = {
 
 export type DlqStatus = {
   dlqMessageCount: number | null;
+  dlqMessagesInFlight?: number;
   countError: string | null;
   messages: DlqMessageDetail[];
   messagesError: string | null;
+  messagesLoadedCount?: number;
+  peekComplete?: boolean;
   maxRetriesBeforeDlq: number;
   dlqLastAlertAt: string | null;
   dlqLastAlertedCount: number;
@@ -36,7 +40,7 @@ export async function GET() {
   if (error) return error;
 
   try {
-    const response = await fetch(`${getBackendApiUrl()}/system/dlq`, {
+    const response = await fetch(`${await getBackendApiUrl()}/system/dlq`, {
       headers: await getBackendAuthHeaders(),
       cache: 'no-store',
     });

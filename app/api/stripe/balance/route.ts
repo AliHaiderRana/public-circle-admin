@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
+import { denyPartnerPaymentAccess } from '@/lib/partner-access.util';
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', { apiVersion: '2024-12-18.acacia' });
@@ -7,6 +8,9 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', { apiVersion: '20
 export async function GET(request: Request) {
   const session = await getServerSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const paymentDenied = denyPartnerPaymentAccess(session);
+  if (paymentDenied) return paymentDenied;
 
   try {
     const [balance, charges, products, subscriptions] = await Promise.all([

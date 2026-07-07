@@ -5,6 +5,9 @@ import dbConnect from '@/lib/db';
 import AdminUser from '@/lib/models/AdminUser';
 import type { AdminAuditSession } from '@/lib/admin-audit.constants';
 import { ADMIN_JWT_SECRET } from '@/lib/admin-jwt';
+import { isPartnerSession } from '@/lib/partner-access.util';
+import { getReferralPartnerById } from '@/lib/referral-partner.service';
+import { isPartnerHandoffEnabled } from '@/lib/partner-handoff-settings.server';
 
 function readBearerToken(request?: Request): string | null {
   if (!request) return null;
@@ -23,6 +26,28 @@ export async function getServerSession(request?: Request) {
     if (!token) return null;
 
     const decoded = jwt.verify(token, ADMIN_JWT_SECRET) as any;
+
+    if (decoded.isPartner && decoded.referralUserId) {
+      if (!(await isPartnerHandoffEnabled())) {
+        return null;
+      }
+
+      const partner = await getReferralPartnerById(String(decoded.referralUserId));
+      if (!partner) {
+        return null;
+      }
+
+      return {
+        ...decoded,
+        userId: String(partner._id),
+        email: partner.emailAddress,
+        name: [partner.firstName, partner.lastName].filter(Boolean).join(' ') || partner.emailAddress,
+        isSuperAdmin: false,
+        isPartner: true,
+        referralUserId: String(partner._id),
+        referralRole: partner.role,
+      };
+    }
     
     // Verify user still exists in database (prevents deleted users from accessing)
     await dbConnect();
@@ -38,6 +63,7 @@ export async function getServerSession(request?: Request) {
       email: user.email,
       name: user.name,
       isSuperAdmin: user.isSuperAdmin || false,
+      isPartner: false,
     };
   } catch (error) {
     return null;
@@ -60,7 +86,30 @@ export function toAdminAuditSession(
     email: session.email,
     name: session.name,
     isSuperAdmin: session.isSuperAdmin,
+    isPartner: isPartnerSession(session),
+    referralRole: session.referralRole,
   };
+}
+
+/** Returns 401/403 NextResponse or null when session is a full admin (not partner). */
+export async function requireFullAdminSession(): Promise<
+  | { session: NonNullable<Awaited<ReturnType<typeof getServerSession>>>; error: null }
+  | { session: null; error: NextResponse }
+> {
+  const session = await getServerSession();
+  if (!session) {
+    return {
+      session: null,
+      error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    };
+  }
+  if (isPartnerSession(session)) {
+    return {
+      session: null,
+      error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+    };
+  }
+  return { session, error: null };
 }
 
 /** Returns 401/403 NextResponse or null when session is a super admin. */

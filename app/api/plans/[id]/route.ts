@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import dbConnect from '@/lib/db';
 import { getServerSession, toAdminAuditSession } from '@/lib/auth';
+import { denyPartnerWrite } from '@/lib/partner-access.util';
 import {
   logAdminActivity,
   ADMIN_AUDIT_ACTION,
@@ -39,6 +40,9 @@ export async function PATCH(
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const writeDenied = denyPartnerWrite(session);
+  if (writeDenied) return writeDenied;
 
   await dbConnect();
 
