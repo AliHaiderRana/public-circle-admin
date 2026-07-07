@@ -451,6 +451,30 @@ export async function getReferralPartnersForCompany(
   return map[companyId] ?? [];
 }
 
+/** Referral DB is optional on prod when Integrations UI is disabled — never block support inbox. */
+export async function getReferralPartnersByCompanyIdsSafe(
+  companyIds: string[],
+): Promise<Record<string, CompanyReferralPartner[]>> {
+  const empty: Record<string, CompanyReferralPartner[]> = {};
+  for (const id of companyIds) {
+    if (id) empty[id] = [];
+  }
+  try {
+    return await getReferralPartnersByCompanyIds(companyIds);
+  } catch (error) {
+    console.error('[referral-partner] Support inbox partner enrichment failed:', error);
+    return empty;
+  }
+}
+
+export async function getReferralPartnersForCompanySafe(
+  companyId: string,
+): Promise<CompanyReferralPartner[]> {
+  if (!companyId) return [];
+  const map = await getReferralPartnersByCompanyIdsSafe([companyId]);
+  return map[companyId] ?? [];
+}
+
 /** All active sales / marketing partners for super-admin support user audit views. */
 export async function listReferralSupportPartners(): Promise<CompanyReferralPartner[]> {
   const conn = await getReferralDbConnection();

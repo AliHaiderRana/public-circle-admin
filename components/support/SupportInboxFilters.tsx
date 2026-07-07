@@ -252,7 +252,7 @@ export function SupportInboxFilters({
       </div>
 
       <div className="flex items-center gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {!isPartner ? (
+        {!isPartner && !isSuperAdmin ? (
           <FilterChip
             active={assigneeFilter === 'unassigned'}
             onClick={() =>

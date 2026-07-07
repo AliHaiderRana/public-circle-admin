@@ -206,6 +206,8 @@ export default function SupportRequestsPage() {
   const resolvedActiveTicketRef = useRef<SupportRequestRow | null>(null);
   const silentRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const highlightHandledRef = useRef<string | null>(null);
+  const highlightClearAttemptedRef = useRef(false);
+  const superAdminInboxInitializedRef = useRef(false);
   const selectedTicketIdRef = useRef<string | null>(selectedTicketId);
   selectedTicketIdRef.current = selectedTicketId;
 
@@ -367,6 +369,16 @@ export default function SupportRequestsPage() {
       .then((data) => setAssignableAdmins(data.admins ?? []))
       .catch(() => setAssignableAdmins([]));
   }, [isPartner]);
+
+  useEffect(() => {
+    if (!isSuperAdmin || isPartner || superAdminInboxInitializedRef.current) return;
+    superAdminInboxInitializedRef.current = true;
+    setAssigneeFilter('all');
+    setActiveOnlyFilter(false);
+    setStatusFilter('');
+    setCategoryFilter('');
+    setSearchTerm('');
+  }, [isSuperAdmin, isPartner]);
 
   const fetchRequests = useCallback(async (silent = false) => {
     if (!silent) {
@@ -645,32 +657,64 @@ export default function SupportRequestsPage() {
   }, [fetchRequests]);
 
   useEffect(() => {
+    highlightClearAttemptedRef.current = false;
+    highlightHandledRef.current = null;
+  }, [highlightRequestId]);
+
+  useEffect(() => {
     if (!highlightRequestId || loading) return;
     if (highlightHandledRef.current === highlightRequestId) return;
 
     const row = requests.find((request) => request._id === highlightRequestId);
-    if (!row) return;
 
-    highlightHandledRef.current = highlightRequestId;
-    setHighlightFading(false);
+    const finishHighlight = (scrollToRow: boolean) => {
+      highlightHandledRef.current = highlightRequestId;
+      setHighlightFading(false);
 
-    if (selectedTicketId !== highlightRequestId) {
-      selectTicket(highlightRequestId);
+      if (selectedTicketId !== highlightRequestId) {
+        selectTicket(highlightRequestId);
+      }
+
+      if (scrollToRow && row) {
+        requestAnimationFrame(() => {
+          highlightedRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+      }
+
+      const params = new URLSearchParams(searchParams.toString());
+      if (params.has('highlight')) {
+        params.delete('highlight');
+        const qs = params.toString();
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      }
+    };
+
+    if (row) {
+      finishHighlight(true);
+      const fadeTimer = window.setTimeout(() => setHighlightFading(true), 2000);
+      return () => window.clearTimeout(fadeTimer);
     }
 
-    requestAnimationFrame(() => {
-      highlightedRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
+    const filtersBlocking =
+      searchTerm ||
+      statusFilter ||
+      (!isPartner && activeOnlyFilter) ||
+      categoryFilter ||
+      (!isPartner && assigneeFilter !== 'all');
 
+    if (filtersBlocking && !highlightClearAttemptedRef.current) {
+      highlightClearAttemptedRef.current = true;
+      setSearchTerm('');
+      setStatusFilter('');
+      setActiveOnlyFilter(false);
+      setAssigneeFilter('all');
+      setCategoryFilter('');
+      setPagination((prev) => ({ ...prev, page: 1 }));
+      return;
+    }
+
+    finishHighlight(false);
     const fadeTimer = window.setTimeout(() => setHighlightFading(true), 2000);
-
-    const params = new URLSearchParams(searchParams.toString());
-    if (params.has('highlight')) {
-      params.delete('highlight');
-      const qs = params.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    }
-
     return () => window.clearTimeout(fadeTimer);
   }, [
     highlightRequestId,
@@ -681,6 +725,12 @@ export default function SupportRequestsPage() {
     searchParams,
     selectTicket,
     selectedTicketId,
+    searchTerm,
+    statusFilter,
+    activeOnlyFilter,
+    categoryFilter,
+    assigneeFilter,
+    isPartner,
   ]);
 
   const hasActiveFilters = Boolean(

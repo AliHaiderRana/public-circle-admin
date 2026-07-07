@@ -18,7 +18,7 @@ import { formatSupportReferenceId } from '@/lib/support-admin.util';
 import { buildStatusTimelineForAdmin } from '@/lib/support-status-timeline.util';
 import { formatAssignmentHistoryForAdmin } from '@/lib/support-assignment.util';
 import { canSessionAccessTicket, denyPartnerSupportTicketPatch } from '@/lib/partner-access.util';
-import { getReferralPartnersForCompany } from '@/lib/referral-partner.service';
+import { getReferralPartnersForCompanySafe } from '@/lib/referral-partner.service';
 import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
 import { getBackendApiUrl, getBackendInternalApiKey } from '@/lib/backend-api.server';
 import { schedulePartnerRealtimeStatsForTicket } from '@/lib/partner-realtime-push.server';
@@ -63,7 +63,7 @@ export async function GET(
 
     const linkedReferralPartners =
       session.isSuperAdmin && companyId
-        ? await getReferralPartnersForCompany(companyId)
+        ? await getReferralPartnersForCompanySafe(companyId)
         : [];
 
     const auditTrail =

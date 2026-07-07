@@ -15,7 +15,7 @@ import {
   ticketsFilterForSession,
   canSessionAccessTicket,
 } from '@/lib/partner-access.util';
-import { getReferralPartnersByCompanyIds } from '@/lib/referral-partner.service';
+import { getReferralPartnersByCompanyIdsSafe } from '@/lib/referral-partner.service';
 import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
 
 export async function GET(request: Request) {
@@ -42,6 +42,8 @@ export async function GET(request: Request) {
     const query: Record<string, unknown> = {
       ...(await ticketsFilterForSession(session)),
     };
+
+    // Super admins see the full queue unless they apply optional list filters below.
 
     if (activeOnly && !isPartnerSession(session)) {
       query.status = {
@@ -133,7 +135,7 @@ export async function GET(request: Request) {
           return request.companyId ? String(request.companyId) : '';
         })
         .filter(Boolean);
-      const partnersByCompany = await getReferralPartnersByCompanyIds(companyIds);
+      const partnersByCompany = await getReferralPartnersByCompanyIdsSafe(companyIds);
       const enriched = requestsWithReference.map((request) => {
         const company = request.companyId as { _id?: unknown } | unknown;
         const companyId =
