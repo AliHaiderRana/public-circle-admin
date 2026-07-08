@@ -15,25 +15,9 @@ const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
-  require('tsx/cjs/api').register({
-    tsconfig: require('./tsconfig.json'),
-  });
-
-  const {
-    attachPartnerRealtimeSocket,
-  } = require('./lib/partner-realtime-socket.server.ts');
-
   const server = createServer();
 
-  // Attach Socket.IO before the Next.js handler so /socket.io is not answered with a 404 page.
-  attachPartnerRealtimeSocket(server);
-
   server.on('request', async (req, res) => {
-    const pathname = parse(req.url || '', true).pathname || '';
-    if (pathname.startsWith('/socket.io')) {
-      return;
-    }
-
     try {
       const parsedUrl = parse(req.url, true);
       await handle(req, res, parsedUrl);
@@ -48,6 +32,5 @@ app.prepare().then(() => {
 
   server.listen(port, () => {
     console.log(`> Admin ready on http://${hostname}:${port}`);
-    console.log(`> Partner realtime socket: http://${hostname}:${port}/partner-realtime`);
   });
 });

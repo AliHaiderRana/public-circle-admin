@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
-import { isAdminIntegrationsEnabled } from '@/lib/feature-flags';
 import {
   buildIntegrationDocs,
   type IntegrationDocsInput,
@@ -13,10 +12,6 @@ function pickQueryUrl(searchParams: URLSearchParams, key: string): string | unde
 }
 
 export async function GET(request: Request) {
-  if (!isAdminIntegrationsEnabled()) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-
   const session = await getServerSession();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

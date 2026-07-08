@@ -76,7 +76,9 @@ function normalizeSettings(doc: {
       adminPortalUrl: adminPortal.adminPortalUrl?.trim() ?? defaults.adminPortal.adminPortalUrl,
       adminApiBaseUrl: adminPortal.adminApiBaseUrl?.trim() ?? defaults.adminPortal.adminApiBaseUrl,
       partnerPortalSsoSecret:
-        adminPortal.partnerPortalSsoSecret?.trim() ?? defaults.adminPortal.partnerPortalSsoSecret,
+        adminPortal.partnerPortalSsoSecret?.trim() ||
+        adminPortal.partnerRealtimeSocketKey?.trim() ||
+        defaults.adminPortal.partnerPortalSsoSecret,
       partnerSidebarLabel:
         adminPortal.partnerSidebarLabel?.trim() ?? defaults.adminPortal.partnerSidebarLabel,
       partnerSidebarEnabled:
@@ -87,7 +89,9 @@ function normalizeSettings(doc: {
         adminPortal.partnerSocketAuthValidator?.trim() ??
         defaults.adminPortal.partnerSocketAuthValidator,
       partnerRealtimeSocketKey:
-        adminPortal.partnerRealtimeSocketKey?.trim() ?? defaults.adminPortal.partnerRealtimeSocketKey,
+        adminPortal.partnerPortalSsoSecret?.trim() ||
+        adminPortal.partnerRealtimeSocketKey?.trim() ||
+        defaults.adminPortal.partnerRealtimeSocketKey,
       adminIntegrationEndpoints: mergePartnerSocketEvents(
         adminPortal.adminIntegrationEndpoints as PartnerSocketEvent[] | undefined,
       ),
@@ -131,5 +135,9 @@ export async function getAdminPortalIntegration(): Promise<AdminPortalIntegratio
 
 export async function getPartnerPortalSsoSecret(): Promise<string> {
   const adminPortal = await getAdminPortalIntegration();
-  return adminPortal.partnerPortalSsoSecret?.trim() || '';
+  return (
+    adminPortal.partnerPortalSsoSecret?.trim() ||
+    adminPortal.partnerRealtimeSocketKey?.trim() ||
+    ''
+  );
 }

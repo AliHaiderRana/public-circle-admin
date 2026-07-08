@@ -1,4 +1,5 @@
 import { getAdminPortalIntegration } from '@/lib/integration-settings.service';
+import { resolveCustomerPortalSecret } from '@/lib/partner-handoff.util';
 
 export async function isPartnerHandoffEnabled(): Promise<boolean> {
   const adminPortal = await getAdminPortalIntegration();
@@ -6,7 +7,7 @@ export async function isPartnerHandoffEnabled(): Promise<boolean> {
     adminPortal.enabled &&
       adminPortal.referralEnabled &&
       adminPortal.adminPortalUrl?.trim() &&
-      adminPortal.partnerPortalSsoSecret?.trim(),
+      resolveCustomerPortalSecret(adminPortal),
   );
 }
 
@@ -14,15 +15,15 @@ export async function assertPartnerHandoffEnabled(): Promise<void> {
   const adminPortal = await getAdminPortalIntegration();
 
   if (!adminPortal.enabled && !adminPortal.referralEnabled) {
-    throw new Error('Partner portal handoff is disabled');
+    throw new Error('Customer portal integration is disabled');
   }
   if (!adminPortal.enabled) {
-    throw new Error('Partner portal handoff is disabled on the admin portal');
+    throw new Error('Customer portal integration is disabled on the admin portal');
   }
   if (!adminPortal.referralEnabled) {
-    throw new Error('Partner portal handoff is disabled on the Venndii Referral App');
+    throw new Error('Customer portal integration is disabled on the referral app');
   }
-  if (!adminPortal.adminPortalUrl?.trim() || !adminPortal.partnerPortalSsoSecret?.trim()) {
-    throw new Error('Partner portal handoff is not configured');
+  if (!adminPortal.adminPortalUrl?.trim() || !resolveCustomerPortalSecret(adminPortal)) {
+    throw new Error('Customer portal integration is not configured');
   }
 }

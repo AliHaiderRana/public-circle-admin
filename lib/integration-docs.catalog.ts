@@ -155,7 +155,7 @@ export function buildIntegrationDocs(input: IntegrationDocsInput = {}): Integrat
         'Lets sales and marketing partners open the Public Circle Admin support inbox from the Venndii Referral App without a separate password.',
       relatedUrlField: 'adminPortalUrl',
       prerequisites: [
-        'Partner API key must be identical in Public Circle Admin and Venndii Referral App → Integrations.',
+        'Secret key must be identical in Public Circle Admin and Venndii Referral App → Integrations.',
         'Partner handoff must be enabled in both admin and referral app.',
         'Referral partners are blocked from password login on the admin login page.',
       ],
@@ -182,7 +182,7 @@ export function buildIntegrationDocs(input: IntegrationDocsInput = {}): Integrat
         },
         {
           key: 'partnerPortalSsoSecret',
-          label: 'Partner API key',
+          label: 'Secret key',
           required: true,
           configured: ssoConfigured,
           hint: 'Shared API key used to sign and verify the 120s handoff JWT.',
@@ -253,7 +253,7 @@ export function buildIntegrationDocs(input: IntegrationDocsInput = {}): Integrat
           referralApiDocBase,
           '/integrations',
           'Super-admin referral JWT',
-          'Read shared Integration-Settings (including partner API key) from referral app UI.',
+          'Read shared Integration-Settings (including secret key) from referral app UI.',
           'Super admin opens Venndii Referral App → Integrations.',
         ),
         api(

@@ -4,7 +4,78 @@ import {
   getReferralPartnerById,
   getReferralPartnersForCompany,
 } from '@/lib/referral-partner.service';
-import { schedulePartnerRealtimeStatsPush } from '@/lib/partner-realtime-socket.server';
+import { getIntegrationSettings } from '@/lib/integration-settings.service';
+import { resolveCustomerPortalSecret } from '@/lib/partner-handoff.util';
+
+const DEBOUNCE_MS = 400;
+const pendingPartnerIds = new Set<string>();
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+function resolveServerPushBaseUrl(serverBaseUrl?: string): string {
+  const raw =
+    serverBaseUrl?.trim() ||
+    process.env.SERVER_API_URL?.trim() ||
+    process.env.NEXT_PUBLIC_SERVER_URL?.trim() ||
+    '';
+  return raw.replace(/\/$/, '');
+}
+
+async function pushPartnerRealtimeStats(referralUserIds: string[]): Promise<void> {
+  if (!referralUserIds.length) return;
+
+  const settings = await getIntegrationSettings();
+  const adminPortal = settings.adminPortal;
+  const secretKey = resolveCustomerPortalSecret(adminPortal);
+  const serverBaseUrl = resolveServerPushBaseUrl(settings.publicCircleServer.serverBaseUrl);
+  const internalApiKey = settings.publicCircleServer.internalApiKey?.trim();
+
+  if (!serverBaseUrl || !secretKey) {
+    return;
+  }
+
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-partner-realtime-secret': secretKey,
+    };
+    if (internalApiKey) {
+      headers['x-internal-api-key'] = internalApiKey;
+    }
+
+    const response = await fetch(`${serverBaseUrl}/internal/customer-portal/push`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ referralUserIds }),
+    });
+
+    if (!response.ok && process.env.NODE_ENV === 'development') {
+      const body = await response.text();
+      console.warn('[customer-portal] remote push failed:', response.status, body);
+    }
+  } catch (error) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[customer-portal] remote push failed:', error);
+    }
+  }
+}
+
+export function schedulePartnerRealtimeStatsPush(referralUserId: string): void {
+  const id = String(referralUserId || '').trim();
+  if (!id) return;
+
+  pendingPartnerIds.add(id);
+
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+  }
+
+  flushTimer = setTimeout(() => {
+    const ids = Array.from(pendingPartnerIds);
+    pendingPartnerIds.clear();
+    flushTimer = null;
+    void pushPartnerRealtimeStats(ids);
+  }, DEBOUNCE_MS);
+}
 
 export async function schedulePartnerRealtimeStatsForTicket(input: {
   supportRequestId?: string;

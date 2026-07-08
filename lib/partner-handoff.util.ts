@@ -1,34 +1,31 @@
-import {
-  getEnabledListenEvents,
-  type PartnerSocketEvent,
-} from '@/lib/partner-socket-events.catalog';
 import type { AdminPortalIntegration } from '@/lib/integration-settings.service';
-import { PARTNER_SOCKET_EVENTS } from '@/lib/partner-realtime.constant';
+
+/** Shared secret for handoff JWT + realtime socket auth. */
+export function resolveCustomerPortalSecret(
+  adminPortal: Pick<
+    AdminPortalIntegration,
+    'partnerPortalSsoSecret' | 'partnerRealtimeSocketKey'
+  >,
+): string {
+  return (
+    adminPortal.partnerPortalSsoSecret?.trim() ||
+    adminPortal.partnerRealtimeSocketKey?.trim() ||
+    ''
+  );
+}
 
 export function isPartnerHandoffActive(adminPortal: AdminPortalIntegration): boolean {
   return Boolean(
     adminPortal.enabled &&
       adminPortal.referralEnabled &&
       adminPortal.adminPortalUrl?.trim() &&
-      adminPortal.partnerPortalSsoSecret?.trim(),
+      resolveCustomerPortalSecret(adminPortal),
   );
 }
 
-export function isPartnerStatsSocketListenEnabled(
-  endpoints: PartnerSocketEvent[] | undefined,
-): boolean {
-  const listen = getEnabledListenEvents(endpoints ?? []);
-  return (
-    listen.includes(PARTNER_SOCKET_EVENTS.UNREAD_MESSAGES) ||
-    listen.includes(PARTNER_SOCKET_EVENTS.OPEN_TICKETS)
-  );
-}
-
+/** Live badges + Support Panel require the customer portal toggle + shared secret. */
 export function isPartnerStatsDeliveryEnabled(
   adminPortal: AdminPortalIntegration,
 ): boolean {
-  return (
-    isPartnerHandoffActive(adminPortal) &&
-    isPartnerStatsSocketListenEnabled(adminPortal.adminIntegrationEndpoints)
-  );
+  return isPartnerHandoffActive(adminPortal);
 }
