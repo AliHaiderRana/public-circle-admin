@@ -5,6 +5,7 @@ import Company from '@/lib/models/Company';
 import AdminUser from '@/lib/models/AdminUser';
 import { SUPPORT_REQUEST_STATUS } from '@/lib/constants';
 import { getPartnerStripeCustomerIds } from '@/lib/referral-partner.service';
+import { getReferralDbConnection } from '@/lib/referral-db';
 
 export type AdminSessionLike = {
   userId?: string;
@@ -60,6 +61,38 @@ function buildPartnerAssigneeClauses(partnerId: string): Record<string, unknown>
   return clauses;
 }
 
+async function getPartnerScopedAssigneeIds(session: AdminSessionLike): Promise<string[]> {
+  const rootId = String(session.referralUserId || session.userId || '').trim();
+  if (!rootId) return [];
+
+  // Referral ADMIN/SUPER_ADMIN should see tickets assigned to all portal users.
+  const role = String(session.referralRole || '').toUpperCase();
+  if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
+    return [rootId];
+  }
+
+  const conn = await getReferralDbConnection();
+  const User =
+    conn.models.ReferralAppUser ||
+    conn.model(
+      'ReferralAppUser',
+      new mongoose.Schema(
+        { role: String, status: String },
+        { collection: 'User', strict: false },
+      ),
+    );
+
+  const rows = await User.find({
+    role: { $in: ['ADMIN', 'SUPER_ADMIN', 'SALES_PERSON', 'MARKETING_AFFILIATE'] },
+    status: { $nin: ['DELETED', 'DISABLED'] },
+  })
+    .select('_id')
+    .lean();
+
+  const ids = rows.map((row: { _id: unknown }) => String(row._id)).filter(Boolean);
+  return ids.length ? ids : [rootId];
+}
+
 function normalizeTicketCompanyId(companyId: unknown): string {
   if (!companyId) return '';
   if (typeof companyId === 'object' && companyId !== null && '_id' in companyId) {
@@ -75,7 +108,8 @@ async function partnerCanAccessAssignedTicket(
   const partnerId = String(session.referralUserId || session.userId || '');
   if (!partnerId || !ticket.assignedAdminId) return false;
 
-  if (String(ticket.assignedAdminId) === partnerId) {
+  const scopedAssigneeIds = await getPartnerScopedAssigneeIds(session);
+  if (scopedAssigneeIds.some((id) => String(ticket.assignedAdminId) === String(id))) {
     return true;
   }
 
@@ -314,7 +348,8 @@ export async function partnerTicketsFilter(
     return { assignedAdminId: new mongoose.Types.ObjectId('000000000000000000000000') };
   }
 
-  const orClauses = buildPartnerAssigneeClauses(String(partnerId));
+  const scopedAssigneeIds = await getPartnerScopedAssigneeIds(session);
+  const orClauses = scopedAssigneeIds.flatMap((id) => buildPartnerAssigneeClauses(id));
   const companyIds = await getPartnerAllowedCompanyIds(session);
   const internalAdminIds = await getInternalAdminAssigneeIds();
 
