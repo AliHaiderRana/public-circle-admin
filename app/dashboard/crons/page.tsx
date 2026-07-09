@@ -40,6 +40,10 @@ import {
   formatReclaimedKb,
   isDiskMaintenanceCron,
 } from "@/lib/disk-maintenance-format";
+import {
+  formatCronDateTime,
+  getCronScheduleDescription,
+} from "@/lib/cron-display-format";
 
 interface Cron {
   _id: string;
@@ -188,36 +192,11 @@ export default function CronsPage() {
     }
   };
 
-  const formatDate = (date: string | null) => {
-    if (!date) return "Never";
-    const d = new Date(date);
-    return d.toLocaleString();
-  };
-
   const formatDuration = (ms: number | null) => {
     if (ms === null) return "-";
     if (ms < 1000) return `${ms}ms`;
     if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
     return `${(ms / 60000).toFixed(1)}m`;
-  };
-
-  const getScheduleDescription = (schedule?: string | null) => {
-    if (!schedule || schedule === "unknown") {
-      return "Schedule not available";
-    }
-
-    const scheduleMap: Record<string, string> = {
-      "*/1 * * * *": "Every minute",
-      "*/10 * * * *": "Every 10 minutes",
-      "0 0 * * *": "Daily at midnight",
-      "0 0 0 * * *": "Daily at midnight",
-      "0 1 * * *": "Daily at 1 AM",
-      "0 4 * * *": "Daily at 4 AM",
-      "0 6 * * *": "Daily at 6 AM",
-      "0 0,12 * * *": "Twice daily (12 AM & 12 PM)",
-      "0 3 * * 0": "Weekly on Sunday at 3 AM",
-    };
-    return scheduleMap[schedule] || schedule;
   };
 
   const hasSchedule = (cron: Cron) =>
@@ -337,7 +316,7 @@ export default function CronsPage() {
                               {cron.schedule}
                             </div>
                             <div className="text-xs text-neutral-500 hidden xl:block">
-                              {getScheduleDescription(cron.schedule)}
+                              {getCronScheduleDescription(cron.schedule)}
                             </div>
                           </div>
                         ) : (
@@ -350,7 +329,7 @@ export default function CronsPage() {
                         <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4 text-neutral-400" />
                           <span className="text-sm">
-                            {formatDate(cron.lastRunAt)}
+                            {formatCronDateTime(cron.lastRunAt)}
                           </span>
                         </div>
                       </TableCell>

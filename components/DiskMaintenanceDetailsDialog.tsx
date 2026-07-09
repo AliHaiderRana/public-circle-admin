@@ -19,6 +19,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { HardDrive, AlertCircle } from "lucide-react";
 import type { DiskMaintenanceMetadata } from "@/lib/disk-maintenance-format";
+import { formatCronDateTime } from "@/lib/cron-display-format";
 
 interface DiskMaintenanceDetailsDialogProps {
   open: boolean;
@@ -44,7 +45,7 @@ export function DiskMaintenanceDetailsDialog({
             Disk Maintenance Details
           </DialogTitle>
           <DialogDescription>
-            {startTime ? `Run at ${new Date(startTime).toLocaleString()}` : "Run details"}
+            {startTime ? `Run at ${formatCronDateTime(startTime)}` : "Run details"}
             {metadata.triggeredBy ? ` · triggered by ${metadata.triggeredBy}` : ""}
           </DialogDescription>
         </DialogHeader>
