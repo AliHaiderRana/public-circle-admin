@@ -17,9 +17,7 @@ export async function verifyReferralBackendInternalAuth(
   }
 
   const settings = await getIntegrationSettings();
-  const expected =
-    settings.adminPortal.referralBackendApiKey?.trim() ||
-    process.env.REFERRAL_BACKEND_API_KEY?.trim();
+  const expected = settings.adminPortal.referralBackendApiKey?.trim();
 
   if (!expected) {
     return NextResponse.json(

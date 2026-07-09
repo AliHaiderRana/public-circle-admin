@@ -19,12 +19,7 @@ function resolveReferralBackendApiKey(
   incoming: string | undefined,
   existing: string | undefined,
 ): string {
-  return (
-    incoming?.trim() ||
-    existing?.trim() ||
-    process.env.REFERRAL_BACKEND_API_KEY?.trim() ||
-    ''
-  );
+  return incoming?.trim() || existing?.trim() || '';
 }
 
 function normalizeAdminManagedPortal(

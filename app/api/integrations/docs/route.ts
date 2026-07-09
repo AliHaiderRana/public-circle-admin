@@ -39,10 +39,7 @@ export async function GET(request: Request) {
         partnerPortalSsoSecret:
           pickQueryUrl(searchParams, 'partnerPortalSsoSecret') ??
           saved.adminPortal.partnerPortalSsoSecret,
-        referralBackendApiKeyConfigured: Boolean(
-          saved.adminPortal.referralBackendApiKey?.trim() ||
-            process.env.REFERRAL_BACKEND_API_KEY?.trim(),
-        ),
+        referralBackendApiKeyConfigured: Boolean(saved.adminPortal.referralBackendApiKey?.trim()),
       },
       publicCircleServer: {
         enabled: searchParams.has('serverEnabled')
