@@ -28,6 +28,11 @@ export const REFERRAL_BACKEND_ALLOWED_INTERNAL_ROUTES: ReferralIntegrationRoute[
     method: 'GET',
     pathPattern: /^\/api\/internal\/referral\/partner-support-stats\/[^/]+$/,
   },
+  {
+    id: 'provision-internal',
+    method: 'POST',
+    pathPattern: /^\/api\/internal\/referral\/third-party-users\/provision$/,
+  },
 ];
 
 function normalizePath(pathname: string): string {
@@ -44,9 +49,15 @@ export function isReferralBackendAllowedInternalRoute(
   const normalized = normalizePath(pathname);
   const verb = method.toUpperCase();
 
-  return REFERRAL_BACKEND_ALLOWED_INTERNAL_ROUTES.some(
-    (route) => route.method === verb && route.pathPattern.test(normalized),
-  );
+  return REFERRAL_BACKEND_ALLOWED_INTERNAL_ROUTES.some((route) => {
+    if (route.method !== verb) {
+      return false;
+    }
+
+    const patternSource = route.pathPattern.source.replace(/^\^/, '').replace(/\$$/, '');
+    const flexiblePattern = new RegExp(`^${patternSource}/?$`);
+    return flexiblePattern.test(normalized);
+  });
 }
 
 export function isReferralAppAllowedAdminBrowserRoute(
