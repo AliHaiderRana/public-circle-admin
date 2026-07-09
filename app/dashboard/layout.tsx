@@ -48,14 +48,12 @@ import { useSupportStats } from "@/hooks/use-support-stats";
 import { formatAdminDisplayName } from "@/lib/support-admin.util";
 import { useAdminSupportRealtimeSync } from "@/hooks/use-admin-support-realtime-sync";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { isAdminIntegrationsEnabled } from "@/lib/feature-flags";
 
 type SidebarItem = {
   name: string;
   href: string;
   icon: ComponentType<{ className?: string }>;
   superAdminOnly?: boolean;
-  integrationsOnly?: boolean;
   countKey?: "unreadChatMessages" | "openSupportRequests" | "pendingCustomerRequests";
   secondaryCountKey?: "unreadChatMessages" | "openSupportRequests" | "pendingCustomerRequests";
 };
@@ -121,7 +119,6 @@ const sidebarItems: SidebarItem[] = [
     href: "/dashboard/integrations",
     icon: Plug,
     superAdminOnly: true,
-    integrationsOnly: true,
   },
   {
     name: "System Configuration",
@@ -211,7 +208,6 @@ export default function DashboardLayout({
           <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
             {sidebarItems
               .filter((item) => {
-                if (item.integrationsOnly && !isAdminIntegrationsEnabled()) return false;
                 if (user?.isPartner) {
                   return partnerSidebarHrefs.has(item.href);
                 }

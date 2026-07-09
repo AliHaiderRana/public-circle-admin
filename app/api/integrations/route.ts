@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
-import { isAdminIntegrationsEnabled } from '@/lib/feature-flags';
 import {
   getManagedIntegrationSettings,
   saveAdminPortalIntegration,
@@ -8,13 +7,7 @@ import {
   savePublicCircleServerIntegration,
 } from '@/lib/integration-settings-admin.service';
 
-function integrationsDisabledResponse() {
-  return NextResponse.json({ error: 'Not found' }, { status: 404 });
-}
-
 export async function GET() {
-  if (!isAdminIntegrationsEnabled()) return integrationsDisabledResponse();
-
   const session = await getServerSession();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -33,8 +26,6 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  if (!isAdminIntegrationsEnabled()) return integrationsDisabledResponse();
-
   const session = await getServerSession();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -79,8 +70,6 @@ export async function PATCH(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  if (!isAdminIntegrationsEnabled()) return integrationsDisabledResponse();
-
   const session = await getServerSession();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

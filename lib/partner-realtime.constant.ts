@@ -1,4 +1,6 @@
-export const PARTNER_REALTIME_NAMESPACE = '/partner-realtime';
+export const CUSTOMER_PORTAL_REALTIME_NAMESPACE = '/customer-portal';
+/** @deprecated Prefer CUSTOMER_PORTAL_REALTIME_NAMESPACE */
+export const PARTNER_REALTIME_NAMESPACE = CUSTOMER_PORTAL_REALTIME_NAMESPACE;
 
 export const PARTNER_SOCKET_EVENTS = {
   UNREAD_MESSAGES: 'partner.unread-messages',

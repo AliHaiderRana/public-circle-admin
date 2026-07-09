@@ -1,6 +1,7 @@
 import { getReferralDbConnection } from '@/lib/referral-db';
 import {
-  mergePartnerSocketEvents,
+  mergeAdminIntegrationEndpoints,
+  type AdminIntegrationEndpoint,
   type PartnerSocketEvent,
 } from '@/lib/partner-socket-events.catalog';
 
@@ -15,7 +16,7 @@ export type AdminPortalIntegration = {
   partnerRealtimeSocketUrl: string;
   partnerSocketAuthValidator: string;
   partnerRealtimeSocketKey: string;
-  adminIntegrationEndpoints?: PartnerSocketEvent[];
+  adminIntegrationEndpoints?: AdminIntegrationEndpoint[];
   referralBackendApiKey: string;
 };
 
@@ -76,7 +77,9 @@ function normalizeSettings(doc: {
       adminPortalUrl: adminPortal.adminPortalUrl?.trim() ?? defaults.adminPortal.adminPortalUrl,
       adminApiBaseUrl: adminPortal.adminApiBaseUrl?.trim() ?? defaults.adminPortal.adminApiBaseUrl,
       partnerPortalSsoSecret:
-        adminPortal.partnerPortalSsoSecret?.trim() ?? defaults.adminPortal.partnerPortalSsoSecret,
+        adminPortal.partnerPortalSsoSecret?.trim() ||
+        adminPortal.partnerRealtimeSocketKey?.trim() ||
+        defaults.adminPortal.partnerPortalSsoSecret,
       partnerSidebarLabel:
         adminPortal.partnerSidebarLabel?.trim() ?? defaults.adminPortal.partnerSidebarLabel,
       partnerSidebarEnabled:
@@ -87,9 +90,11 @@ function normalizeSettings(doc: {
         adminPortal.partnerSocketAuthValidator?.trim() ??
         defaults.adminPortal.partnerSocketAuthValidator,
       partnerRealtimeSocketKey:
-        adminPortal.partnerRealtimeSocketKey?.trim() ?? defaults.adminPortal.partnerRealtimeSocketKey,
-      adminIntegrationEndpoints: mergePartnerSocketEvents(
-        adminPortal.adminIntegrationEndpoints as PartnerSocketEvent[] | undefined,
+        adminPortal.partnerPortalSsoSecret?.trim() ||
+        adminPortal.partnerRealtimeSocketKey?.trim() ||
+        defaults.adminPortal.partnerRealtimeSocketKey,
+      adminIntegrationEndpoints: mergeAdminIntegrationEndpoints(
+        adminPortal.adminIntegrationEndpoints as AdminIntegrationEndpoint[] | undefined,
       ),
       referralBackendApiKey:
         adminPortal.referralBackendApiKey?.trim() ?? defaults.adminPortal.referralBackendApiKey,
@@ -131,5 +136,9 @@ export async function getAdminPortalIntegration(): Promise<AdminPortalIntegratio
 
 export async function getPartnerPortalSsoSecret(): Promise<string> {
   const adminPortal = await getAdminPortalIntegration();
-  return adminPortal.partnerPortalSsoSecret?.trim() || '';
+  return (
+    adminPortal.partnerPortalSsoSecret?.trim() ||
+    adminPortal.partnerRealtimeSocketKey?.trim() ||
+    ''
+  );
 }

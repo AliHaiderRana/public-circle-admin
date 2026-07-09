@@ -50,6 +50,10 @@ import {
   isDiskMaintenanceCron,
   type DiskMaintenanceMetadata,
 } from "@/lib/disk-maintenance-format";
+import {
+  formatCronDateTime,
+  getCronScheduleDescription,
+} from "@/lib/cron-display-format";
 
 interface CronDetails {
   name: string;
@@ -193,36 +197,11 @@ export default function CronDetailPage() {
     }
   };
 
-  const formatDate = (date: string | null) => {
-    if (!date) return "Never";
-    const d = new Date(date);
-    return d.toLocaleString();
-  };
-
   const formatDuration = (ms: number | null) => {
     if (ms === null) return "-";
     if (ms < 1000) return `${ms}ms`;
     if (ms < 60000) return `${(ms / 1000).toFixed(2)}s`;
     return `${(ms / 60000).toFixed(2)}m`;
-  };
-
-  const getScheduleDescription = (schedule: string | null) => {
-    if (!schedule || schedule === "unknown") {
-      return "Schedule not available";
-    }
-
-    const scheduleMap: Record<string, string> = {
-      "*/1 * * * *": "Every minute",
-      "*/10 * * * *": "Every 10 minutes",
-      "0 0 * * *": "Daily at midnight",
-      "0 0 0 * * *": "Daily at midnight",
-      "0 1 * * *": "Daily at 1 AM",
-      "0 4 * * *": "Daily at 4 AM",
-      "0 6 * * *": "Daily at 6 AM",
-      "0 0,12 * * *": "Twice daily (12 AM & 12 PM)",
-      "0 3 * * 0": "Weekly on Sunday at 3 AM",
-    };
-    return scheduleMap[schedule] || schedule;
   };
 
   if (authLoading || (isSuperAdminDlqCron(cronName) && !user?.isSuperAdmin)) {
@@ -363,7 +342,7 @@ export default function CronDetailPage() {
                     {cron.schedule || "Not scheduled"}
                   </div>
                   <div className="text-xs text-neutral-500 break-words">
-                    {getScheduleDescription(cron.schedule)}
+                    {getCronScheduleDescription(cron.schedule)}
                   </div>
                 </div>
               </div>
@@ -381,7 +360,7 @@ export default function CronDetailPage() {
                 <Calendar className="h-4 w-4 text-neutral-400" />
                 <div>
                   <div className="text-sm font-bold">
-                    {formatDate(cron.lastRunAt)}
+                    {formatCronDateTime(cron.lastRunAt)}
                   </div>
                   <div className="text-xs text-neutral-500">
                     Duration: {formatDuration(cron.lastDurationMs)}
@@ -534,7 +513,7 @@ export default function CronDetailPage() {
                           <div className="flex items-center gap-2">
                             <Clock className="h-4 w-4 text-neutral-400" />
                             <span className="text-sm">
-                              {formatDate(item.startTime)}
+                              {formatCronDateTime(item.startTime)}
                             </span>
                           </div>
                         </TableCell>
@@ -640,7 +619,7 @@ export default function CronDetailPage() {
               Execution Error Details
             </DialogTitle>
             <DialogDescription>
-              Error occurred at {formatDate(selectedError?.startTime || null)}
+              Error occurred at {formatCronDateTime(selectedError?.startTime)}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -666,7 +645,7 @@ export default function CronDetailPage() {
               <div>
                 <div className="text-xs text-neutral-500 mb-1">Start Time</div>
                 <div className="text-sm">
-                  {formatDate(selectedError?.startTime || null)}
+                  {formatCronDateTime(selectedError?.startTime)}
                 </div>
               </div>
               <div>

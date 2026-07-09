@@ -1,9 +1,9 @@
-import crypto from 'crypto';
 import dbConnect from '@/lib/db';
 import AppConfig from '@/lib/models/AppConfig';
 import { clearServerSecretsCache } from '@/lib/server-secrets.server';
 import {
-  mergePartnerSocketEvents,
+  mergeAdminIntegrationEndpoints,
+  type AdminIntegrationEndpoint,
   type PartnerSocketEvent,
 } from '@/lib/partner-socket-events.catalog';
 import {
@@ -19,25 +19,7 @@ function resolveReferralBackendApiKey(
   incoming: string | undefined,
   existing: string | undefined,
 ): string {
-  return (
-    incoming?.trim() ||
-    existing?.trim() ||
-    process.env.REFERRAL_BACKEND_API_KEY?.trim() ||
-    ''
-  );
-}
-
-function resolvePartnerRealtimeSocketKey(
-  incoming: string | undefined,
-  existing: string | undefined,
-): string {
-  const fromPayload = incoming?.trim();
-  if (fromPayload) return fromPayload;
-
-  const fromDb = existing?.trim();
-  if (fromDb) return fromDb;
-
-  return crypto.randomBytes(32).toString('hex');
+  return incoming?.trim() || existing?.trim() || '';
 }
 
 function normalizeAdminManagedPortal(
@@ -46,15 +28,20 @@ function normalizeAdminManagedPortal(
 ): AdminPortalIntegration {
   const defaults = emptyIntegrationSettings().adminPortal;
 
+  const partnerPortalSsoSecret =
+    value?.partnerPortalSsoSecret?.trim() ||
+    existing.partnerPortalSsoSecret ||
+    defaults.partnerPortalSsoSecret;
+
+  // Keep legacy socket-key field in sync with the single shared secret.
+  const partnerRealtimeSocketKey = partnerPortalSsoSecret;
+
   return {
     enabled: value?.enabled ?? existing.enabled ?? defaults.enabled,
     referralEnabled: existing.referralEnabled ?? defaults.referralEnabled,
     adminPortalUrl: value?.adminPortalUrl?.trim() ?? existing.adminPortalUrl ?? defaults.adminPortalUrl,
     adminApiBaseUrl: existing.adminApiBaseUrl ?? defaults.adminApiBaseUrl,
-    partnerPortalSsoSecret:
-      value?.partnerPortalSsoSecret?.trim() ||
-      existing.partnerPortalSsoSecret ||
-      defaults.partnerPortalSsoSecret,
+    partnerPortalSsoSecret,
     partnerSidebarLabel: existing.partnerSidebarLabel ?? defaults.partnerSidebarLabel,
     partnerSidebarEnabled: existing.partnerSidebarEnabled ?? defaults.partnerSidebarEnabled,
     partnerRealtimeSocketUrl:
@@ -65,13 +52,11 @@ function normalizeAdminManagedPortal(
       value?.partnerSocketAuthValidator?.trim() ??
       existing.partnerSocketAuthValidator ??
       defaults.partnerSocketAuthValidator,
-    partnerRealtimeSocketKey: resolvePartnerRealtimeSocketKey(
-      value?.partnerRealtimeSocketKey,
-      existing.partnerRealtimeSocketKey,
-    ),
-    adminIntegrationEndpoints: mergePartnerSocketEvents(
-      (value?.adminIntegrationEndpoints as PartnerSocketEvent[] | undefined) ??
-        (existing.adminIntegrationEndpoints as PartnerSocketEvent[] | undefined),
+    partnerRealtimeSocketKey,
+    adminIntegrationEndpoints: mergeAdminIntegrationEndpoints(
+      (value?.adminIntegrationEndpoints as AdminIntegrationEndpoint[] | undefined) ??
+        (existing.adminIntegrationEndpoints as AdminIntegrationEndpoint[] | undefined),
+      existing.adminIntegrationEndpoints as AdminIntegrationEndpoint[] | undefined,
     ),
     referralBackendApiKey: resolveReferralBackendApiKey(
       value?.referralBackendApiKey,
