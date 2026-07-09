@@ -1,6 +1,7 @@
 import { getReferralDbConnection } from '@/lib/referral-db';
 import {
-  mergePartnerSocketEvents,
+  mergeAdminIntegrationEndpoints,
+  type AdminIntegrationEndpoint,
   type PartnerSocketEvent,
 } from '@/lib/partner-socket-events.catalog';
 
@@ -15,7 +16,7 @@ export type AdminPortalIntegration = {
   partnerRealtimeSocketUrl: string;
   partnerSocketAuthValidator: string;
   partnerRealtimeSocketKey: string;
-  adminIntegrationEndpoints?: PartnerSocketEvent[];
+  adminIntegrationEndpoints?: AdminIntegrationEndpoint[];
   referralBackendApiKey: string;
 };
 
@@ -92,8 +93,8 @@ function normalizeSettings(doc: {
         adminPortal.partnerPortalSsoSecret?.trim() ||
         adminPortal.partnerRealtimeSocketKey?.trim() ||
         defaults.adminPortal.partnerRealtimeSocketKey,
-      adminIntegrationEndpoints: mergePartnerSocketEvents(
-        adminPortal.adminIntegrationEndpoints as PartnerSocketEvent[] | undefined,
+      adminIntegrationEndpoints: mergeAdminIntegrationEndpoints(
+        adminPortal.adminIntegrationEndpoints as AdminIntegrationEndpoint[] | undefined,
       ),
       referralBackendApiKey:
         adminPortal.referralBackendApiKey?.trim() ?? defaults.adminPortal.referralBackendApiKey,

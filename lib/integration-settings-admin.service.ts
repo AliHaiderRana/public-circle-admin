@@ -2,7 +2,8 @@ import dbConnect from '@/lib/db';
 import AppConfig from '@/lib/models/AppConfig';
 import { clearServerSecretsCache } from '@/lib/server-secrets.server';
 import {
-  mergePartnerSocketEvents,
+  mergeAdminIntegrationEndpoints,
+  type AdminIntegrationEndpoint,
   type PartnerSocketEvent,
 } from '@/lib/partner-socket-events.catalog';
 import {
@@ -57,9 +58,10 @@ function normalizeAdminManagedPortal(
       existing.partnerSocketAuthValidator ??
       defaults.partnerSocketAuthValidator,
     partnerRealtimeSocketKey,
-    adminIntegrationEndpoints: mergePartnerSocketEvents(
-      (value?.adminIntegrationEndpoints as PartnerSocketEvent[] | undefined) ??
-        (existing.adminIntegrationEndpoints as PartnerSocketEvent[] | undefined),
+    adminIntegrationEndpoints: mergeAdminIntegrationEndpoints(
+      (value?.adminIntegrationEndpoints as AdminIntegrationEndpoint[] | undefined) ??
+        (existing.adminIntegrationEndpoints as AdminIntegrationEndpoint[] | undefined),
+      existing.adminIntegrationEndpoints as AdminIntegrationEndpoint[] | undefined,
     ),
     referralBackendApiKey: resolveReferralBackendApiKey(
       value?.referralBackendApiKey,
