@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,7 +30,7 @@ import {
   Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { DlqMessageDetail } from '@/app/api/dlq/route';
+import type { DlqMessageDetail, DlqPagination } from '@/app/api/dlq/route';
 
 const PAGE_SIZES = [10, 25, 50, 100] as const;
 
@@ -85,26 +85,6 @@ function groupByRun(messages: DlqMessageDetail[]): RunSection[] {
         (a.emailTo || '').localeCompare(b.emailTo || ''),
       ),
     }));
-}
-
-function filterMessages(messages: DlqMessageDetail[], query: string) {
-  const q = query.trim().toLowerCase();
-  if (!q) return messages;
-  return messages.filter((row) =>
-    [
-      row.emailTo,
-      row.emailSubject,
-      row.companyName,
-      row.campaignName,
-      row.campaignRunId,
-      row.failureReason,
-      row.messageId,
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase()
-      .includes(q),
-  );
 }
 
 function ContextLink({
@@ -267,7 +247,7 @@ function MessageTable({
                     <p className="text-sm text-red-800 dark:text-red-300">{failureText}</p>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                       {row.failureStatusCode != null && <span>HTTP {row.failureStatusCode}</span>}
-                      {row.messageId && <span className="font-mono">SQS {shortId(row.messageId)}</span>}
+                      {row.messageId && <span className="font-mono">ID {shortId(row.messageId)}</span>}
                       {typeof row.index === 'number' && <span>Index {row.index}</span>}
                     </div>
                     <div className="mt-3">
@@ -294,75 +274,6 @@ function MessageTable({
   );
 }
 
-function RunPagination({
-  runKey,
-  total,
-  page,
-  pageSize,
-  onPageChange,
-  onPageSizeChange,
-}: {
-  runKey: string;
-  total: number;
-  page: number;
-  pageSize: number;
-  onPageChange: (page: number) => void;
-  onPageSizeChange: (size: number) => void;
-}) {
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  if (totalPages <= 1) return null;
-
-  return (
-    <div className="flex flex-col gap-2 border-t px-3 py-2 sm:flex-row sm:items-center sm:justify-between bg-muted/20">
-      <p className="text-xs text-muted-foreground">
-        {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
-      </p>
-      <div className="flex items-center gap-2">
-        <Select
-          value={String(pageSize)}
-          onValueChange={(v) => onPageSizeChange(Number(v))}
-        >
-          <SelectTrigger className="h-8 w-16" aria-label={`Page size for run ${runKey}`}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PAGE_SIZES.map((size) => (
-              <SelectItem key={size} value={String(size)}>
-                {size}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <div className="inline-flex items-center rounded-md border bg-background">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            disabled={page <= 1}
-            onClick={() => onPageChange(page - 1)}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="min-w-[3.5rem] text-center text-xs tabular-nums">
-            {page}/{totalPages}
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            disabled={page >= totalPages}
-            onClick={() => onPageChange(page + 1)}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function RunSectionBlock({
   section,
   maxRetriesBeforeDlq,
@@ -374,47 +285,21 @@ function RunSectionBlock({
   expandedIds: Set<string>;
   onToggleRow: (id: string) => void;
 }) {
-  const runKey = section.campaignRunId || section.campaignName;
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(10);
-
-  const total = section.messages.length;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const pageRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return section.messages.slice(start, start + pageSize);
-  }, [section.messages, page, pageSize]);
-
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-
   return (
     <div>
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <RunNavLinks section={section} />
         <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-          {total} failed
+          {section.messages.length} on this page
         </span>
       </div>
       <div className="rounded-md border overflow-hidden">
         <MessageTable
-          rows={pageRows}
+          rows={section.messages}
           maxRetriesBeforeDlq={maxRetriesBeforeDlq}
           expandedIds={expandedIds}
           onToggleRow={onToggleRow}
           showContext={false}
-        />
-        <RunPagination
-          runKey={runKey}
-          total={total}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={(size) => {
-            setPageSize(size);
-            setPage(1);
-          }}
         />
       </div>
     </div>
@@ -456,8 +341,18 @@ export type DlqFailedMessagesPanelProps = {
   messages: DlqMessageDetail[];
   totalInDlq: number | null;
   messagesInFlight?: number;
-  peekComplete?: boolean;
+  syncIncomplete?: boolean;
+  dbFailureCount?: number;
   maxRetriesBeforeDlq?: number | null;
+  pagination?: DlqPagination;
+  /** Controlled page from parent (source of truth while fetching). */
+  page: number;
+  pageSize: number;
+  stats?: { companies: number; runs: number };
+  search: string;
+  onSearchChange: (value: string) => void;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
   onRetryLoad?: () => void;
   retrying?: boolean;
 };
@@ -466,34 +361,31 @@ export default function DlqFailedMessagesPanel({
   messages,
   totalInDlq,
   messagesInFlight = 0,
-  peekComplete = true,
+  syncIncomplete = false,
+  dbFailureCount = 0,
   maxRetriesBeforeDlq,
+  pagination,
+  page,
+  pageSize,
+  stats,
+  search,
+  onSearchChange,
+  onPageChange,
+  onPageSizeChange,
   onRetryLoad,
   retrying = false,
 }: DlqFailedMessagesPanelProps) {
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(25);
-  const [viewMode, setViewMode] = useState<'grouped' | 'flat'>('grouped');
+  const [viewMode, setViewMode] = useState<'grouped' | 'flat'>('flat');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-  const filtered = useMemo(() => filterMessages(messages, search), [messages, search]);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paginated = useMemo(() => {
-    if (viewMode === 'grouped') return filtered;
-    const start = (page - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, page, pageSize, viewMode]);
-
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-
-  const stats = useMemo(() => {
-    const companies = new Set(filtered.map((m) => m.companyId || m.companyName)).size;
-    const runs = new Set(filtered.map((m) => m.campaignRunId)).size;
-    return { companies, runs };
-  }, [filtered]);
+  const total = pagination?.total ?? messages.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize) || 1);
+  // New BE returns only the current page. Older APIs may still dump the full list —
+  // slice locally so pagination controls always work.
+  const pageMessages =
+    messages.length > pageSize
+      ? messages.slice((page - 1) * pageSize, page * pageSize)
+      : messages;
 
   const toggleRow = (id: string) => {
     setExpandedIds((prev) => {
@@ -507,6 +399,10 @@ export default function DlqFailedMessagesPanel({
   const available = totalInDlq ?? 0;
   const inFlight = messagesInFlight ?? 0;
   const showInFlightNotice = inFlight > 0;
+  const companies = stats?.companies ?? 0;
+  const runs = stats?.runs ?? 0;
+  const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const rangeEnd = Math.min(page * pageSize, total);
 
   return (
     <div className="space-y-5">
@@ -528,11 +424,14 @@ export default function DlqFailedMessagesPanel({
         </div>
       )}
 
-      {!peekComplete && !showInFlightNotice && (
+      {syncIncomplete && !showInFlightNotice && (
         <div className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex gap-2">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-            <span>Could not load all messages yet. Try refreshing in a few seconds.</span>
+            <span>
+              Showing {dbFailureCount} synced failure record{dbFailureCount === 1 ? '' : 's'} (SQS has{' '}
+              {available} available). Pagination is server-side over those records.
+            </span>
           </div>
           {onRetryLoad && (
             <Button type="button" variant="outline" size="sm" onClick={onRetryLoad} disabled={retrying}>
@@ -544,15 +443,17 @@ export default function DlqFailedMessagesPanel({
       )}
 
       <p className="text-sm text-muted-foreground">
-        <span className="font-medium text-foreground tabular-nums">{available}</span> available
+        <span className="font-medium text-foreground tabular-nums">{available}</span> available in SQS
+        {' · '}
+        <span className="tabular-nums font-medium text-foreground">{total}</span> matching records
         {' · '}
         <span className={cn('tabular-nums', inFlight > 0 && 'text-blue-700 font-medium')}>
           {inFlight} in flight
         </span>
         {' · '}
-        <span className="tabular-nums">{stats.companies}</span> {stats.companies === 1 ? 'company' : 'companies'}
+        <span className="tabular-nums">{companies}</span> {companies === 1 ? 'company' : 'companies'}
         {' · '}
-        <span className="tabular-nums">{stats.runs}</span> {stats.runs === 1 ? 'run' : 'runs'}
+        <span className="tabular-nums">{runs}</span> {runs === 1 ? 'run' : 'runs'}
       </p>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -561,10 +462,7 @@ export default function DlqFailedMessagesPanel({
           <Input
             placeholder="Search email, company, campaign…"
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
+            onChange={(e) => onSearchChange(e.target.value)}
             className="pl-9 h-9"
           />
         </div>
@@ -573,17 +471,19 @@ export default function DlqFailedMessagesPanel({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="grouped">By run</SelectItem>
             <SelectItem value="flat">All rows</SelectItem>
+            <SelectItem value="grouped">By run</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      {filtered.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">No messages match your search.</p>
+      {pageMessages.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          {search.trim() ? 'No messages match your search.' : 'No failure records on this page.'}
+        </p>
       ) : viewMode === 'grouped' ? (
         <GroupedByRunView
-          messages={paginated}
+          messages={pageMessages}
           maxRetriesBeforeDlq={maxRetriesBeforeDlq}
           expandedIds={expandedIds}
           onToggleRow={toggleRow}
@@ -591,7 +491,7 @@ export default function DlqFailedMessagesPanel({
       ) : (
         <div className="rounded-md border overflow-hidden">
           <MessageTable
-            rows={paginated}
+            rows={pageMessages}
             maxRetriesBeforeDlq={maxRetriesBeforeDlq}
             expandedIds={expandedIds}
             onToggleRow={toggleRow}
@@ -599,62 +499,54 @@ export default function DlqFailedMessagesPanel({
         </div>
       )}
 
-      {filtered.length > 0 && viewMode === 'flat' && (
+      {total > 0 && (
         <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-muted-foreground">
-            {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} of {filtered.length}
-            {search ? ` matching “${search.trim()}”` : ''}
+            {rangeStart}–{rangeEnd} of {total}
+            {search.trim() ? ` matching “${search.trim()}”` : ''}
           </p>
-          {filtered.length > PAGE_SIZES[0] && (
-            <div className="flex items-center gap-2">
-              <Label htmlFor="dlq-page-size" className="text-xs text-muted-foreground sr-only">
-                Per page
-              </Label>
-              <Select
-                value={String(pageSize)}
-                onValueChange={(v) => {
-                  setPageSize(Number(v));
-                  setPage(1);
-                }}
+          <div className="flex items-center gap-2">
+            <Label htmlFor="dlq-page-size" className="text-xs text-muted-foreground sr-only">
+              Per page
+            </Label>
+            <Select value={String(pageSize)} onValueChange={(v) => onPageSizeChange(Number(v))}>
+              <SelectTrigger id="dlq-page-size" className="h-8 w-16">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZES.map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="inline-flex items-center rounded-md border">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                disabled={page <= 1 || retrying}
+                onClick={() => onPageChange(page - 1)}
               >
-                <SelectTrigger id="dlq-page-size" className="h-8 w-16">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PAGE_SIZES.map((size) => (
-                    <SelectItem key={size} value={String(size)}>
-                      {size}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="inline-flex items-center rounded-md border">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="min-w-[4rem] text-center text-xs tabular-nums">
-                  {page}/{totalPages}
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="min-w-[4rem] text-center text-xs tabular-nums">
+                {page}/{totalPages}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                disabled={page >= totalPages || retrying}
+                onClick={() => onPageChange(page + 1)}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>

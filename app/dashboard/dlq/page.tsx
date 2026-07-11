@@ -29,17 +29,17 @@ function DlqQueueStatusSkeleton() {
         Loading queue status from SQS…
       </div>
       <div className="space-y-6 animate-pulse">
-      <div className="flex items-end gap-3">
-        <Skeleton className="h-14 w-20" />
-        <Skeleton className="h-4 w-32 mb-2" />
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-16 w-full" />
-      </div>
-      <div className="flex gap-3">
-        <Skeleton className="h-9 w-40" />
-      </div>
+        <div className="flex items-end gap-3">
+          <Skeleton className="h-14 w-20" />
+          <Skeleton className="h-4 w-32 mb-2" />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+        </div>
+        <div className="flex gap-3">
+          <Skeleton className="h-9 w-40" />
+        </div>
       </div>
     </div>
   );
@@ -50,7 +50,7 @@ function DlqMessagesSkeleton() {
     <div className="space-y-4 animate-pulse">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Loading messages from SQS…
+        Loading failure records…
       </div>
       <Skeleton className="h-4 w-64" />
       <div className="flex gap-3">
@@ -94,6 +94,10 @@ export default function DlqPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(
     null,
   );
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   useEffect(() => {
     if (!authLoading && user && !user.isSuperAdmin) {
@@ -101,42 +105,69 @@ export default function DlqPage() {
     }
   }, [user, authLoading, router]);
 
-  const fetchStatus = useCallback(async (options?: { silent?: boolean }) => {
-    if (!options?.silent) setLoading(true);
-    else setRefreshing(true);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
-    setMessage(null);
+  const fetchStatus = useCallback(
+    async (options?: { silent?: boolean; page?: number; pageSize?: number; search?: string }) => {
+      if (!options?.silent) setLoading(true);
+      else setRefreshing(true);
 
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 25000);
+      setMessage(null);
 
-      const res = await fetch('/api/dlq', { cache: 'no-store', signal: controller.signal });
-      clearTimeout(timeout);
-      const data = await res.json();
+      const nextPage = options?.page ?? page;
+      const nextPageSize = options?.pageSize ?? pageSize;
+      const nextSearch = options?.search ?? debouncedSearch;
 
-      if (!res.ok) {
-        setMessage({ type: 'error', text: data.error || 'Failed to load DLQ status' });
-        return;
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 25000);
+        const qs = new URLSearchParams({
+          page: String(nextPage),
+          pageSize: String(nextPageSize),
+        });
+        if (nextSearch) qs.set('search', nextSearch);
+
+        const res = await fetch(`/api/dlq?${qs}`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        const data = await res.json();
+
+        if (!res.ok) {
+          setMessage({ type: 'error', text: data.error || 'Failed to load DLQ status' });
+          return;
+        }
+
+        setStatus(data);
+        setLastRefreshedAt(new Date().toISOString());
+      } catch (err) {
+        const text =
+          err instanceof Error && err.name === 'AbortError'
+            ? 'DLQ load timed out — restart the server and try again.'
+            : 'Failed to load DLQ status';
+        setMessage({ type: 'error', text });
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-
-      setStatus(data);
-      setLastRefreshedAt(new Date().toISOString());
-    } catch (err) {
-      const text =
-        err instanceof Error && err.name === 'AbortError'
-          ? 'DLQ load timed out — restart the server and try again.'
-          : 'Failed to load DLQ status';
-      setMessage({ type: 'error', text });
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+    },
+    [page, pageSize, debouncedSearch],
+  );
 
   useEffect(() => {
-    if (user?.isSuperAdmin) fetchStatus();
-  }, [user, fetchStatus]);
+    if (user?.isSuperAdmin) {
+      fetchStatus({ silent: !!status, page, pageSize, search: debouncedSearch });
+    }
+    // Intentionally depend on pagination/search — status omitted to avoid loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, page, pageSize, debouncedSearch, fetchStatus]);
 
   const handleRedrive = async () => {
     setRedriving(true);
@@ -175,9 +206,10 @@ export default function DlqPage() {
   const messageCount = status?.dlqMessageCount;
   const messagesInFlight = status?.dlqMessagesInFlight ?? 0;
   const hasMessages = typeof messageCount === 'number' && messageCount > 0;
-  const peekIncomplete =
-    hasMessages &&
-    status?.peekComplete === false;
+  const dbFailureCount = status?.dbFailureCount ?? 0;
+  const syncIncomplete = status?.syncIncomplete === true;
+  const pagination = status?.pagination;
+  const listTotal = pagination?.total ?? 0;
 
   const isInitialLoad = loading && !status;
   const isRefreshing = refreshing && !!status;
@@ -263,9 +295,11 @@ export default function DlqPage() {
                 </div>
               )}
 
-              {peekIncomplete && (
+              {syncIncomplete && (
                 <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  Could not load all messages yet. Try refreshing in a few seconds.
+                  SQS reports {messageCount} available, but only {dbFailureCount} failure record
+                  {dbFailureCount === 1 ? '' : 's'} are synced in the database. The list below is
+                  paginated from those records.
                 </div>
               )}
 
@@ -307,6 +341,7 @@ export default function DlqPage() {
           <CardTitle>Failed messages</CardTitle>
           <CardDescription>
             Click a row for full error details. Company, campaign, and run names link to their admin pages.
+            Pages load from the server.
           </CardDescription>
         </CardHeader>
         <CardContent className="relative">
@@ -316,35 +351,38 @@ export default function DlqPage() {
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
               Could not load message details: {status.messagesError}
             </div>
-          ) : hasMessages && !status?.messages?.length ? (
+          ) : hasMessages && listTotal === 0 && !debouncedSearch ? (
             <div className="space-y-3">
               <p className="text-sm text-amber-800">
-                {messagesInFlight > 0 ? (
-                  <>
-                    {messageCount} available in the DLQ, but {messagesInFlight} are in flight and could not
-                    be loaded yet. Wait ~30 seconds and refresh.
-                  </>
-                ) : (
-                  <>
-                    {messageCount} message(s) reported in the DLQ but none could be loaded yet. Try
-                    refreshing.
-                  </>
-                )}
+                {messageCount} message(s) in the DLQ, but no failure records are synced in the database
+                yet. The DLQ monitor cron reconciles records every 10 minutes.
               </p>
               <Button variant="outline" size="sm" onClick={() => fetchStatus({ silent: true })} disabled={refreshing}>
                 <RefreshCw className={cn('mr-2 h-4 w-4', refreshing && 'animate-spin')} />
-                Load messages
+                Refresh
               </Button>
             </div>
-          ) : !status?.messages?.length ? (
+          ) : !hasMessages && listTotal === 0 ? (
             <p className="text-sm text-neutral-500">No failed messages in the DLQ right now.</p>
           ) : (
             <DlqFailedMessagesPanel
-              messages={status.messages}
-              totalInDlq={status.dlqMessageCount}
-              messagesInFlight={status.dlqMessagesInFlight}
-              peekComplete={status.peekComplete}
-              maxRetriesBeforeDlq={status.maxRetriesBeforeDlq}
+              messages={status?.messages || []}
+              totalInDlq={status?.dlqMessageCount ?? null}
+              messagesInFlight={status?.dlqMessagesInFlight}
+              syncIncomplete={syncIncomplete}
+              dbFailureCount={dbFailureCount}
+              maxRetriesBeforeDlq={status?.maxRetriesBeforeDlq}
+              pagination={pagination}
+              page={page}
+              pageSize={pageSize}
+              stats={status?.stats}
+              search={search}
+              onSearchChange={setSearch}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
               onRetryLoad={() => fetchStatus({ silent: true })}
               retrying={refreshing}
             />
@@ -370,8 +408,9 @@ export default function DlqPage() {
         <CardContent className="text-sm text-neutral-600">
           <p>
             Messages fail at <code className="rounded bg-muted px-1">/campaigns/sst-email</code>, retry up
-            to {status?.maxRetriesBeforeDlq ?? 5} times, then move to the DLQ. Fix the root cause before
-            redriving. Failure records in the database are reconciled with the DLQ automatically every 10
+            to {status?.maxRetriesBeforeDlq ?? 5} times, then move to the DLQ. The list is paginated from
+            synced failure records in the database; the available count comes from live SQS. Fix the root
+            cause before redriving. Failure records are reconciled with the DLQ automatically every 10
             minutes by the DLQ monitor cron.
           </p>
         </CardContent>
