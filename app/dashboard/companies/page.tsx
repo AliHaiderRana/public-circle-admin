@@ -159,21 +159,21 @@ export default function CompaniesPage() {
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Companies</h2>
-          <p className="text-neutral-500">
+          <p className="text-muted-foreground">
             Manage all registered organizations and their settings.
           </p>
         </div>
-        <div className="flex items-center gap-4 text-sm text-neutral-500 bg-white dark:bg-neutral-800 p-2 rounded-lg border">
+        <div className="flex items-center gap-4 text-sm text-muted-foreground bg-card p-2 rounded-lg border">
           <div className="flex items-center gap-1 px-2 border-r">
             <Building2 size={16} />
-            <span className="font-bold text-neutral-900">
+            <span className="font-bold text-foreground">
               {pagination.total}
             </span>{" "}
             Total
           </div>
           <div className="flex items-center gap-1 px-2">
             <Globe size={16} />
-            <span className="font-bold text-neutral-900">
+            <span className="font-bold text-foreground">
               {filterOptions.countries.length}
             </span>{" "}
             Countries

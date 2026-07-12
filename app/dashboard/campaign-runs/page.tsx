@@ -164,20 +164,20 @@ export default function CampaignRunsPage() {
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Campaign Runs</h2>
-          <p className="text-neutral-500">View all campaign execution runs across all companies.</p>
+          <p className="text-muted-foreground">View all campaign execution runs across all companies.</p>
         </div>
-        <div className="flex items-center gap-4 text-sm text-neutral-500 bg-white dark:bg-neutral-800 p-2 rounded-lg border">
+        <div className="flex items-center gap-4 text-sm text-muted-foreground bg-card p-2 rounded-lg border">
           <div className="flex items-center gap-1 px-2">
             <Play size={16} />
-            <span className="font-bold text-neutral-900">{pagination.total}</span> Total Runs
+            <span className="font-bold text-foreground">{pagination.total}</span> Total Runs
           </div>
           <div className="flex items-center gap-1 px-2 border-l">
-            <span className="font-bold text-neutral-900">
+            <span className="font-bold text-foreground">
               {campaignRuns.filter(r => !r.isDataStoredOnWarehouse).length}
             </span> Live
           </div>
           <div className="flex items-center gap-1 px-2 border-l">
-            <span className="font-bold text-neutral-900">
+            <span className="font-bold text-foreground">
               {campaignRuns.filter(r => r.isDataStoredOnWarehouse).length}
             </span> Archived
           </div>

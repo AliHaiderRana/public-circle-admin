@@ -54,7 +54,13 @@ import { SupportCountBadge } from "@/components/SupportCountBadge";
 import { useSupportStats } from "@/hooks/use-support-stats";
 import { formatAdminDisplayName } from "@/lib/support-admin.util";
 import { useAdminSupportRealtimeSync } from "@/hooks/use-admin-support-realtime-sync";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 type SidebarItem = {
   name: string;
@@ -188,15 +194,30 @@ export default function DashboardLayout({
     ? getPartnerPortalSubtitle(user?.referralRole)
     : "Admin";
 
+  const userDisplayName =
+    formatAdminDisplayName(user?.name, user?.email) || user?.email || "";
+  const userInitials = userDisplayName
+    .split(/\s+/)
+    .map((word: string) => word[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+  const userRoleLabel = user?.isPartner
+    ? getPartnerPortalSubtitle(user?.referralRole)
+    : user?.isSuperAdmin
+      ? "Super Admin"
+      : "Admin";
+
   const sidebarContent = (
     <>
-      <div className="hidden border-b border-sidebar-border px-5 py-5 lg:block">
+      <div className="hidden h-16 shrink-0 items-center border-b border-sidebar-border px-5 lg:flex">
             <BrandLogo
               subtitle={portalSubtitle}
               subtitleClassName="text-sidebar-foreground/55"
             />
           </div>
-          <div className="border-b border-sidebar-border px-4 py-4 lg:hidden">
+          <div className="flex h-14 shrink-0 items-center border-b border-sidebar-border px-4 lg:hidden">
             <BrandLogo
               subtitle={portalSubtitle}
               subtitleClassName="text-sidebar-foreground/55"
@@ -245,35 +266,39 @@ export default function DashboardLayout({
               })}
           </nav>
 
-          <div className="mt-auto shrink-0 border-t border-sidebar-border px-4 pb-3 pt-3">
-            <div className="mb-2 flex items-center gap-3 px-1">
+          <div className="mt-auto shrink-0 border-t border-sidebar-border p-3">
+            <div className="flex items-center gap-3 rounded-md p-1.5">
               <Avatar className="size-9 shrink-0">
-                <AvatarFallback>
-                  <Users className="size-4" />
+                <AvatarFallback className="text-xs font-semibold">
+                  {userInitials || <Users className="size-4" />}
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">
-                  {formatAdminDisplayName(user?.name, user?.email) || user?.email}
+                <p className="truncate text-sm font-medium leading-tight">
+                  {userDisplayName}
                 </p>
-                <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
-                <p className="text-xs text-muted-foreground">
-                  {user?.isPartner
-                    ? getPartnerPortalSubtitle(user?.referralRole)
-                    : user?.isSuperAdmin
-                      ? "Super Admin"
-                      : "Admin"}
+                <p className="truncate text-xs text-sidebar-foreground/60">
+                  {userRoleLabel}
+                  {user?.email && user.email !== userDisplayName
+                    ? ` · ${user.email}`
+                    : ""}
                 </p>
               </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 text-sidebar-foreground/60 hover:bg-destructive/10 hover:text-destructive"
+                    onClick={logout}
+                  >
+                    <LogOut className="size-4" />
+                    <span className="sr-only">Logout</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Logout</TooltipContent>
+              </Tooltip>
             </div>
-            <Button
-              variant="ghost"
-              className="relative z-10 h-9 w-full justify-start gap-3 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={logout}
-            >
-              <LogOut className="size-4 shrink-0" />
-              Logout
-            </Button>
           </div>
     </>
   );
@@ -320,13 +345,16 @@ export default function DashboardLayout({
                   <BrandLogo variant="icon" iconClassName="h-7 w-7" />
                 </div>
               </div>
-              {!user?.isPartner && <NotificationDropdown />}
-              {user?.isPartner && (
-                <NotificationDropdown
-                  partnerMode
-                  partnerReferralUserId={user?.referralUserId || user?.id}
-                />
-              )}
+              <div className="flex items-center gap-1">
+                <ThemeToggle />
+                {!user?.isPartner && <NotificationDropdown />}
+                {user?.isPartner && (
+                  <NotificationDropdown
+                    partnerMode
+                    partnerReferralUserId={user?.referralUserId || user?.id}
+                  />
+                )}
+              </div>
             </div>
           </header>
 

@@ -192,20 +192,20 @@ export default function CampaignsPage() {
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Campaigns</h2>
-          <p className="text-neutral-500">
+          <p className="text-muted-foreground">
             Manage email campaigns across all companies.
           </p>
         </div>
-        <div className="flex items-center gap-4 text-sm text-neutral-500 bg-white dark:bg-neutral-800 p-2 rounded-lg border">
+        <div className="flex items-center gap-4 text-sm text-muted-foreground bg-card p-2 rounded-lg border">
           <div className="flex items-center gap-1 px-2">
             <Send size={16} />
-            <span className="font-bold text-neutral-900">
+            <span className="font-bold text-foreground">
               {pagination.total}
             </span>{" "}
             Total
           </div>
           <div className="flex items-center gap-1 px-2 border-l">
-            <span className="font-bold text-neutral-900">
+            <span className="font-bold text-foreground">
               {campaigns.filter((c) => c.status === "ACTIVE").length}
             </span>{" "}
             Active
