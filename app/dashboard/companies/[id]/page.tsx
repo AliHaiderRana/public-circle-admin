@@ -566,12 +566,12 @@ export default function CompanyDetailPage() {
                           <UserPlus className="h-5 w-5 text-muted-foreground" />
                         </div>
                         <div>
-                          <p className="font-semibold text-gray-900">
+                          <p className="font-semibold text-foreground">
                             {user.firstName || ''} {user.lastName || ''}
                           </p>
-                          <p className="text-sm text-gray-600">{user.emailAddress || ''}</p>
+                          <p className="text-sm text-muted-foreground">{user.emailAddress || ''}</p>
                           {user.phoneNumber && (
-                            <p className="text-xs text-gray-500 mt-1">{user.phoneNumber}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{user.phoneNumber}</p>
                           )}
                         </div>
                       </div>
@@ -645,12 +645,12 @@ export default function CompanyDetailPage() {
                           <UserPlus className="h-5 w-5 text-muted-foreground" />
                         </div>
                         <div>
-                          <p className="font-semibold text-gray-900">
+                          <p className="font-semibold text-foreground">
                             {user.firstName || ''} {user.lastName || ''}
                           </p>
-                          <p className="text-sm text-gray-600">{user.emailAddress || ''}</p>
+                          <p className="text-sm text-muted-foreground">{user.emailAddress || ''}</p>
                           {user.phoneNumber && (
-                            <p className="text-xs text-gray-500 mt-1">{user.phoneNumber}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{user.phoneNumber}</p>
                           )}
                         </div>
                       </div>
@@ -731,18 +731,18 @@ export default function CompanyDetailPage() {
                   </div>
                   <div className="text-sm text-yellow-800">Paused Campaigns</div>
                 </div>
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <div className="text-2xl font-bold text-gray-600">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-foreground">
                     {companyDetails.campaigns.archived}
                   </div>
-                  <div className="text-sm text-gray-800">Archived Campaigns</div>
+                  <div className="text-sm text-muted-foreground">Archived Campaigns</div>
                 </div>
               </div>
               
               <div className="pt-4 border-t">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Total Campaigns</span>
-                  <span className="text-lg font-semibold text-gray-900">
+                  <span className="text-sm text-muted-foreground">Total Campaigns</span>
+                  <span className="text-lg font-semibold text-foreground">
                     {companyDetails.campaigns.total}
                   </span>
                 </div>
@@ -750,7 +750,7 @@ export default function CompanyDetailPage() {
                   <Progress
                     value={companyDetails.campaigns.total > 0 ? (companyDetails.campaigns.active / companyDetails.campaigns.total) * 100 : 0}
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     {companyDetails.campaigns.total > 0 ? Math.round((companyDetails.campaigns.active / companyDetails.campaigns.total) * 100) : 0}% of campaigns are active
                   </p>
                 </div>
