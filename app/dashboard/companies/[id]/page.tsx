@@ -336,7 +336,7 @@ export default function CompanyDetailPage() {
               <AlertDialogTrigger asChild>
                 <Button 
                   variant="default" 
-                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+                  className="flex items-center gap-2"
                   disabled={actionLoading}
                 >
                   {actionLoading ? (
@@ -364,7 +364,6 @@ export default function CompanyDetailPage() {
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction 
                     onClick={handleUnblockCompany}
-                    className="bg-green-600 hover:bg-green-700"
                   >
                     Unblock Company
                   </AlertDialogAction>
@@ -713,23 +712,23 @@ export default function CompanyDetailPage() {
           <CardContent>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="text-center p-4 bg-green-50 rounded-lg">
-                  <div className="text-2xl font-bold text-green-600">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-foreground">
                     {companyDetails.campaigns.active}
                   </div>
-                  <div className="text-sm text-green-800">Active Campaigns</div>
+                  <div className="text-sm text-muted-foreground">Active Campaigns</div>
                 </div>
-                <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <div className="text-2xl font-bold text-blue-600">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-foreground">
                     {companyDetails.campaigns.draft}
                   </div>
-                  <div className="text-sm text-blue-800">Draft Campaigns</div>
+                  <div className="text-sm text-muted-foreground">Draft Campaigns</div>
                 </div>
-                <div className="text-center p-4 bg-yellow-50 rounded-lg">
-                  <div className="text-2xl font-bold text-yellow-600">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-foreground">
                     {companyDetails.campaigns.paused}
                   </div>
-                  <div className="text-sm text-yellow-800">Paused Campaigns</div>
+                  <div className="text-sm text-muted-foreground">Paused Campaigns</div>
                 </div>
                 <div className="text-center p-4 bg-muted rounded-lg">
                   <div className="text-2xl font-bold text-foreground">

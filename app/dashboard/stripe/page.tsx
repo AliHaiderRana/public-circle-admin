@@ -140,9 +140,9 @@ export default function StripeDashboardPage() {
     return (
       <div className="p-6">
         <div className="text-center py-12">
-          <AlertCircle className="mx-auto h-12 w-12 text-red-500 mb-4" />
-          <h2 className="text-2xl font-semibold text-gray-900">Failed to load Stripe data</h2>
-          <p className="text-gray-600 mt-2">Unable to connect to Stripe API.</p>
+          <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+          <h2 className="text-2xl font-semibold text-foreground">Failed to load Stripe data</h2>
+          <p className="text-muted-foreground mt-2">Unable to connect to Stripe API.</p>
           <Button onClick={fetchStripeData} className="mt-4">
             <RefreshCw className="mr-2 h-4 w-4" />
             Retry
@@ -181,8 +181,8 @@ export default function StripeDashboardPage() {
                 <DollarSign className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Available Balance</p>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-sm font-medium text-muted-foreground">Available Balance</p>
+                <p className="text-lg font-semibold text-foreground">
                   {formatCurrency(totalAvailable, 'usd')}
                 </p>
               </div>
@@ -197,8 +197,8 @@ export default function StripeDashboardPage() {
                 <Clock className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Pending Balance</p>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-sm font-medium text-muted-foreground">Pending Balance</p>
+                <p className="text-lg font-semibold text-foreground">
                   {formatCurrency(totalPending, 'usd')}
                 </p>
               </div>
@@ -213,8 +213,8 @@ export default function StripeDashboardPage() {
                 <TrendingUp className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Monthly Sales</p>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-sm font-medium text-muted-foreground">Monthly Sales</p>
+                <p className="text-lg font-semibold text-foreground">
                   {formatCurrency(stripeData.sales.month, 'usd')}
                 </p>
               </div>
@@ -229,8 +229,8 @@ export default function StripeDashboardPage() {
                 <Users className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Active Subscriptions</p>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-sm font-medium text-muted-foreground">Active Subscriptions</p>
+                <p className="text-lg font-semibold text-foreground">
                   {stripeData.subscriptions.active}
                 </p>
               </div>
@@ -251,19 +251,19 @@ export default function StripeDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+              <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
                 <span className="text-sm font-medium">Today</span>
                 <span className="text-sm font-semibold">{formatCurrency(stripeData.sales.today, 'usd')}</span>
               </div>
-              <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+              <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
                 <span className="text-sm font-medium">This Week</span>
                 <span className="text-sm font-semibold">{formatCurrency(stripeData.sales.week, 'usd')}</span>
               </div>
-              <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+              <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
                 <span className="text-sm font-medium">This Month</span>
                 <span className="text-sm font-semibold">{formatCurrency(stripeData.sales.month, 'usd')}</span>
               </div>
-              <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+              <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
                 <span className="text-sm font-medium">This Year</span>
                 <span className="text-sm font-semibold">{formatCurrency(stripeData.sales.year, 'usd')}</span>
               </div>
@@ -332,7 +332,7 @@ export default function StripeDashboardPage() {
                   <TableCell>{transaction.description}</TableCell>
                   <TableCell>{formatCurrency(transaction.amount, transaction.currency)}</TableCell>
                   <TableCell>{getStatusBadge(transaction.status)}</TableCell>
-                  <TableCell className="text-sm text-gray-500">
+                  <TableCell className="text-sm text-muted-foreground">
                     {formatRelativeTime(transaction.created)}
                   </TableCell>
                 </TableRow>

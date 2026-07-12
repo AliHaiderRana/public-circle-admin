@@ -317,17 +317,17 @@ export default function CampaignRunDetailPage() {
   const getEventIcon = (eventType: string) => {
     switch (eventType) {
       case 'Send':
-        return <Send size={16} className="text-neutral-900" />;
+        return <Send size={16} className="text-muted-foreground" />;
       case 'Delivery':
-        return <CheckCircle2 size={16} className="text-neutral-900" />;
+        return <CheckCircle2 size={16} className="text-muted-foreground" />;
       case 'Bounce':
-        return <XCircle size={16} className="text-red-500" />;
+        return <XCircle size={16} className="text-muted-foreground" />;
       case 'Open':
-        return <Eye size={16} className="text-blue-500" />;
+        return <Eye size={16} className="text-muted-foreground" />;
       case 'Click':
-        return <MousePointer size={16} className="text-purple-500" />;
+        return <MousePointer size={16} className="text-muted-foreground" />;
       default:
-        return <Clock size={16} className="text-gray-500" />;
+        return <Clock size={16} className="text-muted-foreground" />;
     }
   };
 
@@ -362,8 +362,8 @@ export default function CampaignRunDetailPage() {
     return (
       <div className="p-6">
         <div className="text-center py-12">
-          <h2 className="text-2xl font-semibold text-gray-900">Campaign run not found</h2>
-          <p className="text-gray-600 mt-2">The campaign run you're looking for doesn't exist.</p>
+          <h2 className="text-2xl font-semibold text-foreground">Campaign run not found</h2>
+          <p className="text-muted-foreground mt-2">The campaign run you're looking for doesn't exist.</p>
           <Button onClick={() => router.back()} className="mt-4">
             Go Back
           </Button>
@@ -392,7 +392,7 @@ export default function CampaignRunDetailPage() {
               </AvatarFallback>
             </Avatar>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+              <h1 className="text-2xl font-bold text-foreground">
                 {campaignRun.campaign?.campaignName || 'Unknown Campaign'}
               </h1>
               <div className="flex items-center gap-2 mt-1">
@@ -401,7 +401,7 @@ export default function CampaignRunDetailPage() {
                 ) : (
                   <Badge>Live</Badge>
                 )}
-                <span className="text-sm text-gray-500">
+                <span className="text-sm text-muted-foreground">
                   Run ID: {campaignRun._id.slice(-8)}
                 </span>
               </div>
@@ -419,8 +419,8 @@ export default function CampaignRunDetailPage() {
                 <Building2 className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Company</p>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-sm font-medium text-muted-foreground">Company</p>
+                <p className="text-lg font-semibold text-foreground">
                   {campaignRun.company?.name || 'Unknown Company'}
                 </p>
               </div>
@@ -435,8 +435,8 @@ export default function CampaignRunDetailPage() {
                 <Mail className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Subject</p>
-                <p className="text-sm font-semibold text-gray-900 truncate">
+                <p className="text-sm font-medium text-muted-foreground">Subject</p>
+                <p className="text-sm font-semibold text-foreground truncate">
                   {campaignRun.campaign?.emailSubject || 'No Subject'}
                 </p>
               </div>
@@ -451,8 +451,8 @@ export default function CampaignRunDetailPage() {
                 <Calendar className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Created</p>
-                <p className="text-sm font-semibold text-gray-900">
+                <p className="text-sm font-medium text-muted-foreground">Created</p>
+                <p className="text-sm font-semibold text-foreground">
                   {formatDateTime(campaignRun.createdAt)}
                 </p>
               </div>
@@ -472,29 +472,29 @@ export default function CampaignRunDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <div className="text-2xl font-bold text-blue-600">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-foreground">
                     {campaignRun.emailsSentCount || 0}
                   </div>
-                  <div className="text-sm text-blue-800">Total Emails</div>
+                  <div className="text-sm text-muted-foreground">Total Emails</div>
                 </div>
-                <div className="text-center p-4 bg-green-50 rounded-lg">
-                  <div className="text-2xl font-bold text-green-600">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-foreground">
                     {campaignRun.emailCounts?.to || 0}
                   </div>
-                  <div className="text-sm text-green-800">To</div>
+                  <div className="text-sm text-muted-foreground">To</div>
                 </div>
-                <div className="text-center p-4 bg-purple-50 rounded-lg">
-                  <div className="text-2xl font-bold text-purple-600">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-foreground">
                     {campaignRun.emailCounts?.cc || 0}
                   </div>
-                  <div className="text-sm text-purple-800">CC</div>
+                  <div className="text-sm text-muted-foreground">CC</div>
                 </div>
-                <div className="text-center p-4 bg-orange-50 rounded-lg">
-                  <div className="text-2xl font-bold text-orange-600">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-foreground">
                     {campaignRun.emailCounts?.bcc || 0}
                   </div>
-                  <div className="text-sm text-orange-800">BCC</div>
+                  <div className="text-sm text-muted-foreground">BCC</div>
                 </div>
               </div>
             </CardContent>
@@ -592,7 +592,7 @@ export default function CampaignRunDetailPage() {
               ) : (
                 emails.map((email) => (
                   <React.Fragment key={email._id}>
-                    <TableRow className="cursor-pointer hover:bg-gray-50" onClick={() => toggleRowExpansion(email._id)}>
+                    <TableRow className="cursor-pointer" onClick={() => toggleRowExpansion(email._id)}>
                       <TableCell className="pl-6">
                         <div className="flex items-center gap-2 min-w-0">
                           <Mail size={16} className="text-neutral-400" />
@@ -723,15 +723,15 @@ export default function CampaignRunDetailPage() {
                     {expandedRows.has(email._id) && (
                       <TableRow>
                         <TableCell colSpan={4} className="p-0">
-                          <div className="bg-gray-50 p-6 border-l-4 border-blue-500">
+                          <div className="bg-muted p-6 border-l-4 border-border">
                             <div className="space-y-4">
-                              <div className="flex items-center gap-2 font-semibold text-gray-900">
-                                <Clock size={16} className="text-blue-500" />
+                              <div className="flex items-center gap-2 font-semibold text-foreground">
+                                <Clock size={16} className="text-muted-foreground" />
                                 Email Event Timeline
                               </div>
                               
                               {Object.entries(email.emailEvents).map(([eventType, event]) => (
-                                <div key={eventType} className="flex items-start gap-4 p-3 bg-white rounded-lg border">
+                                <div key={eventType} className="flex items-start gap-4 p-3 bg-background rounded-lg border">
                                   <div className="mt-1">
                                     {getEventIcon(eventType)}
                                   </div>
@@ -746,33 +746,33 @@ export default function CampaignRunDetailPage() {
                                     </div>
                                     {eventType === 'Bounce' && (
                                       <div className="space-y-1">
-                                        <div className="text-sm text-red-600">
+                                        <div className="text-sm text-destructive">
                                           Bounce Reason: {getBounceReason(event)}
                                         </div>
                                         {getBounceDiagnostic(event) && (
-                                          <div className="text-xs text-neutral-600 break-words">
+                                          <div className="text-xs text-muted-foreground break-words">
                                             {getBounceDiagnostic(event)}
                                           </div>
                                         )}
                                       </div>
                                     )}
                                     {eventType === 'Send' && (
-                                      <div className="text-sm text-gray-600">
+                                      <div className="text-sm text-muted-foreground">
                                         Email sent successfully to {getRecipientAddress(email) || '—'}
                                       </div>
                                     )}
                                     {eventType === 'Delivery' && (
-                                      <div className="text-sm text-gray-600">
+                                      <div className="text-sm text-muted-foreground">
                                         Email delivered to recipient's mail server
                                       </div>
                                     )}
                                     {eventType === 'Open' && (
-                                      <div className="text-sm text-blue-600">
+                                      <div className="text-sm text-muted-foreground">
                                         Email was opened by recipient
                                       </div>
                                     )}
                                     {eventType === 'Click' && (
-                                      <div className="text-sm text-purple-600">
+                                      <div className="text-sm text-muted-foreground">
                                         Recipient clicked on email links
                                       </div>
                                     )}
