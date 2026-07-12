@@ -45,9 +45,9 @@ export function TicketStatusTimeline({
               className={cn(
                 'mt-1.5 size-2 shrink-0 rounded-full',
                 entry.kind === 'assignment'
-                  ? 'bg-violet-500/80'
+                  ? 'bg-primary'
                   : entry.kind === 'audit'
-                    ? 'bg-amber-500/80'
+                    ? 'bg-muted-foreground'
                     : 'bg-primary/70',
               )}
             />
@@ -67,9 +67,9 @@ export function TicketStatusTimeline({
                 </p>
               </>
             ) : entry.kind === 'assignment' ? (
-              <div className="rounded-lg border border-violet-200/80 bg-violet-50/60 p-2.5 dark:border-violet-900/50 dark:bg-violet-950/20">
+              <div className="rounded-lg border bg-muted/40 p-2.5">
                 <div className="flex items-start gap-2">
-                  <UserRoundCheck className="mt-0.5 size-3.5 shrink-0 text-violet-700 dark:text-violet-300" />
+                  <UserRoundCheck className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1 space-y-1">
                     <p className={cn('leading-snug', compact ? 'text-sm' : 'text-sm font-medium')}>
                       {entry.label}
@@ -90,9 +90,9 @@ export function TicketStatusTimeline({
                 </div>
               </div>
             ) : (
-              <div className="rounded-lg border border-amber-200/80 bg-amber-50/50 p-2.5 dark:border-amber-900/40 dark:bg-amber-950/15">
+              <div className="rounded-lg border bg-muted/40 p-2.5">
                 <div className="flex items-start gap-2">
-                  <ScrollText className="mt-0.5 size-3.5 shrink-0 text-amber-800 dark:text-amber-300" />
+                  <ScrollText className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1 space-y-1">
                     <p className={cn('leading-snug', compact ? 'text-sm' : 'text-sm font-medium')}>
                       {entry.label}

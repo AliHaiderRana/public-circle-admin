@@ -15,7 +15,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { AlertTriangle, Loader2, RefreshCw, RotateCcw } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Info, Loader2, RefreshCw, RotateCcw, XCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import DlqFailedMessagesPanel from '@/components/DlqFailedMessagesPanel';
@@ -28,7 +29,7 @@ function DlqQueueStatusSkeleton() {
         <Loader2 className="h-4 w-4 animate-spin" />
         Loading queue status from SQS…
       </div>
-      <div className="space-y-6 animate-pulse">
+      <div className="space-y-6">
         <div className="flex items-end gap-3">
           <Skeleton className="h-14 w-20" />
           <Skeleton className="h-4 w-32 mb-2" />
@@ -47,7 +48,7 @@ function DlqQueueStatusSkeleton() {
 
 function DlqMessagesSkeleton() {
   return (
-    <div className="space-y-4 animate-pulse">
+    <div className="space-y-4">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
         Loading failure records…
@@ -233,16 +234,16 @@ export default function DlqPage() {
       </div>
 
       {message && (
-        <div
-          className={cn(
-            'rounded-lg border p-4 text-sm',
-            message.type === 'success' && 'border-green-200 bg-green-50 text-green-700',
-            message.type === 'error' && 'border-red-200 bg-red-50 text-red-700',
-            message.type === 'info' && 'border-blue-200 bg-blue-50 text-blue-700',
+        <Alert variant={message.type === 'error' ? 'destructive' : 'default'}>
+          {message.type === 'success' ? (
+            <CheckCircle2 className="h-4 w-4" />
+          ) : message.type === 'error' ? (
+            <XCircle className="h-4 w-4" />
+          ) : (
+            <Info className="h-4 w-4" />
           )}
-        >
-          {message.text}
-        </div>
+          <AlertDescription>{message.text}</AlertDescription>
+        </Alert>
       )}
 
       <Card>
@@ -289,24 +290,33 @@ export default function DlqPage() {
               </div>
 
               {messagesInFlight > 0 && (
-                <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
-                  {messagesInFlight} message{messagesInFlight === 1 ? '' : 's'} are in flight — temporarily
-                  hidden while SQS delivers them to a consumer. Wait ~30 seconds and refresh.
-                </div>
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    {messagesInFlight} message{messagesInFlight === 1 ? '' : 's'} are in flight — temporarily
+                    hidden while SQS delivers them to a consumer. Wait ~30 seconds and refresh.
+                  </AlertDescription>
+                </Alert>
               )}
 
               {syncIncomplete && (
-                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  SQS reports {messageCount} available, but only {dbFailureCount} failure record
-                  {dbFailureCount === 1 ? '' : 's'} are synced in the database. The list below is
-                  paginated from those records.
-                </div>
+                <Alert>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    SQS reports {messageCount} available, but only {dbFailureCount} failure record
+                    {dbFailureCount === 1 ? '' : 's'} are synced in the database. The list below is
+                    paginated from those records.
+                  </AlertDescription>
+                </Alert>
               )}
 
               {status?.countError && (
-                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                  Could not fetch live count: {status.countError}
-                </div>
+                <Alert>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    Could not fetch live count: {status.countError}
+                  </AlertDescription>
+                </Alert>
               )}
 
               <div className="grid gap-3 text-sm sm:grid-cols-2">
@@ -348,9 +358,12 @@ export default function DlqPage() {
           {isInitialLoad ? (
             <DlqMessagesSkeleton />
           ) : status?.messagesError ? (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              Could not load message details: {status.messagesError}
-            </div>
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                Could not load message details: {status.messagesError}
+              </AlertDescription>
+            </Alert>
           ) : hasMessages && listTotal === 0 && !debouncedSearch ? (
             <div className="space-y-3">
               <p className="text-sm text-amber-800">

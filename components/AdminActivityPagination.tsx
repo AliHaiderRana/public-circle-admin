@@ -1,7 +1,14 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 import {
   Select,
   SelectContent,
@@ -9,7 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export const ADMIN_ACTIVITY_PAGE_SIZES = [10, 15, 25, 50] as const;
@@ -99,47 +105,42 @@ export default function AdminActivityPagination({
             </Select>
           </div>
 
-          <div
-            className={cn(
-              'inline-flex items-center rounded-md border bg-background shadow-sm',
-              loading && 'opacity-60 pointer-events-none'
-            )}
-            role="navigation"
-            aria-label="Activity pagination"
-          >
-            <Button
-              type="button"
-              variant="ghost"
-              size={compact ? 'icon' : 'sm'}
-              className={cn('rounded-r-none border-r h-8', !compact && 'px-2.5')}
-              disabled={!canGoPrev}
-              onClick={() => onPageChange(page - 1)}
-              aria-label="Previous page"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              {!compact && <span className="ml-1 hidden md:inline">Previous</span>}
-            </Button>
-            <span
-              className={cn(
-                'flex items-center justify-center border-r bg-muted/40 text-xs font-medium text-foreground tabular-nums',
-                compact ? 'min-w-[5.5rem] h-8 px-2' : 'min-w-[6.5rem] h-8 px-3 text-sm'
-              )}
-            >
-              {page} / {Math.max(1, totalPages)}
-            </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size={compact ? 'icon' : 'sm'}
-              className={cn('rounded-l-none h-8', !compact && 'px-2.5')}
-              disabled={!canGoNext}
-              onClick={() => onPageChange(page + 1)}
-              aria-label="Next page"
-            >
-              {!compact && <span className="mr-1 hidden md:inline">Next</span>}
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+          <Pagination className="mx-0 w-auto" aria-label="Activity pagination">
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (canGoPrev) onPageChange(page - 1);
+                  }}
+                  aria-disabled={!canGoPrev || undefined}
+                  className={cn(!canGoPrev && 'pointer-events-none opacity-50')}
+                />
+              </PaginationItem>
+              <PaginationItem>
+                <PaginationLink
+                  href="#"
+                  isActive
+                  onClick={(e) => e.preventDefault()}
+                  className="w-auto px-3 tabular-nums"
+                >
+                  {page} / {Math.max(1, totalPages)}
+                </PaginationLink>
+              </PaginationItem>
+              <PaginationItem>
+                <PaginationNext
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (canGoNext) onPageChange(page + 1);
+                  }}
+                  aria-disabled={!canGoNext || undefined}
+                  className={cn(!canGoNext && 'pointer-events-none opacity-50')}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
         </div>
       </div>
     </div>

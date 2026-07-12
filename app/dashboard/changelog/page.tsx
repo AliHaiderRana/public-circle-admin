@@ -196,7 +196,7 @@ export default function ChangelogPage() {
                           {entry.features.map((f, i) => (
                             <li key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
                               <span>• {f.text}</span>
-                              {(f.commitSha || f.commitAuthor) && <button type="button" onClick={() => setDetailItem(f)} className="text-xs text-primary underline underline-offset-2 shrink-0">Show Details</button>}
+                              {(f.commitSha || f.commitAuthor) && <Button variant="link" size="sm" onClick={() => setDetailItem(f)} className="h-auto p-0 text-xs shrink-0">Show Details</Button>}
                             </li>
                           ))}
                         </ul>
@@ -211,7 +211,7 @@ export default function ChangelogPage() {
                           {entry.fixes.map((f, i) => (
                             <li key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
                               <span>• {f.text}</span>
-                              {(f.commitSha || f.commitAuthor) && <button type="button" onClick={() => setDetailItem(f)} className="text-xs text-primary underline underline-offset-2 shrink-0">Show Details</button>}
+                              {(f.commitSha || f.commitAuthor) && <Button variant="link" size="sm" onClick={() => setDetailItem(f)} className="h-auto p-0 text-xs shrink-0">Show Details</Button>}
                             </li>
                           ))}
                         </ul>
@@ -226,7 +226,7 @@ export default function ChangelogPage() {
                           {entry.improvements.map((f, i) => (
                             <li key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
                               <span>• {f.text}</span>
-                              {(f.commitSha || f.commitAuthor) && <button type="button" onClick={() => setDetailItem(f)} className="text-xs text-primary underline underline-offset-2 shrink-0">Show Details</button>}
+                              {(f.commitSha || f.commitAuthor) && <Button variant="link" size="sm" onClick={() => setDetailItem(f)} className="h-auto p-0 text-xs shrink-0">Show Details</Button>}
                             </li>
                           ))}
                         </ul>

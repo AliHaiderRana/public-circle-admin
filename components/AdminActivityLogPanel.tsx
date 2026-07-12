@@ -4,6 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -261,23 +266,25 @@ export default function AdminActivityLogPanel({
             )}
           </div>
           {row.details && Object.keys(row.details).length > 0 && (
-            <details className="text-xs">
-              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+            <Collapsible className="text-xs">
+              <CollapsibleTrigger className="cursor-pointer text-muted-foreground hover:text-foreground">
                 More detail
-              </summary>
-              <ul className="mt-2 space-y-1 text-muted-foreground list-disc pl-4">
-                {formatDetailLines(row.details).map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-                {formatDetailLines(row.details).length === 0 && (
-                  <li className="list-none pl-0">
-                    <pre className="max-h-32 overflow-auto rounded bg-muted p-2 font-mono text-[11px] text-foreground">
-                      {JSON.stringify(row.details, null, 2)}
-                    </pre>
-                  </li>
-                )}
-              </ul>
-            </details>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <ul className="mt-2 space-y-1 text-muted-foreground list-disc pl-4">
+                  {formatDetailLines(row.details).map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                  {formatDetailLines(row.details).length === 0 && (
+                    <li className="list-none pl-0">
+                      <pre className="max-h-32 overflow-auto rounded bg-muted p-2 font-mono text-[11px] text-foreground">
+                        {JSON.stringify(row.details, null, 2)}
+                      </pre>
+                    </li>
+                  )}
+                </ul>
+              </CollapsibleContent>
+            </Collapsible>
           )}
         </div>
       ))}

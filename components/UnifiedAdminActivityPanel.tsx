@@ -4,6 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -243,7 +248,7 @@ export default function UnifiedAdminActivityPanel({
               </Badge>
               <Badge variant="outline">{row.categoryLabel}</Badge>
               {row.actorIsPartner ? (
-                <Badge variant="outline" className="font-normal border-amber-300/80 text-amber-900 dark:text-amber-200">
+                <Badge variant="outline" className="font-normal">
                   {row.referralRole === 'SALES_PERSON'
                     ? 'Sales partner'
                     : row.referralRole === 'MARKETING_AFFILIATE'
@@ -274,16 +279,18 @@ export default function UnifiedAdminActivityPanel({
               )}
             </div>
             {detailLines.length > 0 && (
-              <details className="text-xs">
-                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+              <Collapsible className="text-xs">
+                <CollapsibleTrigger className="cursor-pointer text-muted-foreground hover:text-foreground">
                   More detail
-                </summary>
-                <ul className="mt-2 space-y-1 text-muted-foreground list-disc pl-4">
-                  {detailLines.map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-              </details>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <ul className="mt-2 space-y-1 text-muted-foreground list-disc pl-4">
+                    {detailLines.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                </CollapsibleContent>
+              </Collapsible>
             )}
           </div>
         );

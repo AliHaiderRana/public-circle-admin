@@ -5,12 +5,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { UserPlus, User, Mail, Calendar, Eye, EyeOff, ScrollText } from 'lucide-react';
 import {
   AlertDialog,
@@ -142,7 +143,7 @@ export default function AdminsPage() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Admin Users</h2>
-          <p className="text-neutral-500">
+          <p className="text-muted-foreground">
             Create and remove administrator accounts, and review audit trails for support staff.
             Venndii Referral App users are managed on the{' '}
             <Link href="/dashboard/third-party-users" className="text-primary underline-offset-4 hover:underline">
@@ -161,7 +162,7 @@ export default function AdminsPage() {
       </div>
 
       {message && (
-        <div className="p-4 bg-neutral-100 rounded-lg">
+        <div className="p-4 bg-muted rounded-lg">
           <p className="text-sm">{message}</p>
         </div>
       )}
@@ -198,13 +199,16 @@ export default function AdminsPage() {
                     required
                     className="pr-10"
                   />
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="icon"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-700"
+                    className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
+                  </Button>
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
@@ -259,10 +263,10 @@ export default function AdminsPage() {
                 <TableRow>
                   <TableCell
                     colSpan={user?.isSuperAdmin ? 5 : 4}
-                    className="text-center h-48 text-neutral-500"
+                    className="text-center h-48 text-muted-foreground"
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <User size={40} className="text-neutral-300" />
+                      <User size={40} className="text-muted-foreground" />
                       <p>No admin users found.</p>
                     </div>
                   </TableCell>
@@ -272,15 +276,17 @@ export default function AdminsPage() {
                   <TableRow key={admin._id}>
                     <TableCell className="pl-6">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                          <User size={14} />
-                        </div>
+                        <Avatar className="size-8">
+                          <AvatarFallback>
+                            <User size={14} />
+                          </AvatarFallback>
+                        </Avatar>
                         <span className="font-medium">{admin.name || '-'}</span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2 text-sm">
-                        <Mail size={14} className="text-neutral-400" />
+                        <Mail size={14} className="text-muted-foreground" />
                         {admin.email}
                       </div>
                     </TableCell>
@@ -293,8 +299,8 @@ export default function AdminsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2 text-sm text-neutral-600">
-                        <Calendar size={14} className="text-neutral-400" />
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Calendar size={14} />
                         {new Date(admin.createdAt).toLocaleDateString()}
                       </div>
                     </TableCell>
@@ -312,7 +318,7 @@ export default function AdminsPage() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="h-8 min-w-[72px] shrink-0 text-red-500 border-red-200 hover:bg-red-50"
+                                  className="h-8 min-w-[72px] shrink-0 text-destructive hover:text-destructive"
                                   onClick={() => setConfirmingAdminId(admin._id)}
                                   disabled={deletingId === admin._id}
                                 >
@@ -330,7 +336,7 @@ export default function AdminsPage() {
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                                   <AlertDialogAction
-                                    className="bg-red-600 hover:bg-red-700 text-white"
+                                    className={buttonVariants({ variant: "destructive" })}
                                     onClick={async () => {
                                       await handleDelete(admin._id);
                                       setConfirmingAdminId(null);

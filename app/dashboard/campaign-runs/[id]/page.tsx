@@ -16,27 +16,36 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  ArrowLeft, 
-  Mail, 
-  Send, 
-  CheckCircle2, 
-  XCircle, 
-  Eye, 
-  MousePointer, 
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
+import {
+  ArrowLeft,
+  Mail,
+  Send,
+  CheckCircle2,
+  XCircle,
+  Eye,
+  MousePointer,
   Clock,
   Calendar,
   Building2,
   Play,
   Database,
-  ChevronLeft,
-  ChevronRight,
   Filter,
   ChevronDown,
   ChevronUp,
   AlertCircle,
   RefreshCw,
-  BarChart3
+  BarChart3,
+  Info
 } from 'lucide-react';
 
 interface CampaignRunDetail {
@@ -292,15 +301,15 @@ export default function CampaignRunDetailPage() {
   const getEventBadge = (email: EmailRecord) => {
     const events = email.emailEvents || {};
     if (events.Bounce) {
-      return <Badge className="bg-neutral-900 text-white">Failed</Badge>;
+      return <Badge variant="destructive">Failed</Badge>;
     } else if (events.Click) {
-      return <Badge className="bg-neutral-900 text-white">Clicked</Badge>;
+      return <Badge variant="outline">Clicked</Badge>;
     } else if (events.Open) {
-      return <Badge className="bg-neutral-900 text-white">Opened</Badge>;
+      return <Badge variant="outline">Opened</Badge>;
     } else if (events.Delivery) {
-      return <Badge className="bg-neutral-900 text-white">Delivered</Badge>;
+      return <Badge>Delivered</Badge>;
     } else if (events.Send) {
-      return <Badge className="bg-neutral-900 text-white">Sent</Badge>;
+      return <Badge variant="outline">Sent</Badge>;
     }
     return <Badge variant="outline">Pending</Badge>;
   };
@@ -377,18 +386,20 @@ export default function CampaignRunDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
-              <Play className="h-6 w-6 text-white" />
-            </div>
+            <Avatar className="w-12 h-12">
+              <AvatarFallback>
+                <Play className="h-6 w-6" />
+              </AvatarFallback>
+            </Avatar>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
                 {campaignRun.campaign?.campaignName || 'Unknown Campaign'}
               </h1>
               <div className="flex items-center gap-2 mt-1">
                 {campaignRun.isDataStoredOnWarehouse ? (
-                  <Badge className="bg-neutral-900 text-white">Archived</Badge>
+                  <Badge variant="secondary">Archived</Badge>
                 ) : (
-                  <Badge className="bg-neutral-900 text-white">Live</Badge>
+                  <Badge>Live</Badge>
                 )}
                 <span className="text-sm text-gray-500">
                   Run ID: {campaignRun._id.slice(-8)}
@@ -404,8 +415,8 @@ export default function CampaignRunDetailPage() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                <Building2 className="h-5 w-5 text-blue-600" />
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                <Building2 className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-600">Company</p>
@@ -420,8 +431,8 @@ export default function CampaignRunDetailPage() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                <Mail className="h-5 w-5 text-green-600" />
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                <Mail className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-600">Subject</p>
@@ -436,8 +447,8 @@ export default function CampaignRunDetailPage() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                <Calendar className="h-5 w-5 text-purple-600" />
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                <Calendar className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-600">Created</p>
@@ -591,98 +602,104 @@ export default function CampaignRunDetailPage() {
                                 {getRecipientAddress(email) || '—'}
                               </div>
                               <div className="flex items-center gap-1 flex-wrap">
-                                {normalizeEmailList(email.cc).length > 0 && (
-                                  <span className="relative group inline-flex">
-                                    {(() => {
-                                      const list = normalizeEmailList(email.cc);
-                                      const key = `${email._id}-cc`;
-                                      const expanded = !!tooltipExpanded[key];
-                                      const visible = expanded ? list : list.slice(0, 10);
-                                      return (
-                                        <>
-                                          <Badge
-                                            variant="secondary"
-                                            className="h-5 px-2 text-[10px] font-medium"
+                                {normalizeEmailList(email.cc).length > 0 && (() => {
+                                  const list = normalizeEmailList(email.cc);
+                                  const key = `${email._id}-cc`;
+                                  const expanded = !!tooltipExpanded[key];
+                                  const visible = expanded ? list : list.slice(0, 10);
+                                  return (
+                                    <Popover>
+                                      <PopoverTrigger
+                                        asChild
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <Badge
+                                          variant="secondary"
+                                          className="h-5 px-2 text-[10px] font-medium cursor-pointer"
+                                        >
+                                          CC {list.length}
+                                        </Badge>
+                                      </PopoverTrigger>
+                                      <PopoverContent align="start" className="w-72 p-2 text-[11px]">
+                                        <div className="font-semibold mb-1">CC</div>
+                                        <div className={expanded ? 'max-h-48 overflow-y-auto pr-1 space-y-0.5' : 'space-y-0.5'}>
+                                          {visible.map((addr) => (
+                                            <div key={addr} className="truncate">{addr}</div>
+                                          ))}
+                                        </div>
+                                        {!expanded && list.length > 10 && (
+                                          <Button
+                                            variant="link"
+                                            size="sm"
+                                            className="mt-2 h-auto p-0 text-[11px]"
+                                            onClick={(e) => toggleTooltipExpanded(key, e)}
                                           >
-                                            CC {normalizeEmailList(email.cc).length}
-                                          </Badge>
-                                          <div className="pointer-events-auto absolute left-0 top-full z-50 mt-1 hidden w-72 rounded-md border bg-white p-2 text-[11px] text-neutral-900 shadow-md group-hover:block">
-                                            <div className="font-semibold mb-1">CC</div>
-                                            <div className={expanded ? 'max-h-48 overflow-y-auto pr-1 space-y-0.5' : 'space-y-0.5'}>
-                                              {visible.map((addr) => (
-                                                <div key={addr} className="truncate">{addr}</div>
-                                              ))}
-                                            </div>
-                                            {!expanded && list.length > 10 && (
-                                              <button
-                                                type="button"
-                                                className="mt-2 w-full rounded-md border px-2 py-1 text-[11px] font-medium text-neutral-900 hover:bg-neutral-50"
-                                                onClick={(e) => toggleTooltipExpanded(key, e)}
-                                              >
-                                                View all 10+
-                                              </button>
-                                            )}
-                                            {expanded && (
-                                              <button
-                                                type="button"
-                                                className="mt-2 w-full rounded-md border px-2 py-1 text-[11px] font-medium text-neutral-900 hover:bg-neutral-50"
-                                                onClick={(e) => toggleTooltipExpanded(key, e)}
-                                              >
-                                                Show less
-                                              </button>
-                                            )}
-                                          </div>
-                                        </>
-                                      );
-                                    })()}
-                                  </span>
-                                )}
-                                {normalizeEmailList(email.bcc).length > 0 && (
-                                  <span className="relative group inline-flex">
-                                    {(() => {
-                                      const list = normalizeEmailList(email.bcc);
-                                      const key = `${email._id}-bcc`;
-                                      const expanded = !!tooltipExpanded[key];
-                                      const visible = expanded ? list : list.slice(0, 10);
-                                      return (
-                                        <>
-                                          <Badge
-                                            variant="secondary"
-                                            className="h-5 px-2 text-[10px] font-medium"
+                                            View all 10+
+                                          </Button>
+                                        )}
+                                        {expanded && (
+                                          <Button
+                                            variant="link"
+                                            size="sm"
+                                            className="mt-2 h-auto p-0 text-[11px]"
+                                            onClick={(e) => toggleTooltipExpanded(key, e)}
                                           >
-                                            BCC {normalizeEmailList(email.bcc).length}
-                                          </Badge>
-                                          <div className="pointer-events-auto absolute left-0 top-full z-50 mt-1 hidden w-72 rounded-md border bg-white p-2 text-[11px] text-neutral-900 shadow-md group-hover:block">
-                                            <div className="font-semibold mb-1">BCC</div>
-                                            <div className={expanded ? 'max-h-48 overflow-y-auto pr-1 space-y-0.5' : 'space-y-0.5'}>
-                                              {visible.map((addr) => (
-                                                <div key={addr} className="truncate">{addr}</div>
-                                              ))}
-                                            </div>
-                                            {!expanded && list.length > 10 && (
-                                              <button
-                                                type="button"
-                                                className="mt-2 w-full rounded-md border px-2 py-1 text-[11px] font-medium text-neutral-900 hover:bg-neutral-50"
-                                                onClick={(e) => toggleTooltipExpanded(key, e)}
-                                              >
-                                                View all 10+
-                                              </button>
-                                            )}
-                                            {expanded && (
-                                              <button
-                                                type="button"
-                                                className="mt-2 w-full rounded-md border px-2 py-1 text-[11px] font-medium text-neutral-900 hover:bg-neutral-50"
-                                                onClick={(e) => toggleTooltipExpanded(key, e)}
-                                              >
-                                                Show less
-                                              </button>
-                                            )}
-                                          </div>
-                                        </>
-                                      );
-                                    })()}
-                                  </span>
-                                )}
+                                            Show less
+                                          </Button>
+                                        )}
+                                      </PopoverContent>
+                                    </Popover>
+                                  );
+                                })()}
+                                {normalizeEmailList(email.bcc).length > 0 && (() => {
+                                  const list = normalizeEmailList(email.bcc);
+                                  const key = `${email._id}-bcc`;
+                                  const expanded = !!tooltipExpanded[key];
+                                  const visible = expanded ? list : list.slice(0, 10);
+                                  return (
+                                    <Popover>
+                                      <PopoverTrigger
+                                        asChild
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <Badge
+                                          variant="secondary"
+                                          className="h-5 px-2 text-[10px] font-medium cursor-pointer"
+                                        >
+                                          BCC {list.length}
+                                        </Badge>
+                                      </PopoverTrigger>
+                                      <PopoverContent align="start" className="w-72 p-2 text-[11px]">
+                                        <div className="font-semibold mb-1">BCC</div>
+                                        <div className={expanded ? 'max-h-48 overflow-y-auto pr-1 space-y-0.5' : 'space-y-0.5'}>
+                                          {visible.map((addr) => (
+                                            <div key={addr} className="truncate">{addr}</div>
+                                          ))}
+                                        </div>
+                                        {!expanded && list.length > 10 && (
+                                          <Button
+                                            variant="link"
+                                            size="sm"
+                                            className="mt-2 h-auto p-0 text-[11px]"
+                                            onClick={(e) => toggleTooltipExpanded(key, e)}
+                                          >
+                                            View all 10+
+                                          </Button>
+                                        )}
+                                        {expanded && (
+                                          <Button
+                                            variant="link"
+                                            size="sm"
+                                            className="mt-2 h-auto p-0 text-[11px]"
+                                            onClick={(e) => toggleTooltipExpanded(key, e)}
+                                          >
+                                            Show less
+                                          </Button>
+                                        )}
+                                      </PopoverContent>
+                                    </Popover>
+                                  );
+                                })()}
                               </div>
                             </div>
                             <div className="text-xs text-neutral-500">To: {getRecipientAddress(email) || '—'}</div>
@@ -764,32 +781,36 @@ export default function CampaignRunDetailPage() {
                               ))}
                               
                               {email.cc && email.cc.length > 0 && (
-                                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                                  <div className="text-sm font-medium text-blue-800">CC Recipients:</div>
-                                  <div className="text-sm text-blue-600">
-                                    {email.cc.map((cc: any) => cc.recipientEmailAddress || cc.emailAddress || cc).join(', ')}
-                                  </div>
-                                  <div className="text-xs text-blue-500 mt-1">{email.cc.length} recipient(s)</div>
-                                </div>
+                                <Alert>
+                                  <Info className="h-4 w-4" />
+                                  <AlertTitle>CC Recipients</AlertTitle>
+                                  <AlertDescription>
+                                    <div>
+                                      {email.cc.map((cc: any) => cc.recipientEmailAddress || cc.emailAddress || cc).join(', ')}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-1">{email.cc.length} recipient(s)</div>
+                                  </AlertDescription>
+                                </Alert>
                               )}
-                              
+
                               {email.bcc && email.bcc.length > 0 && (
-                                <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
-                                  <div className="text-sm font-medium text-purple-800">BCC Recipients:</div>
-                                  <div className="text-sm text-purple-600">
-                                    {email.bcc.map((bcc: any) => bcc.recipientEmailAddress || bcc.emailAddress || bcc).join(', ')}
-                                  </div>
-                                  <div className="text-xs text-purple-500 mt-1">{email.bcc.length} recipient(s)</div>
-                                </div>
+                                <Alert>
+                                  <Info className="h-4 w-4" />
+                                  <AlertTitle>BCC Recipients</AlertTitle>
+                                  <AlertDescription>
+                                    <div>
+                                      {email.bcc.map((bcc: any) => bcc.recipientEmailAddress || bcc.emailAddress || bcc).join(', ')}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-1">{email.bcc.length} recipient(s)</div>
+                                  </AlertDescription>
+                                </Alert>
                               )}
-                              
+
                               {email.resendCount && email.resendCount > 0 && (
-                                <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
-                                  <div className="flex items-center gap-2 text-sm font-medium text-orange-800">
-                                    <RefreshCw size={16} />
-                                    Resent {email.resendCount} time(s)
-                                  </div>
-                                </div>
+                                <Alert>
+                                  <RefreshCw className="h-4 w-4" />
+                                  <AlertTitle>Resent {email.resendCount} time(s)</AlertTitle>
+                                </Alert>
                               )}
                             </div>
                           </div>
@@ -825,24 +846,32 @@ export default function CampaignRunDetailPage() {
               </SelectContent>
             </Select>
             
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handlePageChange(pagination.page - 1)}
-              disabled={pagination.page === 1}
-            >
-              <ChevronLeft size={16} />
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handlePageChange(pagination.page + 1)}
-              disabled={pagination.page === pagination.pages}
-            >
-              Next
-              <ChevronRight size={16} />
-            </Button>
+            <Pagination className="mx-0 w-auto">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handlePageChange(pagination.page - 1);
+                    }}
+                    aria-disabled={pagination.page === 1}
+                    className={pagination.page === 1 ? 'pointer-events-none opacity-50' : ''}
+                  />
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handlePageChange(pagination.page + 1);
+                    }}
+                    aria-disabled={pagination.page === pagination.pages}
+                    className={pagination.page === pagination.pages ? 'pointer-events-none opacity-50' : ''}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
           </div>
         </div>
       )}

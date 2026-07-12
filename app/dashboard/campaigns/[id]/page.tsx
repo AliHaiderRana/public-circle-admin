@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
   ArrowLeft, 
   Send, 
@@ -79,13 +80,13 @@ export default function CampaignDetailPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'ACTIVE':
-        return <Badge className="bg-neutral-900 text-white">Active</Badge>;
+        return <Badge>Active</Badge>;
       case 'PAUSED':
-        return <Badge variant="secondary">Paused</Badge>;
+        return <Badge variant="outline">Paused</Badge>;
       case 'DRAFT':
-        return <Badge variant="outline">Draft</Badge>;
+        return <Badge variant="secondary">Draft</Badge>;
       case 'ARCHIVED':
-        return <Badge variant="destructive">Archived</Badge>;
+        return <Badge variant="secondary">Archived</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
@@ -115,8 +116,8 @@ export default function CampaignDetailPage() {
     return (
       <div className="p-6">
         <div className="text-center py-12">
-          <h2 className="text-2xl font-semibold text-gray-900">Campaign not found</h2>
-          <p className="text-gray-600 mt-2">The campaign you're looking for doesn't exist.</p>
+          <h2 className="text-2xl font-semibold text-foreground">Campaign not found</h2>
+          <p className="text-muted-foreground mt-2">The campaign you're looking for doesn't exist.</p>
           <Button onClick={() => router.back()} className="mt-4">
             Go Back
           </Button>
@@ -139,16 +140,18 @@ export default function CampaignDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center border border-gray-200">
-              <Send className="h-6 w-6 text-white" />
-            </div>
+            <Avatar className="h-12 w-12">
+              <AvatarFallback>
+                <Send className="h-6 w-6" />
+              </AvatarFallback>
+            </Avatar>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+              <h1 className="text-2xl font-bold text-foreground">
                 {campaign.campaignName}
               </h1>
               <div className="flex items-center gap-2 mt-1">
                 {getStatusBadge(campaign.status)}
-                <span className="text-sm text-gray-500">
+                <span className="text-sm text-muted-foreground">
                   Created {new Date(campaign.createdAt).toLocaleDateString()}
                 </span>
               </div>
@@ -165,119 +168,119 @@ export default function CampaignDetailPage() {
       </div>
 
       {/* Info Alert */}
-      <Alert className="bg-blue-50 border-blue-200">
-        <Info className="h-4 w-4 text-blue-600" />
-        <AlertDescription className="text-blue-800">
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertDescription>
           We're maintaining only 30 records for each campaign run. Historical data beyond the most recent 30 records will not be available.
         </AlertDescription>
       </Alert>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        <Card className="hover:shadow-lg transition-shadow duration-200 border-0 shadow-md">
+        <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <Send className="h-4 w-4 text-blue-500" />
+                <p className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                  <Send className="h-4 w-4 text-muted-foreground" />
                   Emails Processed
                 </p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
+                <p className="text-3xl font-bold text-foreground mt-2">
                   {campaign.processedCount || 0}
                 </p>
               </div>
-              <div className="h-14 w-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-                <Send className="h-7 w-7 text-white" />
+              <div className="h-14 w-14 bg-muted rounded-lg flex items-center justify-center">
+                <Send className="h-7 w-7 text-muted-foreground" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow duration-200 border-0 shadow-md">
+        <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-green-500" />
+                <p className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
                   Total Recipients
                 </p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
+                <p className="text-3xl font-bold text-foreground mt-2">
                   {(campaign.cc?.length || 0) + (campaign.bcc?.length || 0)}
                 </p>
                 <div className="flex items-center gap-3 mt-3">
                   <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    <span className="text-xs text-gray-600 font-medium">
+                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                    <span className="text-xs text-muted-foreground font-medium">
                       CC: {campaign.cc?.length || 0}
                     </span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                    <span className="text-xs text-gray-600 font-medium">
+                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                    <span className="text-xs text-muted-foreground font-medium">
                       BCC: {campaign.bcc?.length || 0}
                     </span>
                   </div>
                 </div>
               </div>
-              <div className="h-14 w-14 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
-                <BarChart3 className="h-7 w-7 text-white" />
+              <div className="h-14 w-14 bg-muted rounded-lg flex items-center justify-center">
+                <BarChart3 className="h-7 w-7 text-muted-foreground" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow duration-200 border-0 shadow-md">
+        <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <Users className="h-4 w-4 text-purple-500" />
+                <p className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
                   Segments
                 </p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
+                <p className="text-3xl font-bold text-foreground mt-2">
                   {campaign.segments?.length || 0}
                 </p>
               </div>
-              <div className="h-14 w-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                <Users className="h-7 w-7 text-white" />
+              <div className="h-14 w-14 bg-muted rounded-lg flex items-center justify-center">
+                <Users className="h-7 w-7 text-muted-foreground" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow duration-200 border-0 shadow-md">
+        <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <Play className="h-4 w-4 text-indigo-500" />
+                <p className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                  <Play className="h-4 w-4 text-muted-foreground" />
                   Campaign Runs
                 </p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
+                <p className="text-3xl font-bold text-foreground mt-2">
                   {campaign.campaignRunsCount || 0}
                 </p>
               </div>
-              <div className="h-14 w-14 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                <Play className="h-7 w-7 text-white" />
+              <div className="h-14 w-14 bg-muted rounded-lg flex items-center justify-center">
+                <Play className="h-7 w-7 text-muted-foreground" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow duration-200 border-0 shadow-md">
+        <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-orange-500" />
+                <p className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
                   Company
                 </p>
-                <p className="text-lg font-bold text-gray-900 mt-2 truncate">
+                <p className="text-lg font-bold text-foreground mt-2 truncate">
                   {campaign.company.name}
                 </p>
               </div>
-              <div className="h-14 w-14 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
-                <Building2 className="h-7 w-7 text-white" />
+              <div className="h-14 w-14 bg-muted rounded-lg flex items-center justify-center">
+                <Building2 className="h-7 w-7 text-muted-foreground" />
               </div>
             </div>
           </CardContent>
@@ -295,28 +298,28 @@ export default function CampaignDetailPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <label className="text-sm font-medium text-gray-700">Subject Line</label>
-              <p className="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded-lg">
+              <label className="text-sm font-medium text-muted-foreground">Subject Line</label>
+              <p className="mt-1 text-sm text-foreground bg-muted p-3 rounded-lg">
                 {campaign.emailSubject}
               </p>
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-700">Source Email</label>
-              <p className="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded-lg">
+              <label className="text-sm font-medium text-muted-foreground">Source Email</label>
+              <p className="mt-1 text-sm text-foreground bg-muted p-3 rounded-lg">
                 {campaign.sourceEmailAddress}
               </p>
             </div>
             {campaign.replyToEmailAddress && (
               <div>
-                <label className="text-sm font-medium text-gray-700">Reply To Email</label>
-                <p className="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded-lg">
+                <label className="text-sm font-medium text-muted-foreground">Reply To Email</label>
+                <p className="mt-1 text-sm text-foreground bg-muted p-3 rounded-lg">
                   {campaign.replyToEmailAddress}
                 </p>
               </div>
             )}
             <div>
-              <label className="text-sm font-medium text-gray-700">CC Recipients</label>
-              <p className="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded-lg">
+              <label className="text-sm font-medium text-muted-foreground">CC Recipients</label>
+              <p className="mt-1 text-sm text-foreground bg-muted p-3 rounded-lg">
                 {campaign.cc?.length || 0} recipients
                 {campaign.cc && campaign.cc.length > 0 && (
                   <div className="mt-2 max-h-20 overflow-y-auto text-xs">
@@ -327,8 +330,8 @@ export default function CampaignDetailPage() {
               </p>
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-700">BCC Recipients</label>
-              <p className="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded-lg">
+              <label className="text-sm font-medium text-muted-foreground">BCC Recipients</label>
+              <p className="mt-1 text-sm text-foreground bg-muted p-3 rounded-lg">
                 {campaign.bcc?.length || 0} recipients
                 {campaign.bcc && campaign.bcc.length > 0 && (
                   <div className="mt-2 max-h-20 overflow-y-auto text-xs">
@@ -351,60 +354,60 @@ export default function CampaignDetailPage() {
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Calendar size={16} className="text-gray-500" />
+                <Calendar size={16} className="text-muted-foreground" />
                 <span className="text-sm font-medium">Created</span>
               </div>
-              <span className="text-sm text-gray-900">
+              <span className="text-sm text-foreground">
                 {new Date(campaign.createdAt).toLocaleDateString()} at {new Date(campaign.createdAt).toLocaleTimeString()}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Clock size={16} className="text-gray-500" />
+                <Clock size={16} className="text-muted-foreground" />
                 <span className="text-sm font-medium">Last Updated</span>
               </div>
-              <span className="text-sm text-gray-900">
+              <span className="text-sm text-foreground">
                 {new Date(campaign.updatedAt).toLocaleDateString()} at {new Date(campaign.updatedAt).toLocaleTimeString()}
               </span>
             </div>
             {campaign.lastProcessed && (
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Play size={16} className="text-gray-500" />
+                  <Play size={16} className="text-muted-foreground" />
                   <span className="text-sm font-medium">Last Processed</span>
                 </div>
-                <span className="text-sm text-gray-900">
+                <span className="text-sm text-foreground">
                   {new Date(campaign.lastProcessed).toLocaleDateString()} at {new Date(campaign.lastProcessed).toLocaleTimeString()}
                 </span>
               </div>
             )}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Building2 size={16} className="text-gray-500" />
+                <Building2 size={16} className="text-muted-foreground" />
                 <span className="text-sm font-medium">Company</span>
               </div>
-              <span className="text-sm text-gray-900">{campaign.company.name}</span>
+              <span className="text-sm text-foreground">{campaign.company.name}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Send size={16} className="text-gray-500" />
+                <Send size={16} className="text-muted-foreground" />
                 <span className="text-sm font-medium">Run Mode</span>
               </div>
-              <span className="text-sm text-gray-900">{campaign.runMode}</span>
+              <span className="text-sm text-foreground">{campaign.runMode}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Clock size={16} className="text-gray-500" />
+                <Clock size={16} className="text-muted-foreground" />
                 <span className="text-sm font-medium">Frequency</span>
               </div>
-              <span className="text-sm text-gray-900">{campaign.frequency}</span>
+              <span className="text-sm text-foreground">{campaign.frequency}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <CheckCircle2 size={16} className="text-gray-500" />
+                <CheckCircle2 size={16} className="text-muted-foreground" />
                 <span className="text-sm font-medium">Cron Status</span>
               </div>
-              <span className="text-sm text-gray-900">{campaign.cronStatus}</span>
+              <span className="text-sm text-foreground">{campaign.cronStatus}</span>
             </div>
           </CardContent>
         </Card>

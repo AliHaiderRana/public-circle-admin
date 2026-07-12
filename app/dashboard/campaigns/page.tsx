@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Select,
   SelectContent,
@@ -29,17 +30,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
   Search,
   Send,
-  BarChart3,
   Mail,
-  CheckCircle2,
-  Clock,
-  ChevronLeft,
-  ChevronRight,
   Filter,
   Building2,
-  ArrowUpDown,
   ArrowUp,
   ArrowDown,
   Play,
@@ -170,13 +172,13 @@ export default function CampaignsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "ACTIVE":
-        return <Badge className="bg-neutral-900 text-white">Active</Badge>;
+        return <Badge>Active</Badge>;
       case "PAUSED":
-        return <Badge variant="secondary">Paused</Badge>;
+        return <Badge variant="outline">Paused</Badge>;
       case "DRAFT":
-        return <Badge variant="outline">Draft</Badge>;
+        return <Badge variant="secondary">Draft</Badge>;
       case "ARCHIVED":
-        return <Badge variant="destructive">Archived</Badge>;
+        return <Badge variant="secondary">Archived</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
@@ -410,9 +412,11 @@ export default function CampaignsPage() {
                   <TableRow key={campaign._id}>
                     <TableCell className="pl-6 font-medium">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center">
-                          <Mail className="w-4 h-4 text-white" />
-                        </div>
+                        <Avatar>
+                          <AvatarFallback>
+                            <Mail className="w-4 h-4" />
+                          </AvatarFallback>
+                        </Avatar>
                         {campaign.campaignName || campaign.name}
                       </div>
                     </TableCell>
@@ -511,24 +515,40 @@ export default function CampaignsPage() {
                   </SelectContent>
                 </Select>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(pagination.page - 1)}
-                  disabled={pagination.page === 1}
-                >
-                  <ChevronLeft size={16} />
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(pagination.page + 1)}
-                  disabled={pagination.page === pagination.pages}
-                >
-                  Next
-                  <ChevronRight size={16} />
-                </Button>
+                <Pagination className="mx-0 w-auto">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handlePageChange(pagination.page - 1);
+                        }}
+                        aria-disabled={pagination.page === 1}
+                        className={
+                          pagination.page === 1
+                            ? "pointer-events-none opacity-50"
+                            : ""
+                        }
+                      />
+                    </PaginationItem>
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handlePageChange(pagination.page + 1);
+                        }}
+                        aria-disabled={pagination.page === pagination.pages}
+                        className={
+                          pagination.page === pagination.pages
+                            ? "pointer-events-none opacity-50"
+                            : ""
+                        }
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
               </div>
             </div>
           )}

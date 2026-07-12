@@ -74,11 +74,11 @@ export default function EmailReputationGraph({ data }: EmailReputationGraphProps
         <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-            <span className="text-gray-600">Bounce Rate: Critical if &gt;5%</span>
+            <span className="text-muted-foreground">Bounce Rate: Critical if &gt;5%</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-            <span className="text-gray-600">Complaint Rate: Critical if &gt;0.1%</span>
+            <span className="text-muted-foreground">Complaint Rate: Critical if &gt;0.1%</span>
           </div>
         </div>
       </CardContent>

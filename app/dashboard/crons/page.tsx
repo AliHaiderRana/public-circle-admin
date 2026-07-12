@@ -25,10 +25,13 @@ import {
   Clock,
   AlertCircle,
   CheckCircle2,
+  Info,
   Loader2,
   Database,
   History,
+  XCircle,
 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -240,24 +243,18 @@ export default function CronsPage() {
         </div>
 
         {message && (
-          <div
-            className={`p-4 rounded-lg flex items-center gap-2 ${
-              message.type === "success"
-                ? "bg-green-50 text-green-700 border border-green-200"
-                : message.type === "error"
-                ? "bg-red-50 text-red-700 border border-red-200"
-                : "bg-blue-50 text-blue-700 border border-blue-200"
-            }`}
+          <Alert
+            variant={message.type === "error" ? "destructive" : "default"}
           >
             {message.type === "success" ? (
               <CheckCircle2 className="h-4 w-4" />
             ) : message.type === "error" ? (
-              <AlertCircle className="h-4 w-4" />
+              <XCircle className="h-4 w-4" />
             ) : (
-              <AlertCircle className="h-4 w-4" />
+              <Info className="h-4 w-4" />
             )}
-            <p className="text-sm">{message.text}</p>
-          </div>
+            <AlertDescription>{message.text}</AlertDescription>
+          </Alert>
         )}
 
         {crons.length === 0 ? (
@@ -345,12 +342,12 @@ export default function CronsPage() {
                       </TableCell>
                       <TableCell>
                         {cronStatuses[cron.name] === 'in-progress' ? (
-                          <Badge className="text-xs bg-blue-100 text-blue-700 border-blue-200">
+                          <Badge variant="outline" className="text-xs">
                             <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                             In Progress
                           </Badge>
                         ) : cronStatuses[cron.name] === 'completed' ? (
-                          <Badge className="text-xs bg-green-100 text-green-700 border-green-200">
+                          <Badge className="text-xs">
                             <CheckCircle2 className="mr-1 h-3 w-3" />
                             Success
                           </Badge>
@@ -362,17 +359,14 @@ export default function CronsPage() {
                         ) : cron.lastError ? (
                           <Badge 
                             variant="destructive" 
-                            className="text-xs cursor-pointer hover:bg-red-600" 
+                            className="text-xs cursor-pointer"
                             onClick={() => setErrorDialogCron(cron)}
                           >
                             <AlertCircle className="mr-1 h-3 w-3" />
                             Error
                           </Badge>
                         ) : cron.lastRunAt ? (
-                          <Badge
-                            variant="outline"
-                            className="text-xs bg-green-50 text-green-700 border-green-200"
-                          >
+                          <Badge variant="outline" className="text-xs">
                             Success
                           </Badge>
                         ) : (

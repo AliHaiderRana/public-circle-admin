@@ -15,8 +15,16 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Play, BarChart3, Mail, Clock, ChevronLeft, ChevronRight, Filter, Building2, Calendar, Database } from 'lucide-react';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
+import { Search, Play, Mail, Filter, Building2, Calendar, Database } from 'lucide-react';
 
 interface CampaignRun {
   _id: string;
@@ -324,9 +332,11 @@ export default function CampaignRunsPage() {
                   <TableRow key={run._id}>
                     <TableCell className="pl-6 font-medium">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
-                          <Play className="w-4 h-4 text-white" />
-                        </div>
+                        <Avatar>
+                          <AvatarFallback>
+                            <Play className="w-4 h-4" />
+                          </AvatarFallback>
+                        </Avatar>
                         <div>
                           <div>{run.campaign?.campaignName || 'Unknown Campaign'}</div>
                           <div className="text-xs text-neutral-500">ID: {run._id.slice(-8)}</div>
@@ -341,9 +351,11 @@ export default function CampaignRunsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center">
-                          <Mail size={14} className="text-neutral-600" />
-                        </div>
+                        <Avatar>
+                          <AvatarFallback>
+                            <Mail size={14} />
+                          </AvatarFallback>
+                        </Avatar>
                         <div>
                           <div className="font-semibold text-neutral-900">
                             {run.emailsSentCount.toLocaleString()}
@@ -373,12 +385,12 @@ export default function CampaignRunsPage() {
                         {run.isDataStoredOnWarehouse ? (
                           <>
                             <Database size={16} className="text-neutral-900" />
-                            <Badge className="bg-neutral-900 text-white">Archived</Badge>
+                            <Badge variant="secondary">Archived</Badge>
                           </>
                         ) : (
                           <>
                             <Play size={16} className="text-neutral-900" />
-                            <Badge className="bg-neutral-900 text-white">Live</Badge>
+                            <Badge>Live</Badge>
                           </>
                         )}
                       </div>
@@ -430,24 +442,32 @@ export default function CampaignRunsPage() {
                   </SelectContent>
                 </Select>
                 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(pagination.page - 1)}
-                  disabled={pagination.page === 1}
-                >
-                  <ChevronLeft size={16} />
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(pagination.page + 1)}
-                  disabled={pagination.page === pagination.pages}
-                >
-                  Next
-                  <ChevronRight size={16} />
-                </Button>
+                <Pagination className="mx-0 w-auto">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handlePageChange(pagination.page - 1);
+                        }}
+                        aria-disabled={pagination.page === 1}
+                        className={pagination.page === 1 ? 'pointer-events-none opacity-50' : ''}
+                      />
+                    </PaginationItem>
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handlePageChange(pagination.page + 1);
+                        }}
+                        aria-disabled={pagination.page === pagination.pages}
+                        className={pagination.page === pagination.pages ? 'pointer-events-none opacity-50' : ''}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
               </div>
             </div>
           )}

@@ -410,7 +410,7 @@ function ActorTypeBadge({ row }: { row: UnifiedActivityRow }) {
           ? 'Marketing partner'
           : 'Support partner';
     return (
-      <Badge variant="outline" className="gap-1 font-normal border-amber-300/80 text-amber-900 dark:text-amber-200">
+      <Badge variant="outline" className="gap-1 font-normal">
         {label}
       </Badge>
     );
@@ -806,91 +806,106 @@ export default function AdminActivityGroupedPanel({
       </div>
 
       {/* Filter accordion */}
-      <Collapsible open={controlsOpen}>
-        <div
-          className="flex flex-wrap cursor-pointer select-none items-center justify-between gap-2 rounded-lg border bg-card px-4 py-3 transition-colors hover:bg-accent/50"
-          onClick={() => setControlsOpen((v) => !v)}
-          role="button"
-          tabIndex={0}
-          aria-expanded={controlsOpen}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') setControlsOpen((v) => !v);
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Filters</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {hasActiveFilters && (
-              <>
-                {dateFrom && (
-                  <Badge variant="secondary" className="gap-1 h-6 font-normal text-xs">
-                    From {dateFrom}
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setDateFrom(''); }}
-                      aria-label="Clear from date"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                )}
-                {dateTo && (
-                  <Badge variant="secondary" className="gap-1 h-6 font-normal text-xs">
-                    To {dateTo}
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setDateTo(''); }}
-                      aria-label="Clear to date"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                )}
-                {source !== 'all' && sourceLabel && (
-                  <Badge variant="secondary" className="gap-1 h-6 font-normal text-xs">
-                    {sourceLabel}
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setSource('all'); }}
-                      aria-label="Clear source"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                )}
-                {category !== 'all' && categoryLabel && (
-                  <Badge variant="secondary" className="gap-1 h-6 font-normal text-xs">
-                    {categoryLabel}
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setCategory('all'); }}
-                      aria-label="Clear category"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                )}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={(e) => { e.stopPropagation(); clearFilters(); }}
-                >
-                  Clear
-                </Button>
-              </>
-            )}
-            <ChevronDown
-              className={cn(
-                'h-4 w-4 text-muted-foreground transition-transform duration-200',
-                controlsOpen && 'rotate-180'
+      <Collapsible open={controlsOpen} onOpenChange={setControlsOpen}>
+        <CollapsibleTrigger asChild>
+          <div
+            className="flex flex-wrap cursor-pointer select-none items-center justify-between gap-2 rounded-lg border bg-card px-4 py-3 transition-colors hover:bg-accent/50"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setControlsOpen((v) => !v);
+              }
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Filters</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {hasActiveFilters && (
+                <>
+                  {dateFrom && (
+                    <Badge variant="secondary" className="gap-1 h-6 font-normal text-xs">
+                      From {dateFrom}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-4"
+                        onClick={(e) => { e.stopPropagation(); setDateFrom(''); }}
+                        aria-label="Clear from date"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  )}
+                  {dateTo && (
+                    <Badge variant="secondary" className="gap-1 h-6 font-normal text-xs">
+                      To {dateTo}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-4"
+                        onClick={(e) => { e.stopPropagation(); setDateTo(''); }}
+                        aria-label="Clear to date"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  )}
+                  {source !== 'all' && sourceLabel && (
+                    <Badge variant="secondary" className="gap-1 h-6 font-normal text-xs">
+                      {sourceLabel}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-4"
+                        onClick={(e) => { e.stopPropagation(); setSource('all'); }}
+                        aria-label="Clear source"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  )}
+                  {category !== 'all' && categoryLabel && (
+                    <Badge variant="secondary" className="gap-1 h-6 font-normal text-xs">
+                      {categoryLabel}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-4"
+                        onClick={(e) => { e.stopPropagation(); setCategory('all'); }}
+                        aria-label="Clear category"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={(e) => { e.stopPropagation(); clearFilters(); }}
+                  >
+                    Clear
+                  </Button>
+                </>
               )}
-            />
+              <ChevronDown
+                className={cn(
+                  'h-4 w-4 text-muted-foreground transition-transform duration-200',
+                  controlsOpen && 'rotate-180'
+                )}
+              />
+            </div>
           </div>
-        </div>
+        </CollapsibleTrigger>
         <CollapsibleContent>
           <AuditLogFilters
             showAdminEmail={false}

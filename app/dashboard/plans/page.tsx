@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Layers, Loader2, Save } from 'lucide-react';
+import { CheckCircle2, Layers, Loader2, Save, XCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -225,14 +226,16 @@ export default function PlanQuotasPage() {
       </div>
 
       {errorMessage ? (
-        <p className="text-sm text-red-600" role="alert">
-          {errorMessage}
-        </p>
+        <Alert variant="destructive">
+          <XCircle className="h-4 w-4" />
+          <AlertDescription>{errorMessage}</AlertDescription>
+        </Alert>
       ) : null}
       {successMessage ? (
-        <p className="text-sm text-green-600" role="status">
-          {successMessage}
-        </p>
+        <Alert role="status">
+          <CheckCircle2 className="h-4 w-4" />
+          <AlertDescription>{successMessage}</AlertDescription>
+        </Alert>
       ) : null}
 
       {loading ? (

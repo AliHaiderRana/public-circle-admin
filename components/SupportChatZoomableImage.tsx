@@ -8,6 +8,7 @@ import {
   useTransformEffect,
 } from 'react-zoom-pan-pinch';
 import { Minus, Plus, RotateCcw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 type SupportChatZoomableImageProps = {
@@ -27,37 +28,43 @@ function ZoomToolbar({ scaleLabelRef }: { scaleLabelRef: React.RefObject<HTMLSpa
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 rounded-full border border-white/15 bg-black/70 px-3 py-2 text-white shadow-lg">
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon"
         onClick={() => zoomOut(0.35, 120)}
-        className="inline-flex size-8 items-center justify-center rounded-full hover:bg-white/15"
+        className="size-8 rounded-full hover:bg-white/15 hover:text-white"
         aria-label="Zoom out"
       >
         <Minus className="size-4" />
-      </button>
+      </Button>
       <span
         ref={scaleLabelRef}
         className="min-w-[3.5rem] text-center text-xs font-medium tabular-nums"
       >
         100%
       </span>
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon"
         onClick={() => zoomIn(0.35, 120)}
-        className="inline-flex size-8 items-center justify-center rounded-full hover:bg-white/15"
+        className="size-8 rounded-full hover:bg-white/15 hover:text-white"
         aria-label="Zoom in"
       >
         <Plus className="size-4" />
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
         onClick={() => resetTransform(150)}
-        className="inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs font-medium hover:bg-white/15"
+        className="h-8 gap-1 rounded-full px-2.5 text-xs hover:bg-white/15 hover:text-white"
         aria-label="Reset zoom"
       >
         <RotateCcw className="size-3.5" />
         Fit
-      </button>
+      </Button>
     </div>
   );
 }

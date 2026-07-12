@@ -7,6 +7,13 @@ import NotificationDropdown from "@/components/NotificationDropdown";
 import { AdminNotificationSoundProvider } from "@/components/AdminNotificationSoundProvider";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -181,18 +188,9 @@ export default function DashboardLayout({
     ? getPartnerPortalSubtitle(user?.referralRole)
     : "Admin";
 
-  return (
-    <ProtectedRoute>
-      <AdminNotificationSoundProvider>
-      <TooltipProvider delayDuration={300}>
-      <div className="flex h-screen bg-background text-foreground">
-        <aside
-          className={cn(
-            "fixed inset-y-0 left-0 z-40 flex h-screen w-64 min-h-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out lg:static lg:h-full lg:translate-x-0 lg:shrink-0",
-            isSidebarOpen ? "translate-x-0" : "-translate-x-full",
-          )}
-        >
-          <div className="hidden border-b border-sidebar-border px-5 py-5 lg:block">
+  const sidebarContent = (
+    <>
+      <div className="hidden border-b border-sidebar-border px-5 py-5 lg:block">
             <BrandLogo
               subtitle={portalSubtitle}
               subtitleClassName="text-sidebar-foreground/55"
@@ -216,10 +214,12 @@ export default function DashboardLayout({
               })
               .map((item) => {
                 const isActive = isSidebarItemActive(pathname, item.href);
-                const primaryCount = item.countKey ? stats[item.countKey] : 0;
-                const secondaryCount = item.secondaryCountKey
-                  ? stats[item.secondaryCountKey]
-                  : 0;
+                const primaryCount =
+                  (item.countKey ? stats[item.countKey] : 0) ?? 0;
+                const secondaryCount =
+                  (item.secondaryCountKey
+                    ? stats[item.secondaryCountKey]
+                    : 0) ?? 0;
                 return (
                   <Link
                     key={item.href}
@@ -247,9 +247,11 @@ export default function DashboardLayout({
 
           <div className="mt-auto shrink-0 border-t border-sidebar-border px-4 pb-3 pt-3">
             <div className="mb-2 flex items-center gap-3 px-1">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-sidebar-accent-foreground">
-                <Users className="size-4" />
-              </div>
+              <Avatar className="size-9 shrink-0">
+                <AvatarFallback>
+                  <Users className="size-4" />
+                </AvatarFallback>
+              </Avatar>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">
                   {formatAdminDisplayName(user?.name, user?.email) || user?.email}
@@ -273,15 +275,29 @@ export default function DashboardLayout({
               Logout
             </Button>
           </div>
+    </>
+  );
+
+  return (
+    <ProtectedRoute>
+      <AdminNotificationSoundProvider>
+      <TooltipProvider delayDuration={300}>
+      <div className="flex h-screen bg-background text-foreground">
+        <aside className="hidden w-64 min-h-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:flex lg:h-full lg:shrink-0">
+          {sidebarContent}
         </aside>
 
-        {isSidebarOpen && (
-          <div
-            className="fixed inset-0 z-30 bg-black/50 lg:hidden"
-            onClick={() => setIsSidebarOpen(false)}
-            aria-hidden
-          />
-        )}
+        <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
+          <SheetContent
+            side="left"
+            className="w-64 gap-0 bg-sidebar p-0 text-sidebar-foreground"
+          >
+            <SheetHeader className="sr-only">
+              <SheetTitle>Navigation menu</SheetTitle>
+            </SheetHeader>
+            {sidebarContent}
+          </SheetContent>
+        </Sheet>
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <header className="flex h-14 shrink-0 items-center border-b border-border bg-card px-4 lg:h-16 lg:px-6">

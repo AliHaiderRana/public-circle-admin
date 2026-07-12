@@ -308,22 +308,18 @@ export default function CronDetailPage() {
 
         {/* Message */}
         {message && (
-          <div
-            className={`p-4 rounded-lg flex items-center gap-2 ${
-              message.type === "success"
-                ? "bg-green-50 text-green-700 border border-green-200"
-                : message.type === "error"
-                ? "bg-red-50 text-red-700 border border-red-200"
-                : "bg-blue-50 text-blue-700 border border-blue-200"
-            }`}
+          <Alert
+            variant={message.type === "error" ? "destructive" : "default"}
           >
             {message.type === "success" ? (
               <CheckCircle2 className="h-4 w-4" />
+            ) : message.type === "error" ? (
+              <XCircle className="h-4 w-4" />
             ) : (
-              <AlertCircle className="h-4 w-4" />
+              <Info className="h-4 w-4" />
             )}
-            <p className="text-sm">{message.text}</p>
-          </div>
+            <AlertDescription>{message.text}</AlertDescription>
+          </Alert>
         )}
 
         {/* Overview Cards */}
@@ -386,9 +382,7 @@ export default function CronDetailPage() {
                 ) : cron.lastRunAt ? (
                   <>
                     <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    <Badge className="bg-green-50 text-green-700 border-green-200">
-                      Success
-                    </Badge>
+                    <Badge>Success</Badge>
                   </>
                 ) : (
                   <>
@@ -398,7 +392,7 @@ export default function CronDetailPage() {
                 )}
               </div>
               {cron.lastError && (
-                <p className="text-xs text-red-600 mt-2 truncate">
+                <p className="text-xs text-destructive mt-2 truncate">
                   {cron.lastError}
                 </p>
               )}
@@ -476,8 +470,9 @@ export default function CronDetailPage() {
                 </CardDescription>
               </div>
             </div>
-            <Alert className="mt-4 bg-blue-50 border-blue-200">
-              <AlertDescription className="text-blue-800">
+            <Alert className="mt-4">
+              <Info className="h-4 w-4" />
+              <AlertDescription>
                 We're maintaining only the 30 most recent execution records for this cron job. Historical data beyond the most recent 30 records will not be available.
               </AlertDescription>
             </Alert>
@@ -535,7 +530,7 @@ export default function CronDetailPage() {
                         </TableCell>
                         <TableCell>
                           {item.status === "SUCCESS" ? (
-                            <Badge className="bg-green-50 text-green-700 border-green-200">
+                            <Badge>
                               <CheckCircle2 className="mr-1 h-3 w-3" />
                               Success
                             </Badge>
@@ -626,7 +621,7 @@ export default function CronDetailPage() {
             <div>
               <div className="text-sm font-medium mb-2">Error Message:</div>
               <div className="h-[200px] w-full rounded-md border p-4 overflow-auto">
-                <pre className="text-sm text-red-600 whitespace-pre-wrap font-mono">
+                <pre className="text-sm text-destructive whitespace-pre-wrap font-mono">
                   {selectedError?.error || "No error message available"}
                 </pre>
               </div>

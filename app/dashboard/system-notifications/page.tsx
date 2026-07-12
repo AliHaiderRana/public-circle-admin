@@ -16,7 +16,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, Bell, Mail, MailWarning } from 'lucide-react';
+import { Loader2, Bell, CheckCircle2, Mail, MailWarning, XCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   ConfirmToggleDialog,
   type ConfirmToggleRequest,
@@ -217,15 +218,14 @@ export default function SystemNotificationsPage() {
       </div>
 
       {feedback && (
-        <p
-          className={
-            feedback.type === 'success'
-              ? 'rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800'
-              : 'rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800'
-          }
-        >
-          {feedback.text}
-        </p>
+        <Alert variant={feedback.type === 'error' ? 'destructive' : 'default'}>
+          {feedback.type === 'success' ? (
+            <CheckCircle2 className="h-4 w-4" />
+          ) : (
+            <XCircle className="h-4 w-4" />
+          )}
+          <AlertDescription>{feedback.text}</AlertDescription>
+        </Alert>
       )}
 
       <Card>

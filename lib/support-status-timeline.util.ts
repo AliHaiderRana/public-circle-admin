@@ -183,7 +183,7 @@ export function buildTicketHistoryForAdmin(
   );
 }
 
-export function formatTimelineTimestamp(value: string) {
+export function formatTimelineTimestamp(value: string | Date) {
   return new Date(value).toLocaleString(undefined, {
     dateStyle: 'medium',
     timeStyle: 'short',

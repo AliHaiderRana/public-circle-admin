@@ -109,11 +109,11 @@ export default function ProfilePage() {
       <div className="max-w-3xl mx-auto space-y-6">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Profile</h2>
-          <p className="text-neutral-500 mt-1">
+          <p className="text-muted-foreground mt-1">
             Your partner portal account. Update your password in the Venndii Referral App.
           </p>
         </div>
-        <Card className="border-0 shadow-md">
+        <Card>
           <CardHeader>
             <CardTitle>Account</CardTitle>
             <CardDescription>Read-only partner session details</CardDescription>
@@ -148,24 +148,24 @@ export default function ProfilePage() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Profile</h2>
-          <p className="text-neutral-500 mt-1">Update your personal details and keep your account secure.</p>
+          <p className="text-muted-foreground mt-1">Update your personal details and keep your account secure.</p>
         </div>
       </div>
 
       {message && (
-        <Alert className={message.type === 'success' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
+        <Alert variant={message.type === 'error' ? 'destructive' : 'default'}>
           {message.type === 'success' ? (
-            <CheckCircle className="h-4 w-4 text-green-600" />
+            <CheckCircle className="h-4 w-4" />
           ) : (
-            <AlertCircle className="h-4 w-4 text-red-600" />
+            <AlertCircle className="h-4 w-4" />
           )}
-          <AlertDescription className={message.type === 'success' ? 'text-green-700' : 'text-red-700'}>
+          <AlertDescription>
             {message.text}
           </AlertDescription>
         </Alert>
       )}
 
-      <Card className="border-0 shadow-md">
+      <Card>
         <CardHeader className="pb-4 flex flex-row items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -187,7 +187,7 @@ export default function ProfilePage() {
             <TabsContent value="profile" className="space-y-6">
               <form onSubmit={handleUpdateProfile} className="space-y-5">
                 <div className="space-y-2">
-                  <Label htmlFor="name" className="text-sm font-medium text-neutral-700">
+                  <Label htmlFor="name">
                     Full name
                   </Label>
                   <Input
@@ -200,19 +200,20 @@ export default function ProfilePage() {
                   {suggestedName && suggestedName !== name.trim() && (
                     <p className="text-xs text-muted-foreground">
                       Suggested display name:{' '}
-                      <button
+                      <Button
                         type="button"
-                        className="font-medium text-primary underline-offset-2 hover:underline"
+                        variant="link"
+                        className="h-auto p-0 text-xs font-medium"
                         onClick={() => setName(suggestedName)}
                       >
                         {suggestedName}
-                      </button>
+                      </Button>
                     </p>
                   )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-sm font-medium text-neutral-700">
+                  <Label htmlFor="email">
                     Email address
                   </Label>
                   <Input
@@ -220,7 +221,6 @@ export default function ProfilePage() {
                     type="email"
                     value={email}
                     disabled
-                    className="bg-neutral-50 text-neutral-600 cursor-not-allowed"
                   />
                 </div>
 
@@ -243,7 +243,7 @@ export default function ProfilePage() {
             <TabsContent value="security" className="space-y-6">
               <form onSubmit={handleUpdatePassword} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="currentPassword" className="text-sm font-medium text-neutral-700">
+                  <Label htmlFor="currentPassword">
                     Current password
                   </Label>
                   <div className="relative">
@@ -256,19 +256,22 @@ export default function ProfilePage() {
                       required
                       className="pr-10"
                     />
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="icon"
                       onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-700"
+                      className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
+                      aria-label={showCurrentPassword ? 'Hide password' : 'Show password'}
                     >
                       {showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="newPassword" className="text-sm font-medium text-neutral-700">
+                    <Label htmlFor="newPassword">
                       New password
                     </Label>
                     <div className="relative">
@@ -281,17 +284,20 @@ export default function ProfilePage() {
                         required
                         className="pr-10"
                       />
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="icon"
                         onClick={() => setShowNewPassword(!showNewPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-700"
+                        className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
+                        aria-label={showNewPassword ? 'Hide password' : 'Show password'}
                       >
                         {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="confirmPassword" className="text-sm font-medium text-neutral-700">
+                    <Label htmlFor="confirmPassword">
                       Confirm new password
                     </Label>
                     <div className="relative">
@@ -304,13 +310,16 @@ export default function ProfilePage() {
                         required
                         className="pr-10"
                       />
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="icon"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-700"
+                        className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
+                        aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
                       >
                         {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>

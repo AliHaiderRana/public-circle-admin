@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Save, LayoutPanelLeft, Sparkles, Send, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, LayoutPanelLeft, Sparkles, Send, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -551,10 +554,10 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
   if (loadingTemplate) {
     return (
       <div className="space-y-3">
-        <div className="h-11 w-full animate-pulse rounded-lg bg-neutral-200" />
+        <Skeleton className="h-11 w-full rounded-lg" />
         <div className="grid gap-3 xl:grid-cols-[260px_minmax(0,1fr)]">
-          <div className="h-[84vh] animate-pulse rounded-lg bg-neutral-200" />
-          <div className="h-[84vh] animate-pulse rounded-lg bg-neutral-200" />
+          <Skeleton className="h-[84vh] rounded-lg" />
+          <Skeleton className="h-[84vh] rounded-lg" />
         </div>
       </div>
     );
@@ -599,15 +602,17 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
       </div>
 
       {errorMessage && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          {errorMessage}
-        </div>
+        <Alert variant="destructive">
+          <XCircle className="h-4 w-4" />
+          <AlertDescription>{errorMessage}</AlertDescription>
+        </Alert>
       )}
 
       {successMessage && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
-          {successMessage}
-        </div>
+        <Alert>
+          <CheckCircle2 className="h-4 w-4" />
+          <AlertDescription>{successMessage}</AlertDescription>
+        </Alert>
       )}
 
       <div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
@@ -638,8 +643,8 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
                 <Button
                   type="button"
                   size="sm"
-                  variant="ghost"
-                  className="h-auto p-0 text-xs font-medium text-primary hover:bg-transparent hover:text-primary/80"
+                  variant="link"
+                  className="h-auto p-0 text-xs"
                   onClick={() => setCreateCategoryDialogOpen(true)}
                 >
                   + Create new
@@ -649,7 +654,7 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
                 {loadingCategories ? (
                   <p className="text-sm text-muted-foreground">Loading categories...</p>
                 ) : categories.length === 0 ? (
-                  <p className="text-sm text-amber-600">
+                  <p className="text-sm text-muted-foreground">
                     No categories found.
                     {' '}
                     <Link href="/dashboard/template-categories" className="font-medium underline">
@@ -680,15 +685,15 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
                 )}
               </div>
               {categoryIds.length === 0 && !loadingCategories && categories.length > 0 && (
-                <p className="text-sm text-amber-600">Select at least one category.</p>
+                <p className="text-sm text-muted-foreground">Select at least one category.</p>
               )}
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="template-description">Description</Label>
-              <textarea
+              <Textarea
                 id="template-description"
-                className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                className="min-h-24"
                 placeholder="A short summary of this sample template"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}

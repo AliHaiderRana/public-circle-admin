@@ -89,11 +89,11 @@ export default function StripeDashboardPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'succeeded':
-        return <Badge className="bg-neutral-900 text-white">Success</Badge>;
+        return <Badge>Success</Badge>;
       case 'pending':
-        return <Badge className="bg-neutral-900 text-white">Pending</Badge>;
+        return <Badge variant="outline">Pending</Badge>;
       case 'failed':
-        return <Badge className="bg-red-500">Failed</Badge>;
+        return <Badge variant="destructive">Failed</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -177,8 +177,8 @@ export default function StripeDashboardPage() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                <DollarSign className="h-5 w-5 text-green-600" />
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                <DollarSign className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-600">Available Balance</p>
@@ -193,8 +193,8 @@ export default function StripeDashboardPage() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center">
-                <Clock className="h-5 w-5 text-yellow-600" />
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                <Clock className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-600">Pending Balance</p>
@@ -209,8 +209,8 @@ export default function StripeDashboardPage() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-blue-600" />
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                <TrendingUp className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-600">Monthly Sales</p>
@@ -225,8 +225,8 @@ export default function StripeDashboardPage() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                <Users className="h-5 w-5 text-purple-600" />
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                <Users className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-600">Active Subscriptions</p>
@@ -282,21 +282,21 @@ export default function StripeDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
-                <span className="text-sm font-medium text-green-800">Active</span>
-                <span className="text-sm font-semibold text-green-900">{stripeData.subscriptions.active}</span>
+              <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
+                <span className="text-sm font-medium text-muted-foreground">Active</span>
+                <span className="text-sm font-semibold text-foreground">{stripeData.subscriptions.active}</span>
               </div>
-              <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
-                <span className="text-sm font-medium text-blue-800">Trial</span>
-                <span className="text-sm font-semibold text-blue-900">{stripeData.subscriptions.trial}</span>
+              <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
+                <span className="text-sm font-medium text-muted-foreground">Trial</span>
+                <span className="text-sm font-semibold text-foreground">{stripeData.subscriptions.trial}</span>
               </div>
-              <div className="flex justify-between items-center p-3 bg-red-50 rounded-lg">
-                <span className="text-sm font-medium text-red-800">Canceled</span>
-                <span className="text-sm font-semibold text-red-900">{stripeData.subscriptions.canceled}</span>
+              <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
+                <span className="text-sm font-medium text-muted-foreground">Canceled</span>
+                <span className="text-sm font-semibold text-foreground">{stripeData.subscriptions.canceled}</span>
               </div>
-              <div className="flex justify-between items-center p-3 bg-purple-50 rounded-lg">
-                <span className="text-sm font-medium text-purple-800">Monthly Recurring Revenue</span>
-                <span className="text-sm font-semibold text-purple-900">
+              <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
+                <span className="text-sm font-medium text-muted-foreground">Monthly Recurring Revenue</span>
+                <span className="text-sm font-semibold text-foreground">
                   {formatCurrency(stripeData.subscriptions.totalRevenue, 'usd')}
                 </span>
               </div>

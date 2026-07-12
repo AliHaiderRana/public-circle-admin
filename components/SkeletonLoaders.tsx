@@ -11,7 +11,7 @@ interface SkeletonLoaderProps {
 
 export function StatsCardSkeleton({ height = "h-24" }: SkeletonLoaderProps) {
   return (
-    <Card className="border-0 shadow-sm">
+    <Card>
       <CardContent className="p-6">
         <div className="flex items-center justify-between mb-4">
           <Skeleton className="h-12 w-12 rounded-lg" />
@@ -99,7 +99,7 @@ export function ReputationCardSkeleton() {
 
 export function ActivityCardSkeleton() {
   return (
-    <Card className="border-0 shadow-sm">
+    <Card>
       <CardHeader className="pb-4">
         <Skeleton className="h-6 w-48" />
       </CardHeader>
@@ -122,13 +122,13 @@ export function ActivityCardSkeleton() {
 
 export function QuickActionsCardSkeleton() {
   return (
-    <Card className="border-0 shadow-sm">
+    <Card>
       <CardHeader className="pb-4">
         <Skeleton className="h-6 w-32" />
       </CardHeader>
       <CardContent className="space-y-3">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="p-3 rounded-lg border border-gray-200">
+          <div key={i} className="p-3 rounded-lg border border-border">
             <div className="flex items-center space-x-3">
               <Skeleton className="h-8 w-8 rounded-lg" />
               <div className="flex-1">

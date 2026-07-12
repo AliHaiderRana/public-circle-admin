@@ -43,43 +43,28 @@ function attachmentHasImage(attachment?: SupportChatAttachment): boolean {
   );
 }
 
-function ImageLoadingSlot({ tone }: { tone: 'user' | 'support' }) {
+function ImageLoadingSlot() {
   return (
     <div
       className={cn(
         IMAGE_FRAME_CLASS,
         IMAGE_LOADING_SIZE_CLASS,
-        'flex items-center justify-center rounded-[16px]',
-        tone === 'user' ? 'bg-black/10' : 'bg-black/[0.05] dark:bg-white/[0.06]',
+        'flex items-center justify-center rounded-[16px] bg-muted',
       )}
       aria-label="Loading image"
     >
-      <Loader2
-        className={cn(
-          'size-5 animate-spin',
-          tone === 'user' ? 'text-white/50' : 'text-muted-foreground/60',
-        )}
-      />
+      <Loader2 className="size-5 animate-spin text-muted-foreground" />
     </div>
   );
 }
 
-function ImageErrorSlot({
-  tone,
-  message,
-}: {
-  tone: 'user' | 'support';
-  message?: string;
-}) {
+function ImageErrorSlot({ message }: { message?: string }) {
   return (
     <div
       className={cn(
         IMAGE_FRAME_CLASS,
         IMAGE_LOADING_SIZE_CLASS,
-        'flex flex-col items-center justify-center gap-1 px-2 text-center rounded-[16px]',
-        tone === 'user'
-          ? 'bg-black/15 text-white/70'
-          : 'bg-muted/80 text-muted-foreground',
+        'flex flex-col items-center justify-center gap-1 px-2 text-center rounded-[16px] bg-muted text-muted-foreground',
       )}
     >
       <ImageOff className="size-4 shrink-0 opacity-70" />
@@ -120,7 +105,6 @@ function SupportChatMessageImage({
   stableKey,
   alt,
   imageClassName,
-  imageTone,
   pendingUpload,
   awaitingUrl,
   onReady,
@@ -130,7 +114,6 @@ function SupportChatMessageImage({
   stableKey?: string;
   alt: string;
   imageClassName?: string;
-  imageTone: 'user' | 'support';
   pendingUpload?: SupportChatPendingUpload;
   awaitingUrl?: boolean;
   onReady?: () => void;
@@ -208,7 +191,7 @@ function SupportChatMessageImage({
   }, [src, previewSrc]);
 
   if (pendingUpload?.error) {
-    return <ImageErrorSlot tone={imageTone} message={pendingUpload.error} />;
+    return <ImageErrorSlot message={pendingUpload.error} />;
   }
 
   // Display S3 remote URL if available, else fall back to local preview blob URL
@@ -216,13 +199,13 @@ function SupportChatMessageImage({
 
   if (!displaySrc) {
     if (awaitingUrl || showUploadOverlay) {
-      return <ImageLoadingSlot tone={imageTone} />;
+      return <ImageLoadingSlot />;
     }
     return null;
   }
 
   if (error) {
-    return <ImageErrorSlot tone={imageTone} />;
+    return <ImageErrorSlot />;
   }
 
   const ready =
@@ -236,7 +219,7 @@ function SupportChatMessageImage({
       className={cn(
         IMAGE_FRAME_CLASS,
         !ready && IMAGE_LOADING_SIZE_CLASS,
-        !ready && 'bg-black/[0.03] dark:bg-white/[0.04]',
+        !ready && 'bg-muted/50',
       )}
       style={
         ready && dimensions
@@ -363,9 +346,7 @@ export function SupportChatMessageContent({
           className={cn(
             'flex w-fit max-w-full text-left focus:outline-none items-start justify-start overflow-hidden border',
             borderRadiusClass,
-            isInternal
-              ? 'border-dashed border-amber-200/80 dark:border-amber-900/50'
-              : 'border-transparent',
+            isInternal ? 'border-dashed' : 'border-transparent',
             imageReady && 'focus-visible:ring-2 focus-visible:ring-primary',
             !imageReady && 'cursor-default',
           )}
@@ -377,7 +358,6 @@ export function SupportChatMessageContent({
             stableKey={imageStableKey}
             alt={attachment?.originalName || 'Chat image'}
             imageClassName={imageClassName}
-            imageTone={imageTone}
             pendingUpload={pendingUpload}
             awaitingUrl={awaitingUrl}
             onReady={handleImageReady}
@@ -391,7 +371,7 @@ export function SupportChatMessageContent({
           )}>
             {formatMessageTime(createdAt)}
             {isInternal && (
-              <span className="font-normal text-amber-700 dark:text-amber-300">
+              <span className="font-normal text-muted-foreground">
                 · Internal
               </span>
             )}
@@ -417,7 +397,7 @@ export function SupportChatMessageContent({
           borderRadiusClass,
           isRightAligned
             ? isInternal
-              ? 'bg-amber-50/90 text-foreground border-amber-200/80 border-dashed dark:bg-amber-950/25 dark:border-amber-900/50'
+              ? 'bg-muted/60 text-foreground border-dashed'
               : 'bg-muted text-foreground border-border/80'
             : 'bg-background text-foreground border-border/50',
         )}
@@ -438,7 +418,6 @@ export function SupportChatMessageContent({
             stableKey={imageStableKey}
             alt={attachment?.originalName || 'Chat image'}
             imageClassName={imageClassName}
-            imageTone={imageTone}
             pendingUpload={pendingUpload}
             awaitingUrl={awaitingUrl}
             onReady={handleImageReady}
@@ -459,7 +438,7 @@ export function SupportChatMessageContent({
             >
               {formatMessageTime(createdAt)}
               {isInternal && (
-                <span className="font-normal text-amber-700 dark:text-amber-300">
+                <span className="font-normal text-muted-foreground">
                   · Internal
                 </span>
               )}

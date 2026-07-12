@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
 export default function SignupPage() {
@@ -60,7 +62,7 @@ export default function SignupPage() {
 
   if (isAllowed === false) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-neutral-50 dark:bg-neutral-900 px-4">
+      <div className="flex items-center justify-center min-h-screen bg-muted/30 px-4">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Signup Disabled</CardTitle>
@@ -77,7 +79,7 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-neutral-50 dark:bg-neutral-900 px-4">
+    <div className="flex items-center justify-center min-h-screen bg-muted/30 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold">Admin Signup</CardTitle>
@@ -85,7 +87,12 @@ export default function SignupPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && <p className="text-sm text-red-500">{error}</p>}
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="size-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -113,7 +120,7 @@ export default function SignupPage() {
           </form>
         </CardContent>
         <CardFooter className="flex justify-center">
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-muted-foreground">
             Already have an account?{' '}
             <Link href="/login" className="text-primary hover:underline">
               Login

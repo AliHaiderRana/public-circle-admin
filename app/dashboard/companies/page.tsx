@@ -453,17 +453,14 @@ export default function CompaniesPage() {
                     </TableCell>
                     <TableCell>
                       <Badge
-                        className={
-                          company.status === "ACTIVE"
-                            ? "bg-neutral-900 text-white"
-                            : company.status === "BLOCKED"
-                              ? "bg-red-500 text-white"
-                              : company.status === "SUSPENDED"
-                                ? "bg-yellow-500 text-white"
-                                : ""
-                        }
                         variant={
-                          company.status === "ACTIVE" ? "default" : "secondary"
+                          company.status === "ACTIVE"
+                            ? "default"
+                            : company.status === "BLOCKED"
+                              ? "destructive"
+                              : company.status === "SUSPENDED"
+                                ? "outline"
+                                : "secondary"
                         }
                       >
                         {company.status}

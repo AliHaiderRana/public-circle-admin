@@ -22,8 +22,15 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 import { CUSTOMER_REQUEST_STATUS, CUSTOMER_REQUEST_TYPE } from '@/lib/constants';
-import { Check, X, Search, Filter, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Check, X, Search, Filter, Loader2 } from 'lucide-react';
 
 export default function CustomerRequestsPage() {
   const searchParams = useSearchParams();
@@ -128,11 +135,11 @@ export default function CustomerRequestsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case CUSTOMER_REQUEST_STATUS.COMPLETED:
-        return <Badge className="bg-neutral-900 text-white">COMPLETED</Badge>;
+        return <Badge>COMPLETED</Badge>;
       case CUSTOMER_REQUEST_STATUS.REJECTED:
         return <Badge variant="destructive">REJECTED</Badge>;
       case CUSTOMER_REQUEST_STATUS.PENDING:
-        return <Badge variant="secondary">PENDING</Badge>;
+        return <Badge variant="outline">PENDING</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
@@ -321,18 +328,18 @@ export default function CustomerRequestsPage() {
                             ) : (
                               <>
                                 <Button
-                                  variant="outline"
+                                  variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                  className="h-8 w-8"
                                   onClick={() => handleUpdateStatus(request._id, CUSTOMER_REQUEST_STATUS.COMPLETED)}
                                   disabled={updatingId === request._id}
                                 >
                                   {updatingId === request._id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                                 </Button>
                                 <Button
-                                  variant="outline"
+                                  variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  className="h-8 w-8"
                                   onClick={() => handleUpdateStatus(request._id, CUSTOMER_REQUEST_STATUS.REJECTED)}
                                   disabled={updatingId === request._id}
                                 >
@@ -373,24 +380,32 @@ export default function CustomerRequestsPage() {
                   </SelectContent>
                 </Select>
                 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(pagination.page - 1)}
-                  disabled={pagination.page === 1}
-                >
-                  <ChevronLeft size={16} />
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(pagination.page + 1)}
-                  disabled={pagination.page === pagination.pages}
-                >
-                  Next
-                  <ChevronRight size={16} />
-                </Button>
+                <Pagination className="mx-0 w-auto">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handlePageChange(pagination.page - 1);
+                        }}
+                        aria-disabled={pagination.page === 1}
+                        className={pagination.page === 1 ? 'pointer-events-none opacity-50' : ''}
+                      />
+                    </PaginationItem>
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handlePageChange(pagination.page + 1);
+                        }}
+                        aria-disabled={pagination.page === pagination.pages}
+                        className={pagination.page === pagination.pages ? 'pointer-events-none opacity-50' : ''}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
               </div>
             </div>
           )}

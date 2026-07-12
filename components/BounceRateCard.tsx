@@ -1,6 +1,13 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import {
+  Tooltip as UiTooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { Info, ExternalLink, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
 import React from 'react';
 import {
@@ -72,9 +79,9 @@ export default function BounceRateCard({ data, currentRate, status }: BounceRate
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-gray-900 text-white px-3 py-2 rounded-lg shadow-lg text-sm">
+        <div className="bg-popover text-popover-foreground border px-3 py-2 rounded-md shadow-md text-sm">
           <p className="font-medium">{label}</p>
-          <p className="text-blue-300">Bounce Rate: {payload[0].value.toFixed(2)}%</p>
+          <p className="text-muted-foreground">Bounce Rate: {payload[0].value.toFixed(2)}%</p>
         </div>
       );
     }
@@ -82,26 +89,35 @@ export default function BounceRateCard({ data, currentRate, status }: BounceRate
   };
 
   return (
-    <Card className="border border-gray-200 shadow-sm">
+    <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <CardTitle className="text-lg font-semibold flex items-center gap-2">
             Bounce rate
-            <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help" />
+            <TooltipProvider>
+              <UiTooltip>
+                <TooltipTrigger asChild>
+                  <Info className="w-4 h-4 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  The percentage of emails sent from your account that resulted in a hard bounce.
+                </TooltipContent>
+              </UiTooltip>
+            </TooltipProvider>
           </CardTitle>
           <div className="flex items-center gap-2">
             {getStatusIcon()}
             <span className={`text-sm font-medium ${getStatusColor()}`}>{status}</span>
           </div>
         </div>
-        <p className="text-gray-600 text-sm mt-2">
+        <p className="text-muted-foreground text-sm mt-2">
           The percentage of emails sent from your account that resulted in a hard bounce based on a representative volume of email.
         </p>
       </CardHeader>
       <CardContent className="pt-0">
         <div className="mb-4">
-          <p className="text-gray-600 text-sm font-medium">Historic bounce rate</p>
-          <p className="text-3xl font-bold text-gray-900">{currentRate.toFixed(2)}%</p>
+          <p className="text-muted-foreground text-sm font-medium">Historic bounce rate</p>
+          <p className="text-3xl font-bold text-foreground">{currentRate.toFixed(2)}%</p>
         </div>
 
         <div className="h-56 mb-6">
@@ -178,21 +194,21 @@ export default function BounceRateCard({ data, currentRate, status }: BounceRate
           <div className="flex items-center gap-6 text-sm">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-blue-500 rounded-sm"></div>
-              <span className="text-gray-600 font-medium">Bounce rate</span>
+              <span className="text-muted-foreground font-medium">Bounce rate</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-6 h-0.5 border-t-2 border-dashed border-yellow-500"></div>
-              <span className="text-gray-600 font-medium">Warning (5%)</span>
+              <span className="text-muted-foreground font-medium">Warning (5%)</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-6 h-0.5 border-t-2 border-dashed border-red-500"></div>
-              <span className="text-gray-600 font-medium">Risk (10%)</span>
+              <span className="text-muted-foreground font-medium">Risk (10%)</span>
             </div>
           </div>
-          <button className="flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors">
+          <Button variant="link" className="h-auto p-0 gap-1 text-sm font-medium">
             View in CloudWatch
             <ExternalLink className="w-3 h-3" />
-          </button>
+          </Button>
         </div>
       </CardContent>
     </Card>

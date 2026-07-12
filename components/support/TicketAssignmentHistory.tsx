@@ -1,6 +1,7 @@
 'use client';
 
 import { UserRoundCheck } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import {
   formatAssignmentTimestamp,
@@ -29,31 +30,26 @@ export function TicketAssignmentHistory({
   return (
     <div className={cn('space-y-3', className)}>
       {entries.map((entry) => (
-        <div
-          key={entry._id ?? `${entry.assignedAt}-${entry.adminId}`}
-          className="rounded-lg border border-violet-200/80 bg-violet-50/70 p-3 dark:border-violet-900/50 dark:bg-violet-950/20"
-        >
-          <div className="flex items-start gap-2">
-            <UserRoundCheck className="mt-0.5 size-4 shrink-0 text-violet-700 dark:text-violet-300" />
-            <div className="min-w-0 flex-1 space-y-1.5">
-              <p className={cn('leading-snug', compact ? 'text-sm' : 'text-sm font-medium')}>
-                {entry.label}
+        <Alert key={entry._id ?? `${entry.assignedAt}-${entry.adminId}`}>
+          <UserRoundCheck className="size-4" />
+          <AlertTitle className={cn('text-sm leading-snug', compact && 'font-normal')}>
+            {entry.label}
+          </AlertTitle>
+          <AlertDescription className="space-y-1.5">
+            <p className="text-xs text-muted-foreground">
+              {formatAssignmentTimestamp(entry.assignedAt)}
+            </p>
+            {entry.note?.trim() ? (
+              <p className="text-sm whitespace-pre-wrap leading-relaxed">{entry.note}</p>
+            ) : null}
+            {entry.anchorMessagePreview?.trim() ? (
+              <p className="text-xs text-muted-foreground rounded-md border bg-muted/40 px-2.5 py-2">
+                <span className="font-medium text-foreground/80">After message: </span>
+                “{entry.anchorMessagePreview}”
               </p>
-              <p className="text-xs text-muted-foreground">
-                {formatAssignmentTimestamp(entry.assignedAt)}
-              </p>
-              {entry.note?.trim() ? (
-                <p className="text-sm whitespace-pre-wrap leading-relaxed">{entry.note}</p>
-              ) : null}
-              {entry.anchorMessagePreview?.trim() ? (
-                <p className="text-xs text-muted-foreground rounded-md border bg-background/70 px-2.5 py-2">
-                  <span className="font-medium text-foreground/80">After message: </span>
-                  “{entry.anchorMessagePreview}”
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </div>
+            ) : null}
+          </AlertDescription>
+        </Alert>
       ))}
     </div>
   );
@@ -70,23 +66,21 @@ export function TicketAssignmentHandoffMarker({
 }: TicketAssignmentHandoffMarkerProps) {
   return (
     <div className={cn('flex justify-center py-1', className)}>
-      <div className="w-full max-w-[92%] rounded-xl border border-violet-200/80 bg-violet-50/80 px-3.5 py-3 dark:border-violet-900/50 dark:bg-violet-950/25">
-        <div className="flex items-start gap-2">
-          <UserRoundCheck className="mt-0.5 size-4 shrink-0 text-violet-700 dark:text-violet-300" />
-          <div className="min-w-0 flex-1 space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-violet-800 dark:text-violet-200">
-              Assignment change
-            </p>
-            <p className="text-sm leading-snug">{entry.label}</p>
-            {entry.note?.trim() ? (
-              <p className="text-sm whitespace-pre-wrap text-foreground/90">{entry.note}</p>
-            ) : null}
-            <p className="text-[11px] text-muted-foreground">
-              {formatAssignmentTimestamp(entry.assignedAt)}
-            </p>
-          </div>
-        </div>
-      </div>
+      <Alert className="max-w-[92%]">
+        <UserRoundCheck className="size-4" />
+        <AlertTitle className="text-xs font-semibold uppercase tracking-wide">
+          Assignment change
+        </AlertTitle>
+        <AlertDescription className="space-y-1">
+          <p className="text-sm leading-snug text-foreground">{entry.label}</p>
+          {entry.note?.trim() ? (
+            <p className="text-sm whitespace-pre-wrap text-foreground/90">{entry.note}</p>
+          ) : null}
+          <p className="text-[11px] text-muted-foreground">
+            {formatAssignmentTimestamp(entry.assignedAt)}
+          </p>
+        </AlertDescription>
+      </Alert>
     </div>
   );
 }

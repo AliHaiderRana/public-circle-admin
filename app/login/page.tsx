@@ -20,7 +20,6 @@ import {
   EyeOff,
   Loader2,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { BrandLogo } from "@/components/BrandLogo";
 
 function LoginPageContent() {
@@ -154,11 +153,13 @@ function LoginPageContent() {
                       className="pr-10"
                       required
                     />
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="icon"
                       tabIndex={-1}
                       onClick={() => setShowPassword((prev) => !prev)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                      className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
                       aria-label={showPassword ? "Hide password" : "Show password"}
                     >
                       {showPassword ? (
@@ -166,7 +167,7 @@ function LoginPageContent() {
                       ) : (
                         <Eye className="size-4" />
                       )}
-                    </button>
+                    </Button>
                   </div>
                 </div>
 

@@ -2,9 +2,18 @@
 
 import { Fragment, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 import {
   Select,
   SelectContent,
@@ -21,11 +30,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  AlertCircle,
+  AlertTriangle,
   ArrowUpRight,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
+  Info,
   RefreshCw,
   Search,
 } from 'lucide-react';
@@ -236,7 +244,7 @@ function MessageTable({
                   {formatDate(row.lastFailedAt) || formatDate(row.queuedAt)}
                 </TableCell>
                 <TableCell className="py-2.5">
-                  <p className="text-sm text-red-700 dark:text-red-400 line-clamp-1" title={failureText}>
+                  <p className="text-sm text-destructive line-clamp-1" title={failureText}>
                     {failureText}
                   </p>
                 </TableCell>
@@ -244,7 +252,7 @@ function MessageTable({
               {expanded && (
                 <TableRow className="bg-muted/20 hover:bg-muted/20">
                   <TableCell colSpan={colSpan} className="py-3 px-6">
-                    <p className="text-sm text-red-800 dark:text-red-300">{failureText}</p>
+                    <p className="text-sm text-destructive">{failureText}</p>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                       {row.failureStatusCode != null && <span>HTTP {row.failureStatusCode}</span>}
                       {row.messageId && <span className="font-mono">ID {shortId(row.messageId)}</span>}
@@ -407,39 +415,39 @@ export default function DlqFailedMessagesPanel({
   return (
     <div className="space-y-5">
       {showInFlightNotice && (
-        <div className="flex flex-col gap-2 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span>
               <strong>{inFlight}</strong> message{inFlight === 1 ? '' : 's'} in flight in SQS — temporarily
               hidden while being read. Wait ~30 seconds, then refresh.
             </span>
-          </div>
-          {onRetryLoad && (
-            <Button type="button" variant="outline" size="sm" onClick={onRetryLoad} disabled={retrying}>
-              <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', retrying && 'animate-spin')} />
-              Refresh
-            </Button>
-          )}
-        </div>
+            {onRetryLoad && (
+              <Button type="button" variant="outline" size="sm" onClick={onRetryLoad} disabled={retrying}>
+                <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', retrying && 'animate-spin')} />
+                Refresh
+              </Button>
+            )}
+          </AlertDescription>
+        </Alert>
       )}
 
       {syncIncomplete && !showInFlightNotice && (
-        <div className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span>
               Showing {dbFailureCount} synced failure record{dbFailureCount === 1 ? '' : 's'} (SQS has{' '}
               {available} available). Pagination is server-side over those records.
             </span>
-          </div>
-          {onRetryLoad && (
-            <Button type="button" variant="outline" size="sm" onClick={onRetryLoad} disabled={retrying}>
-              <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', retrying && 'animate-spin')} />
-              Refresh
-            </Button>
-          )}
-        </div>
+            {onRetryLoad && (
+              <Button type="button" variant="outline" size="sm" onClick={onRetryLoad} disabled={retrying}>
+                <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', retrying && 'animate-spin')} />
+                Refresh
+              </Button>
+            )}
+          </AlertDescription>
+        </Alert>
       )}
 
       <p className="text-sm text-muted-foreground">
@@ -447,7 +455,7 @@ export default function DlqFailedMessagesPanel({
         {' · '}
         <span className="tabular-nums font-medium text-foreground">{total}</span> matching records
         {' · '}
-        <span className={cn('tabular-nums', inFlight > 0 && 'text-blue-700 font-medium')}>
+        <span className={cn('tabular-nums', inFlight > 0 && 'text-foreground font-medium')}>
           {inFlight} in flight
         </span>
         {' · '}
@@ -521,31 +529,42 @@ export default function DlqFailedMessagesPanel({
                 ))}
               </SelectContent>
             </Select>
-            <div className="inline-flex items-center rounded-md border">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                disabled={page <= 1 || retrying}
-                onClick={() => onPageChange(page - 1)}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="min-w-[4rem] text-center text-xs tabular-nums">
-                {page}/{totalPages}
-              </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                disabled={page >= totalPages || retrying}
-                onClick={() => onPageChange(page + 1)}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+            <Pagination className="mx-0 w-auto">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (page > 1 && !retrying) onPageChange(page - 1);
+                    }}
+                    aria-disabled={page <= 1 || retrying || undefined}
+                    className={cn((page <= 1 || retrying) && 'pointer-events-none opacity-50')}
+                  />
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationLink
+                    href="#"
+                    isActive
+                    onClick={(e) => e.preventDefault()}
+                    className="w-auto px-3 tabular-nums"
+                  >
+                    {page}/{totalPages}
+                  </PaginationLink>
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (page < totalPages && !retrying) onPageChange(page + 1);
+                    }}
+                    aria-disabled={page >= totalPages || retrying || undefined}
+                    className={cn((page >= totalPages || retrying) && 'pointer-events-none opacity-50')}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
           </div>
         </div>
       )}

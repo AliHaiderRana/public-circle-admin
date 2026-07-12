@@ -3,7 +3,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { cn } from '@/lib/utils';
 import { LucideIcon, ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import { ReactNode } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -31,8 +30,6 @@ export default function IndividualStatsCard({
   icon: Icon,
   change,
   changeType = 'neutral',
-  color = 'text-blue-600',
-  bgColor = 'bg-blue-50',
   description,
   progress,
   badge,
@@ -61,7 +58,7 @@ export default function IndividualStatsCard({
       );
     } else {
       return (
-        <div className="flex items-center text-gray-600">
+        <div className="flex items-center text-muted-foreground">
           <Minus className="w-4 h-4 mr-1" />
           <span className="text-sm font-medium">{change}</span>
         </div>
@@ -71,7 +68,7 @@ export default function IndividualStatsCard({
 
   if (loading) {
     return (
-      <Card className={cn('border-0 shadow-sm', className)}>
+      <Card className={className}>
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-4">
             <Skeleton className="h-12 w-12 rounded-lg" />
@@ -90,11 +87,11 @@ export default function IndividualStatsCard({
   }
 
   return (
-    <Card className={cn('border-0 shadow-sm hover:shadow-md transition-all duration-200', className)}>
+    <Card className={className}>
       <CardContent className="p-6">
         <div className="flex items-center justify-between mb-4">
-          <div className={`p-3 rounded-lg ${bgColor}`}>
-            <Icon className={`w-6 h-6 ${color}`} />
+          <div className="p-3 rounded-lg bg-muted">
+            <Icon className="w-6 h-6 text-muted-foreground" />
           </div>
           <div className="flex items-center gap-2">
             {badge && (
@@ -107,15 +104,15 @@ export default function IndividualStatsCard({
         </div>
         <div className="space-y-2">
           <div>
-            <p className="text-2xl font-bold text-gray-900">{value}</p>
-            <p className="text-sm text-gray-600 mt-1">{title}</p>
+            <p className="text-2xl font-bold text-foreground">{value}</p>
+            <p className="text-sm text-muted-foreground mt-1">{title}</p>
             {description && (
-              <p className="text-xs text-gray-500 mt-1">{description}</p>
+              <p className="text-xs text-muted-foreground mt-1">{description}</p>
             )}
           </div>
           {progress !== undefined && (
             <div className="space-y-1">
-              <div className="flex justify-between text-xs text-gray-500">
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Progress</span>
                 <span>{progress}%</span>
               </div>

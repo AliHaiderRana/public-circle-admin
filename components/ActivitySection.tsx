@@ -15,26 +15,13 @@ export default function ActivitySection({ campaignData, campaignLoading }: Activ
   const getActivityIcon = (type: string) => {
     switch (type) {
       case 'campaign_run':
-        return <Mail className="w-5 h-5 text-white" />;
+        return <Mail className="w-5 h-5 text-muted-foreground" />;
       case 'customer_request':
-        return <Activity className="w-5 h-5 text-white" />;
+        return <Activity className="w-5 h-5 text-muted-foreground" />;
       case 'user_registration':
-        return <UserPlus className="w-5 h-5 text-white" />;
+        return <UserPlus className="w-5 h-5 text-muted-foreground" />;
       default:
-        return <Target className="w-5 h-5 text-white" />;
-    }
-  };
-
-  const getActivityColor = (type: string) => {
-    switch (type) {
-      case 'campaign_run':
-        return 'from-purple-500 to-indigo-600';
-      case 'customer_request':
-        return 'from-orange-500 to-red-600';
-      case 'user_registration':
-        return 'from-green-500 to-emerald-600';
-      default:
-        return 'from-blue-500 to-cyan-600';
+        return <Target className="w-5 h-5 text-muted-foreground" />;
     }
   };
 
@@ -54,19 +41,19 @@ export default function ActivitySection({ campaignData, campaignLoading }: Activ
   const getStatusBadge = (status: string | undefined) => {
     switch (status) {
       case 'COMPLETED':
-        return <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Completed</Badge>;
+        return <Badge><CheckCircle className="w-3 h-3 mr-1" />Completed</Badge>;
       case 'SENT':
-        return <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Sent</Badge>;
+        return <Badge><CheckCircle className="w-3 h-3 mr-1" />Sent</Badge>;
       case 'PENDING':
-        return <Badge className="bg-yellow-100 text-yellow-800"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
+        return <Badge variant="outline"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
       case 'REJECTED':
-        return <Badge className="bg-red-100 text-red-800"><XCircle className="w-3 h-3 mr-1" />Rejected</Badge>;
+        return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Rejected</Badge>;
       case 'ACTIVE':
-        return <Badge className="bg-blue-100 text-blue-800"><Activity className="w-3 h-3 mr-1" />Active</Badge>;
+        return <Badge><Activity className="w-3 h-3 mr-1" />Active</Badge>;
       case 'PAUSED':
-        return <Badge className="bg-gray-100 text-gray-800"><Clock className="w-3 h-3 mr-1" />Paused</Badge>;
+        return <Badge variant="outline"><Clock className="w-3 h-3 mr-1" />Paused</Badge>;
       default:
-        return status ? <Badge className="bg-gray-100 text-gray-800">{status}</Badge> : null;
+        return status ? <Badge variant="secondary">{status}</Badge> : null;
     }
   };
 
@@ -91,7 +78,7 @@ export default function ActivitySection({ campaignData, campaignLoading }: Activ
             <Activity className="h-5 w-5" />
             Recent Activity
           </CardTitle>
-          <p className="text-sm text-gray-500">Latest campaign runs, customer requests, and user registrations</p>
+          <p className="text-sm text-muted-foreground">Latest campaign runs, customer requests, and user registrations</p>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -110,22 +97,22 @@ export default function ActivitySection({ campaignData, campaignLoading }: Activ
               </div>
             ) : campaignData?.recentActivity && campaignData.recentActivity.length > 0 ? (
               campaignData.recentActivity.map((activity: any) => (
-                <div key={activity._id} className="flex items-start gap-4 p-4 rounded-lg border hover:bg-neutral-50 transition-colors">
-                  <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getActivityColor(activity.type)} flex items-center justify-center flex-shrink-0`}>
+                <div key={activity._id} className="flex items-start gap-4 p-4 rounded-lg border hover:bg-accent transition-colors">
+                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
                     {getActivityIcon(activity.type)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-medium text-gray-500 uppercase">{getActivityLabel(activity.type)}</span>
+                          <span className="text-xs font-medium text-muted-foreground uppercase">{getActivityLabel(activity.type)}</span>
                         </div>
-                        <p className="text-sm font-medium text-gray-900">{activity.name}</p>
-                        <p className="text-xs text-gray-500 mt-1">{activity.company?.name || 'Unknown Company'}</p>
+                        <p className="text-sm font-medium text-foreground">{activity.name}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{activity.company?.name || 'Unknown Company'}</p>
                       </div>
                       {getStatusBadge(activity.status)}
                     </div>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                       <span>{formatDate(activity.createdAt || activity.updatedAt)}</span>
                       {activity.emailsSent && <span>• {activity.emailsSent.toLocaleString()} emails sent</span>}
                     </div>
@@ -134,8 +121,8 @@ export default function ActivitySection({ campaignData, campaignLoading }: Activ
               ))
             ) : (
               <div className="text-center py-12">
-                <Activity className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">No recent activity</p>
+                <Activity className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+                <p className="text-muted-foreground">No recent activity</p>
               </div>
             )}
           </div>
@@ -159,58 +146,58 @@ export default function ActivitySection({ campaignData, campaignLoading }: Activ
           ) : (
             <div className="flex flex-col gap-3">
               <Link href="/dashboard/users" className="block">
-                <div className="w-full text-left px-4 py-3 rounded-lg border hover:bg-neutral-50 hover:border-neutral-300 transition-all cursor-pointer">
+                <Card className="px-4 py-3 hover:bg-accent transition-colors cursor-pointer">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
-                      <Users className="w-4 h-4 text-blue-600" />
+                    <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                      <Users className="w-4 h-4 text-muted-foreground" />
                     </div>
                     <div>
                       <p className="text-sm font-medium">Manage Users</p>
-                      <p className="text-xs text-gray-500">View all users</p>
+                      <p className="text-xs text-muted-foreground">View all users</p>
                     </div>
                   </div>
-                </div>
+                </Card>
               </Link>
-              
+
               <Link href="/dashboard/campaigns" className="block">
-                <div className="w-full text-left px-4 py-3 rounded-lg border hover:bg-neutral-50 hover:border-neutral-300 transition-all cursor-pointer">
+                <Card className="px-4 py-3 hover:bg-accent transition-colors cursor-pointer">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
-                      <Target className="w-4 h-4 text-purple-600" />
+                    <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                      <Target className="w-4 h-4 text-muted-foreground" />
                     </div>
                     <div>
                       <p className="text-sm font-medium">Campaigns</p>
-                      <p className="text-xs text-gray-500">View and manage</p>
+                      <p className="text-xs text-muted-foreground">View and manage</p>
                     </div>
                   </div>
-                </div>
+                </Card>
               </Link>
-              
+
               <Link href="/dashboard/companies" className="block">
-                <div className="w-full text-left px-4 py-3 rounded-lg border hover:bg-neutral-50 hover:border-neutral-300 transition-all cursor-pointer">
+                <Card className="px-4 py-3 hover:bg-accent transition-colors cursor-pointer">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
-                      <Building2 className="w-4 h-4 text-green-600" />
+                    <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                      <Building2 className="w-4 h-4 text-muted-foreground" />
                     </div>
                     <div>
                       <p className="text-sm font-medium">Companies</p>
-                      <p className="text-xs text-gray-500">Browse all</p>
+                      <p className="text-xs text-muted-foreground">Browse all</p>
                     </div>
                   </div>
-                </div>
+                </Card>
               </Link>
-              
+
               <Link href="/dashboard/customer-requests" className="block">
-                <div className="w-full text-left px-4 py-3 rounded-lg border hover:bg-neutral-50 hover:border-neutral-300 transition-all cursor-pointer">
+                <Card className="px-4 py-3 hover:bg-accent transition-colors cursor-pointer">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
-                      <Activity className="w-4 h-4 text-orange-600" />
+                    <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                      <Activity className="w-4 h-4 text-muted-foreground" />
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-medium">Customer Requests</p>
-                      <p className="text-xs text-gray-500">
-                        {campaignData?.pendingRequests > 0 
-                          ? `${campaignData.pendingRequests} pending` 
+                      <p className="text-xs text-muted-foreground">
+                        {campaignData?.pendingRequests > 0
+                          ? `${campaignData.pendingRequests} pending`
                           : 'No pending requests'
                         }
                       </p>
@@ -219,7 +206,7 @@ export default function ActivitySection({ campaignData, campaignLoading }: Activ
                       <Badge variant="destructive" className="text-xs">{campaignData.pendingRequests}</Badge>
                     )}
                   </div>
-                </div>
+                </Card>
               </Link>
             </div>
           )}
