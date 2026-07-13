@@ -36,7 +36,7 @@ export default function ConfigPage() {
   if (authLoading || !user?.isSuperAdmin) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-neutral-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -90,7 +90,7 @@ export default function ConfigPage() {
     <div className="max-w-4xl space-y-8">
       <div>
         <h2 className="text-3xl font-bold tracking-tight">System Configuration</h2>
-        <p className="text-neutral-500">Fine-tune internal application behaviors and access controls.</p>
+        <p className="text-muted-foreground">Fine-tune internal application behaviors and access controls.</p>
       </div>
 
       <Card>
@@ -148,7 +148,7 @@ export default function ConfigPage() {
                     <Label htmlFor="autoAssignSupportTicketsToReferralUsers">
                       Auto-assign support tickets
                     </Label>
-                    <p className="text-sm text-neutral-500">
+                    <p className="text-sm text-muted-foreground">
                       Automatically assign new tickets to linked referral users when available;
                       otherwise assign to the default super admin.
                     </p>

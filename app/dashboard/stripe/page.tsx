@@ -117,7 +117,7 @@ export default function StripeDashboardPage() {
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-3xl font-bold tracking-tight">Stripe Dashboard</h2>
-            <p className="text-neutral-500">Monitor your Stripe balance and sales data.</p>
+            <p className="text-muted-foreground">Monitor your Stripe balance and sales data.</p>
           </div>
           <Skeleton className="h-10 w-32" />
         </div>
@@ -160,7 +160,7 @@ export default function StripeDashboardPage() {
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Stripe Dashboard</h2>
-          <p className="text-neutral-500">Monitor your Stripe balance and sales data in real-time.</p>
+          <p className="text-muted-foreground">Monitor your Stripe balance and sales data in real-time.</p>
         </div>
         <Button 
           onClick={fetchStripeData} 

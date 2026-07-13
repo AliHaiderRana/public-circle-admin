@@ -454,7 +454,7 @@ export default function TemplatesPage() {
               />
             </div>
             <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'ACTIVE' | 'ARCHIVED' | 'ALL')}>
-              <SelectTrigger className="h-12 rounded-xl bg-white">
+              <SelectTrigger className="h-12 rounded-xl">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
               <SelectContent>

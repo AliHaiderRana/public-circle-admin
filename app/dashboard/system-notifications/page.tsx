@@ -168,7 +168,7 @@ export default function SystemNotificationsPage() {
         <Label htmlFor={id} className="text-sm font-medium leading-none">
           {label}
         </Label>
-        <p className="text-sm text-neutral-500">{description}</p>
+        <p className="text-sm text-muted-foreground">{description}</p>
       </div>
       <Switch
         id={id}
@@ -182,7 +182,7 @@ export default function SystemNotificationsPage() {
   const RecipientList = ({ recipients }: { recipients: TeamRecipient[] }) => (
     <div className="rounded-lg border bg-neutral-50 dark:bg-neutral-900/40 divide-y">
       {recipients.length === 0 ? (
-        <p className="p-4 text-sm text-neutral-500">No alert email recipients selected.</p>
+        <p className="p-4 text-sm text-muted-foreground">No alert email recipients selected.</p>
       ) : (
         recipients.map((row) => (
           <div
@@ -202,7 +202,7 @@ export default function SystemNotificationsPage() {
   if (authLoading || !user?.isSuperAdmin) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-neutral-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -211,7 +211,7 @@ export default function SystemNotificationsPage() {
     <div className="max-w-5xl space-y-8">
       <div>
         <h2 className="text-3xl font-bold tracking-tight">System Notifications</h2>
-        <p className="text-neutral-500">
+        <p className="text-muted-foreground">
           Super admins control which alert emails are sent and which admin users receive them.
           In-app bell notifications are not configured here.
         </p>
@@ -293,7 +293,7 @@ export default function SystemNotificationsPage() {
           {loading || !settings ? (
             <Skeleton className="h-48 w-full" />
           ) : settings.adminRecipients.length === 0 ? (
-            <p className="text-sm text-neutral-500">No admin users found.</p>
+            <p className="text-sm text-muted-foreground">No admin users found.</p>
           ) : (
             <Table>
               <TableHeader>
@@ -318,7 +318,7 @@ export default function SystemNotificationsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <p className="text-sm text-neutral-600">{admin.email}</p>
+                      <p className="text-sm text-muted-foreground">{admin.email}</p>
                     </TableCell>
                     <TableCell className="text-center">
                       <Switch
@@ -382,7 +382,7 @@ export default function SystemNotificationsPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <Mail className="h-4 w-4 text-neutral-500" />
+              <Mail className="h-4 w-4 text-muted-foreground" />
               <CardTitle className="text-base">Support alert recipients</CardTitle>
             </div>
           </CardHeader>
@@ -394,7 +394,7 @@ export default function SystemNotificationsPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <MailWarning className="h-4 w-4 text-neutral-500" />
+              <MailWarning className="h-4 w-4 text-muted-foreground" />
               <CardTitle className="text-base">DLQ alert recipients</CardTitle>
             </div>
           </CardHeader>

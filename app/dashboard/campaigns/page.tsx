@@ -226,7 +226,7 @@ export default function CampaignsPage() {
                 </CardDescription>
               </div>
               <div className="relative w-72">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 h-4 w-4" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
                   placeholder="Search campaigns..."
                   className="pl-10"
@@ -239,7 +239,7 @@ export default function CampaignsPage() {
             {/* Filters */}
             <div className="flex items-center gap-4 pt-2 border-t">
               <div className="flex items-center gap-2">
-                <Filter size={16} className="text-neutral-500" />
+                <Filter size={16} className="text-muted-foreground" />
                 <span className="text-sm font-medium">Filters:</span>
               </div>
 
@@ -272,12 +272,12 @@ export default function CampaignsPage() {
                 <SelectTrigger className="w-56">
                   <SelectValue placeholder="Company">
                     {companiesLoading ? (
-                      <span className="text-neutral-400">
+                      <span className="text-muted-foreground">
                         Loading companies...
                       </span>
                     ) : companyFilter ? (
                       <div className="flex items-center gap-2">
-                        <Building2 size={14} className="text-neutral-500" />
+                        <Building2 size={14} className="text-muted-foreground" />
                         <span className="truncate">
                           {getCompanyNameById(companyFilter) ||
                             "Selected Company"}
@@ -392,10 +392,10 @@ export default function CampaignsPage() {
                 <TableRow>
                   <TableCell
                     colSpan={7}
-                    className="text-center h-48 text-neutral-500"
+                    className="text-center h-48 text-muted-foreground"
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <Send size={40} className="text-neutral-300" />
+                      <Send size={40} className="text-muted-foreground/50" />
                       <p>No campaigns found matching your filters.</p>
                       <Button
                         variant="outline"
@@ -422,7 +422,7 @@ export default function CampaignsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1 text-sm">
-                        <Building2 size={12} className="text-neutral-400" />
+                        <Building2 size={12} className="text-muted-foreground" />
                         {campaign.company?.name || "No Company"}
                       </div>
                     </TableCell>
@@ -437,21 +437,21 @@ export default function CampaignsPage() {
                       {campaign.campaignRunsCount > 0 ? (
                         <div className="flex items-center gap-2">
                           <div className="flex items-center gap-1 text-sm">
-                            <Play size={14} className="text-neutral-500" />
+                            <Play size={14} className="text-muted-foreground" />
                             <span className="font-medium">
                               {campaign.campaignRunsCount}
                             </span>
-                            <span className="text-neutral-500 text-xs">
+                            <span className="text-muted-foreground text-xs">
                               {campaign.campaignRunsCount === 1 ? "run" : "runs"}
                             </span>
                           </div>
                           {campaign.campaignRuns && campaign.campaignRuns.length > 0 && (
-                            <div className="text-xs text-neutral-500">
+                            <div className="text-xs text-muted-foreground">
                               <div>
                                 Latest: {new Date(campaign.campaignRuns[0].createdAt).toLocaleDateString()}
                               </div>
                               {campaign.campaignRuns[0].emailsSentCount > 0 && (
-                                <div className="text-neutral-400">
+                                <div className="text-muted-foreground">
                                   {campaign.campaignRuns[0].emailsSentCount} emails
                                 </div>
                               )}
@@ -459,14 +459,14 @@ export default function CampaignsPage() {
                           )}
                         </div>
                       ) : (
-                        <span className="text-sm text-neutral-400">No runs</span>
+                        <span className="text-sm text-muted-foreground">No runs</span>
                       )}
                     </TableCell>
                     <TableCell className="text-sm">
                       <div>
                         {new Date(campaign.createdAt).toLocaleDateString()}
                       </div>
-                      <div className="text-xs text-neutral-500">
+                      <div className="text-xs text-muted-foreground">
                         {new Date(campaign.createdAt).toLocaleTimeString()}
                       </div>
                     </TableCell>
@@ -489,7 +489,7 @@ export default function CampaignsPage() {
 
           {pagination.pages > 1 && (
             <div className="flex items-center justify-between px-6 py-4 border-t">
-              <div className="text-sm text-neutral-500">
+              <div className="text-sm text-muted-foreground">
                 Page {pagination.page} of {pagination.pages} ({pagination.total}{" "}
                 total campaigns)
               </div>

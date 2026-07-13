@@ -215,7 +215,7 @@ export default function CronsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-neutral-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -226,7 +226,7 @@ export default function CronsPage() {
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-3xl font-bold tracking-tight">Cron Jobs</h2>
-            <p className="text-neutral-500">
+            <p className="text-muted-foreground">
               Manage and trigger scheduled tasks
             </p>
           </div>
@@ -260,11 +260,11 @@ export default function CronsPage() {
         {crons.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
-              <Database className="h-12 w-12 text-neutral-400 mb-4" />
-              <h3 className="text-lg font-medium text-neutral-900 mb-2">
+              <Database className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium text-foreground mb-2">
                 No cron jobs found
               </h3>
-              <p className="text-neutral-500 mb-4">
+              <p className="text-muted-foreground mb-4">
                 Click the button below to seed the cron metadata
               </p>
               <Button onClick={seedCrons} disabled={seeding}>
@@ -301,7 +301,7 @@ export default function CronsPage() {
                       <TableCell className="align-top whitespace-normal break-words">
                         <div>
                           <div className="font-medium">{cron.displayName}</div>
-                          <div className="text-xs text-neutral-500 hidden xl:block">
+                          <div className="text-xs text-muted-foreground hidden xl:block">
                             {cron.description}
                           </div>
                         </div>
@@ -312,19 +312,19 @@ export default function CronsPage() {
                             <div className="font-mono text-xs break-all">
                               {cron.schedule}
                             </div>
-                            <div className="text-xs text-neutral-500 hidden xl:block">
+                            <div className="text-xs text-muted-foreground hidden xl:block">
                               {getCronScheduleDescription(cron.schedule)}
                             </div>
                           </div>
                         ) : (
-                          <span className="text-xs text-neutral-400 italic">
+                          <span className="text-xs text-muted-foreground italic">
                             Not scheduled
                           </span>
                         )}
                       </TableCell>
                       <TableCell className="whitespace-normal">
                         <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-neutral-400" />
+                          <Clock className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm">
                             {formatCronDateTime(cron.lastRunAt)}
                           </span>

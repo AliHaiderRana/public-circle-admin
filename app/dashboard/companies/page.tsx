@@ -194,7 +194,7 @@ export default function CompaniesPage() {
             </div>
             <div className="flex items-center gap-2">
               <div className="relative w-72">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 h-4 w-4" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
                   placeholder="Search companies..."
                   className="pl-10"
@@ -208,7 +208,7 @@ export default function CompaniesPage() {
           {/* Filters */}
           <div className="flex items-center gap-4 pt-4 border-t">
             <div className="flex items-center gap-2">
-              <Filter size={16} className="text-neutral-500" />
+              <Filter size={16} className="text-muted-foreground" />
               <span className="text-sm font-medium">Filters:</span>
             </div>
 
@@ -392,10 +392,10 @@ export default function CompaniesPage() {
                 <TableRow>
                   <TableCell
                     colSpan={8}
-                    className="text-center h-48 text-neutral-500"
+                    className="text-center h-48 text-muted-foreground"
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <Building2 size={40} className="text-neutral-300" />
+                      <Building2 size={40} className="text-muted-foreground/50" />
                       <p>No companies found matching your search.</p>
                       <Button
                         variant="outline"
@@ -420,7 +420,7 @@ export default function CompaniesPage() {
                           />
                         ) : (
                           <div className="w-6 h-6 bg-neutral-100 flex items-center justify-center rounded-sm">
-                            <Building2 size={12} className="text-neutral-400" />
+                            <Building2 size={12} className="text-muted-foreground" />
                           </div>
                         )}
                         {company.name}
@@ -428,16 +428,16 @@ export default function CompaniesPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1 text-sm">
-                        <MapPin size={12} className="text-neutral-400" />
+                        <MapPin size={12} className="text-muted-foreground" />
                         {company.city}, {company.country}
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm text-neutral-600">
+                    <TableCell className="text-sm text-muted-foreground">
                       {company.companySize || "N/A"}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Send size={14} className="text-neutral-500" />
+                        <Send size={14} className="text-muted-foreground" />
                         <span className="font-medium">
                           {company.campaignCount || 0}
                         </span>
@@ -445,7 +445,7 @@ export default function CompaniesPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Mail size={14} className="text-neutral-500" />
+                        <Mail size={14} className="text-muted-foreground" />
                         <span className="font-medium">
                           {company.contactCount || 0}
                         </span>
@@ -470,7 +470,7 @@ export default function CompaniesPage() {
                       <div>
                         {new Date(company.createdAt).toLocaleDateString()}
                       </div>
-                      <div className="text-xs text-neutral-500">
+                      <div className="text-xs text-muted-foreground">
                         {new Date(company.createdAt).toLocaleTimeString()}
                       </div>
                     </TableCell>
@@ -493,7 +493,7 @@ export default function CompaniesPage() {
 
           {pagination.total > 0 && (
             <div className="flex items-center justify-between px-6 py-4 border-t">
-              <div className="text-sm text-neutral-500">
+              <div className="text-sm text-muted-foreground">
                 Page {pagination.page} of {pagination.pages} ({pagination.total}{" "}
                 total companies)
               </div>

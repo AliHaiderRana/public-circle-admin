@@ -170,15 +170,15 @@ export default function CustomerRequestsPage() {
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Customer Requests</h2>
-          <p className="text-neutral-500">Manage sensitive edit requests from companies.</p>
+          <p className="text-muted-foreground">Manage sensitive edit requests from companies.</p>
         </div>
-        <div className="flex items-center gap-4 text-sm text-neutral-500 bg-white dark:bg-neutral-800 p-2 rounded-lg border">
+        <div className="flex items-center gap-4 text-sm text-muted-foreground bg-card p-2 rounded-lg border">
           <div className="flex items-center gap-1 px-2">
             <Filter size={16} />
-            <span className="font-bold text-neutral-900">{pagination.total}</span> Total
+            <span className="font-bold text-foreground">{pagination.total}</span> Total
           </div>
           <div className="flex items-center gap-1 px-2 border-l">
-            <span className="font-bold text-neutral-900">
+            <span className="font-bold text-foreground">
               {requests.filter(r => r.requestStatus === CUSTOMER_REQUEST_STATUS.PENDING).length}
             </span> Pending
           </div>
@@ -196,7 +196,7 @@ export default function CustomerRequestsPage() {
                 </CardDescription>
               </div>
               <div className="relative w-72">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 h-4 w-4" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input 
                   placeholder="Search company or reason..." 
                   className="pl-10"
@@ -209,7 +209,7 @@ export default function CustomerRequestsPage() {
             {/* Filters */}
             <div className="flex items-center gap-4 pt-2 border-t">
               <div className="flex items-center gap-2">
-                <Filter size={16} className="text-neutral-500" />
+                <Filter size={16} className="text-muted-foreground" />
                 <span className="text-sm font-medium">Filters:</span>
               </div>
               
@@ -277,9 +277,9 @@ export default function CustomerRequestsPage() {
                 ))
               ) : requests.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center h-48 text-neutral-500">
+                  <TableCell colSpan={6} className="text-center h-48 text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
-                      <Filter size={40} className="text-neutral-300" />
+                      <Filter size={40} className="text-muted-foreground/50" />
                       <p>No requests found matching your filters.</p>
                       <Button variant="outline" size="sm" onClick={clearFilters}>Clear filters</Button>
                     </div>
@@ -310,7 +310,7 @@ export default function CustomerRequestsPage() {
                       <TableCell>{getStatusBadge(request.requestStatus)}</TableCell>
                       <TableCell className="text-sm">
                         <div>{new Date(request.createdAt).toLocaleDateString()}</div>
-                        <div className="text-xs text-neutral-500">{new Date(request.createdAt).toLocaleTimeString()}</div>
+                        <div className="text-xs text-muted-foreground">{new Date(request.createdAt).toLocaleTimeString()}</div>
                       </TableCell>
                       <TableCell className="text-right pr-6">
                         {request.requestStatus === CUSTOMER_REQUEST_STATUS.PENDING && (
@@ -359,7 +359,7 @@ export default function CustomerRequestsPage() {
           
           {pagination.pages > 1 && (
             <div className="flex items-center justify-between px-6 py-4 border-t">
-              <div className="text-sm text-neutral-500">
+              <div className="text-sm text-muted-foreground">
                 Page {pagination.page} of {pagination.pages} ({pagination.total} total requests)
               </div>
               <div className="flex items-center gap-2">

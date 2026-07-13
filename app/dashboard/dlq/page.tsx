@@ -199,7 +199,7 @@ export default function DlqPage() {
   if (authLoading || !user?.isSuperAdmin) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-neutral-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -220,7 +220,7 @@ export default function DlqPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Dead Letter Queue</h2>
-          <p className="text-neutral-500">
+          <p className="text-muted-foreground">
             Failed outbound campaign emails. Alert recipients:{' '}
             <Link href="/dashboard/system-notifications" className="underline underline-offset-2">
               System Notifications
@@ -274,18 +274,18 @@ export default function DlqPage() {
                   >
                     {typeof messageCount === 'number' ? messageCount : '—'}
                   </div>
-                  <div className="mt-1 text-sm text-neutral-500">available</div>
+                  <div className="mt-1 text-sm text-muted-foreground">available</div>
                 </div>
                 <div>
                   <div
                     className={cn(
                       'text-3xl font-semibold tracking-tight tabular-nums',
-                      messagesInFlight > 0 ? 'text-blue-600' : 'text-neutral-400',
+                      messagesInFlight > 0 ? 'text-blue-600' : 'text-muted-foreground',
                     )}
                   >
                     {messagesInFlight}
                   </div>
-                  <div className="mt-1 text-sm text-neutral-500">in flight</div>
+                  <div className="mt-1 text-sm text-muted-foreground">in flight</div>
                 </div>
               </div>
 
@@ -321,11 +321,11 @@ export default function DlqPage() {
 
               <div className="grid gap-3 text-sm sm:grid-cols-2">
                 <div className="rounded-md border bg-muted/30 px-3 py-2">
-                  <div className="text-neutral-500">Last alert sent</div>
+                  <div className="text-muted-foreground">Last alert sent</div>
                   <div className="font-medium">{formatDate(status?.dlqLastAlertAt ?? null)}</div>
                 </div>
                 <div className="rounded-md border bg-muted/30 px-3 py-2">
-                  <div className="text-neutral-500">Refreshed</div>
+                  <div className="text-muted-foreground">Refreshed</div>
                   <div className="font-medium">{formatDate(lastRefreshedAt)}</div>
                 </div>
               </div>
@@ -376,7 +376,7 @@ export default function DlqPage() {
               </Button>
             </div>
           ) : !hasMessages && listTotal === 0 ? (
-            <p className="text-sm text-neutral-500">No failed messages in the DLQ right now.</p>
+            <p className="text-sm text-muted-foreground">No failed messages in the DLQ right now.</p>
           ) : (
             <DlqFailedMessagesPanel
               messages={status?.messages || []}
@@ -418,7 +418,7 @@ export default function DlqPage() {
             <CardTitle>How this works</CardTitle>
           </div>
         </CardHeader>
-        <CardContent className="text-sm text-neutral-600">
+        <CardContent className="text-sm text-muted-foreground">
           <p>
             Messages fail at <code className="rounded bg-muted px-1">/campaigns/sst-email</code>, retry up
             to {status?.maxRetriesBeforeDlq ?? 5} times, then move to the DLQ. The list is paginated from

@@ -546,8 +546,8 @@ export default function CampaignRunDetailPage() {
 
         <div className="flex items-center gap-3">
           {isWarehouseData && (
-            <div className="flex items-center gap-2 text-sm text-neutral-600">
-              <Database size={16} className="text-neutral-500" />
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Database size={16} className="text-muted-foreground" />
               <span>Warehouse Data</span>
             </div>
           )}
@@ -581,9 +581,9 @@ export default function CampaignRunDetailPage() {
                 ))
               ) : emails.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center h-48 text-neutral-500">
+                  <TableCell colSpan={4} className="text-center h-48 text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
-                      <Mail size={40} className="text-neutral-300" />
+                      <Mail size={40} className="text-muted-foreground/50" />
                       <p>No email records found matching your filters.</p>
                       <Button variant="outline" size="sm" onClick={clearFilters}>Clear filters</Button>
                     </div>
@@ -595,7 +595,7 @@ export default function CampaignRunDetailPage() {
                     <TableRow className="cursor-pointer" onClick={() => toggleRowExpansion(email._id)}>
                       <TableCell className="pl-6">
                         <div className="flex items-center gap-2 min-w-0">
-                          <Mail size={16} className="text-neutral-400" />
+                          <Mail size={16} className="text-muted-foreground" />
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 min-w-0">
                               <div className="font-medium truncate max-w-[260px] sm:max-w-[360px]">
@@ -702,7 +702,7 @@ export default function CampaignRunDetailPage() {
                                 })()}
                               </div>
                             </div>
-                            <div className="text-xs text-neutral-500">To: {getRecipientAddress(email) || '—'}</div>
+                            <div className="text-xs text-muted-foreground">To: {getRecipientAddress(email) || '—'}</div>
                           </div>
                         </div>
                       </TableCell>
@@ -825,7 +825,7 @@ export default function CampaignRunDetailPage() {
       
       {pagination.pages > 1 && (
         <div className="flex items-center justify-between px-6 py-4 border-t">
-          <div className="text-sm text-neutral-500">
+          <div className="text-sm text-muted-foreground">
             Page {pagination.page} of {pagination.pages} ({pagination.total} total emails)
           </div>
           <div className="flex items-center gap-2">
