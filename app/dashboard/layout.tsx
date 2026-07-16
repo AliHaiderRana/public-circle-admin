@@ -41,6 +41,8 @@ import {
   Inbox,
   Bell,
   MailWarning,
+  ChevronDown,
+  Link2,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -61,6 +63,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+
+type SidebarChildItem = {
+  name: string;
+  href: string;
+  icon: ComponentType<{ className?: string }>;
+};
 
 type SidebarItem = {
   name: string;
@@ -69,6 +82,7 @@ type SidebarItem = {
   superAdminOnly?: boolean;
   countKey?: "unreadChatMessages" | "openSupportRequests" | "pendingCustomerRequests";
   secondaryCountKey?: "unreadChatMessages" | "openSupportRequests" | "pendingCustomerRequests";
+  children?: SidebarChildItem[];
 };
 
 const sidebarItems: SidebarItem[] = [
@@ -132,6 +146,13 @@ const sidebarItems: SidebarItem[] = [
     href: "/dashboard/integrations",
     icon: Plug,
     superAdminOnly: true,
+    children: [
+      {
+        name: "Customer Portal",
+        href: "/dashboard/integrations",
+        icon: Link2,
+      },
+    ],
   },
   {
     name: "System Configuration",
@@ -241,6 +262,56 @@ export default function DashboardLayout({
                   (item.secondaryCountKey
                     ? stats[item.secondaryCountKey]
                     : 0) ?? 0;
+
+                if (item.children?.length) {
+                  const hasActiveChild = item.children.some((child) =>
+                    isSidebarItemActive(pathname, child.href),
+                  );
+
+                  return (
+                    <Collapsible
+                      key={item.href}
+                      defaultOpen={hasActiveChild}
+                      className="group/collapsible"
+                    >
+                      <CollapsibleTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-9 w-full justify-start gap-3 px-3 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                        >
+                          <item.icon className="size-5 shrink-0" />
+                          <span className="flex-1 truncate text-left">{item.name}</span>
+                          <ChevronDown className="size-4 shrink-0 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="ml-6 mt-1 space-y-1 border-l border-sidebar-border pl-3">
+                          {item.children.map((child) => {
+                            const childActive = isSidebarItemActive(pathname, child.href);
+                            return (
+                              <Link
+                                key={child.href}
+                                href={child.href}
+                                className={cn(
+                                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                                  childActive
+                                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                                )}
+                                onClick={() => setIsSidebarOpen(false)}
+                              >
+                                <child.icon className="size-4 shrink-0" />
+                                <span className="truncate">{child.name}</span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  );
+                }
+
                 return (
                   <Link
                     key={item.href}

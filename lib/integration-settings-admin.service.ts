@@ -35,15 +35,29 @@ function normalizeAdminManagedPortal(
 
   // Keep legacy socket-key field in sync with the single shared secret.
   const partnerRealtimeSocketKey = partnerPortalSsoSecret;
+  const enabled = value?.enabled ?? existing.enabled ?? defaults.enabled;
+  const turningMainOn = enabled && !existing.enabled;
+  const endpoints = mergeAdminIntegrationEndpoints(
+    (value?.adminIntegrationEndpoints as AdminIntegrationEndpoint[] | undefined) ??
+      (existing.adminIntegrationEndpoints as AdminIntegrationEndpoint[] | undefined),
+    existing.adminIntegrationEndpoints as AdminIntegrationEndpoint[] | undefined,
+  );
+  const partnerSidebarEnabled = enabled
+    ? (turningMainOn
+      ? true
+      : (value?.partnerSidebarEnabled ??
+        existing.partnerSidebarEnabled ??
+        defaults.partnerSidebarEnabled))
+    : false;
 
   return {
-    enabled: value?.enabled ?? existing.enabled ?? defaults.enabled,
+    enabled,
     referralEnabled: existing.referralEnabled ?? defaults.referralEnabled,
     adminPortalUrl: value?.adminPortalUrl?.trim() ?? existing.adminPortalUrl ?? defaults.adminPortalUrl,
     adminApiBaseUrl: existing.adminApiBaseUrl ?? defaults.adminApiBaseUrl,
     partnerPortalSsoSecret,
     partnerSidebarLabel: existing.partnerSidebarLabel ?? defaults.partnerSidebarLabel,
-    partnerSidebarEnabled: existing.partnerSidebarEnabled ?? defaults.partnerSidebarEnabled,
+    partnerSidebarEnabled,
     partnerRealtimeSocketUrl:
       value?.partnerRealtimeSocketUrl?.trim() ??
       existing.partnerRealtimeSocketUrl ??
@@ -53,11 +67,13 @@ function normalizeAdminManagedPortal(
       existing.partnerSocketAuthValidator ??
       defaults.partnerSocketAuthValidator,
     partnerRealtimeSocketKey,
-    adminIntegrationEndpoints: mergeAdminIntegrationEndpoints(
-      (value?.adminIntegrationEndpoints as AdminIntegrationEndpoint[] | undefined) ??
-        (existing.adminIntegrationEndpoints as AdminIntegrationEndpoint[] | undefined),
-      existing.adminIntegrationEndpoints as AdminIntegrationEndpoint[] | undefined,
-    ),
+    adminIntegrationEndpoints: endpoints.map((entry) => ({
+      ...entry,
+      adminEnabled:
+        enabled &&
+        (entry.kind !== 'http' || partnerSidebarEnabled) &&
+        (turningMainOn || entry.adminEnabled !== false),
+    })),
     referralBackendApiKey: resolveReferralBackendApiKey(
       value?.referralBackendApiKey,
       existing.referralBackendApiKey,

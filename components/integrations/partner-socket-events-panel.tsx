@@ -10,6 +10,7 @@ import { PartnerSocketConnectionInfo } from '@/components/integrations/partner-s
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Loader2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
@@ -22,6 +23,10 @@ type PartnerSocketEventsPanelProps = {
   serverBaseUrl?: string;
   partnerRealtimeSocketUrl?: string;
   onPartnerRealtimeSocketUrlChange?: (value: string) => void;
+  enabled: boolean;
+  parentEnabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
+  onEventsChange: (events: PartnerSocketEvent[]) => void;
 };
 
 export function PartnerSocketEventsPanel({
@@ -33,6 +38,10 @@ export function PartnerSocketEventsPanel({
   serverBaseUrl,
   partnerRealtimeSocketUrl,
   onPartnerRealtimeSocketUrlChange,
+  enabled,
+  parentEnabled,
+  onEnabledChange,
+  onEventsChange,
 }: PartnerSocketEventsPanelProps) {
   const mergedEvents = useMemo(
     () =>
@@ -46,19 +55,28 @@ export function PartnerSocketEventsPanel({
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Customer portal realtime</CardTitle>
-        <CardDescription>
-          Keep this simple: one socket URL + four fixed events.
-        </CardDescription>
+    <Card className="ml-4 border-l-4 sm:ml-8">
+      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+        <div className="space-y-1.5">
+          <CardTitle>Customer portal realtime</CardTitle>
+          <CardDescription>
+            Child integration for the socket connection and four fixed events.
+          </CardDescription>
+        </div>
+        <Switch
+          aria-label="Enable customer portal realtime"
+          checked={parentEnabled && enabled}
+          disabled={!parentEnabled || saving}
+          onCheckedChange={onEnabledChange}
+        />
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className={`space-y-4 ${!parentEnabled || !enabled ? 'opacity-60' : ''}`}>
         <PartnerSocketConnectionInfo
           adminPortalUrl={adminPortalUrl}
           serverBaseUrl={serverBaseUrl}
           partnerRealtimeSocketUrl={partnerRealtimeSocketUrl}
           onPartnerRealtimeSocketUrlChange={onPartnerRealtimeSocketUrlChange}
+          disabled={!parentEnabled || !enabled}
         />
 
         <div className="border-t pt-4">
@@ -70,7 +88,7 @@ export function PartnerSocketEventsPanel({
               <TableRow>
                 <TableHead>Direction</TableHead>
                 <TableHead>Event</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Enabled</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -84,10 +102,19 @@ export function PartnerSocketEventsPanel({
                   <TableCell>
                     <code className="text-sm">{event.path}</code>
                   </TableCell>
-                  <TableCell>
-                    <Badge variant={event.enabled ? 'default' : 'outline'}>
-                      {event.enabled ? 'Enabled' : 'Disabled'}
-                    </Badge>
+                  <TableCell className="text-right">
+                    <Switch
+                      aria-label={`Enable ${event.label}`}
+                      checked={parentEnabled && enabled && event.enabled}
+                      disabled={!parentEnabled || !enabled || saving}
+                      onCheckedChange={(checked) =>
+                        onEventsChange(
+                          mergedEvents.map((entry) =>
+                            entry.id === event.id ? { ...entry, enabled: checked } : entry,
+                          ),
+                        )
+                      }
+                    />
                   </TableCell>
                 </TableRow>
               ))}
@@ -97,9 +124,9 @@ export function PartnerSocketEventsPanel({
 
         <div className="flex items-center justify-between border-t pt-4">
           <p className="text-sm text-muted-foreground">
-            {dirty ? 'Unsaved socket connection changes.' : 'Socket connection saved.'}
+            {dirty ? 'Unsaved socket changes — save to apply.' : null}
           </p>
-          <Button type="button" onClick={onSave} disabled={!dirty || saving}>
+          <Button type="button" onClick={onSave} disabled={!dirty || saving || !parentEnabled}>
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Save socket connection
           </Button>
