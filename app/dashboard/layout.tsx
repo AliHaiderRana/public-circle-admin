@@ -41,6 +41,7 @@ import {
   Inbox,
   Bell,
   MailWarning,
+  Database,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -131,6 +132,12 @@ const sidebarItems: SidebarItem[] = [
     name: "Integrations",
     href: "/dashboard/integrations",
     icon: Plug,
+    superAdminOnly: true,
+  },
+  {
+    name: "DB Analytics",
+    href: "/dashboard/db-analytics",
+    icon: Database,
     superAdminOnly: true,
   },
   {
