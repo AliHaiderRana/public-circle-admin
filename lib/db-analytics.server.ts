@@ -1,14 +1,169 @@
+import mongoose from 'mongoose';
 import { ObjectId } from 'mongodb';
 import type { Db, Collection } from 'mongodb';
 
-export const COMPANY_GROUP_LIMIT = 5000;
-export const COMPANY_FIELD_CANDIDATES = ['company', 'companyId', 'company_id'] as const;
-/** Cache collection for on-demand exact per-company size computations */
-export const DB_ANALYTICS_STATS_COLLECTION = 'admin-db-analytics-stats';
+// Databases every MongoDB deployment carries internally — never shown as
+// "another app's database" in the switcher.
+const SYSTEM_DATABASES = new Set(['admin', 'local', 'config']);
 
-const COUNT_AGG_TIMEOUT_MS = 20_000;
-// Exact sizes scan every document — explicit admin action, so allow a long run
-const EXACT_SIZE_TIMEOUT_MS = 120_000;
+export function isSystemDatabase(name: string): boolean {
+  return SYSTEM_DATABASES.has(name);
+}
+
+export type ClusterDatabaseInfo = {
+  name: string;
+  sizeOnDisk: number;
+  empty: boolean;
+};
+
+/**
+ * Full Atlas cluster hostname from the connection string, unformatted
+ * (e.g. "publiccircles-staging.lx6dtlk.mongodb.net"). MongoDB has no
+ * server-side command that returns this — it only exists in the SRV
+ * hostname.
+ */
+export function getClusterName(): string | null {
+  const raw = (process.env.MONGODB_URI || process.env.MONGODB_URL || '').trim();
+  if (!raw) return null;
+  try {
+    const host = new URL(raw).hostname;
+    return host || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Every non-system database on the same cluster this app's connection can see. */
+export async function listClusterDatabases(): Promise<ClusterDatabaseInfo[]> {
+  const defaultDb = mongoose.connection.db;
+  if (!defaultDb) throw new Error('Database connection unavailable');
+  const result = await defaultDb.admin().listDatabases();
+  return (result.databases ?? [])
+    .filter((d) => !SYSTEM_DATABASES.has(d.name))
+    .map((d) => ({
+      name: d.name,
+      sizeOnDisk: Number(d.sizeOnDisk ?? 0),
+      empty: Boolean(d.empty),
+    }));
+}
+
+export type ClusterDatabaseRow = {
+  name: string;
+  collections: number;
+  indexes: number;
+  objects: number;
+  dataSize: number;
+  storageSize: number;
+  indexSize: number;
+  totalSize: number;
+  error?: string;
+};
+
+export type ClusterWideStats = {
+  databases: number;
+  collections: number;
+  objects: number;
+  dataSize: number;
+  storageSize: number;
+  indexSize: number;
+  totalSize: number;
+  failedDatabases: string[];
+  perDatabase: ClusterDatabaseRow[];
+};
+
+/**
+ * Sums dbStats across every non-system database on the cluster, and keeps
+ * the per-database breakdown too. One dbStats call per database, run in
+ * parallel — cheap relative to per-collection or per-document scans, since
+ * it's pure server-side metadata.
+ */
+export async function getClusterWideStats(
+  databases: ClusterDatabaseInfo[]
+): Promise<ClusterWideStats> {
+  const failedDatabases: string[] = [];
+
+  const perDatabase = await Promise.all(
+    databases.map(async (d): Promise<ClusterDatabaseRow> => {
+      try {
+        const db = resolveDb(d.name);
+        const stats = await db.command({ dbStats: 1 });
+        const dataSize = Number(stats.dataSize ?? 0);
+        const indexSize = Number(stats.indexSize ?? 0);
+        return {
+          name: d.name,
+          collections: Number(stats.collections ?? 0),
+          indexes: Number(stats.indexes ?? 0),
+          objects: Number(stats.objects ?? 0),
+          dataSize,
+          storageSize: Number(stats.storageSize ?? 0),
+          indexSize,
+          totalSize: dataSize + indexSize,
+        };
+      } catch (err) {
+        failedDatabases.push(d.name);
+        return {
+          name: d.name,
+          collections: 0,
+          indexes: 0,
+          objects: 0,
+          dataSize: 0,
+          storageSize: 0,
+          indexSize: 0,
+          totalSize: 0,
+          error: err instanceof Error ? err.message : 'Failed to read stats',
+        };
+      }
+    })
+  );
+
+  const totals = perDatabase
+    .filter((r) => !r.error)
+    .reduce(
+      (acc, r) => ({
+        collections: acc.collections + r.collections,
+        objects: acc.objects + r.objects,
+        dataSize: acc.dataSize + r.dataSize,
+        storageSize: acc.storageSize + r.storageSize,
+        indexSize: acc.indexSize + r.indexSize,
+      }),
+      { collections: 0, objects: 0, dataSize: 0, storageSize: 0, indexSize: 0 }
+    );
+
+  return {
+    databases: databases.length,
+    ...totals,
+    // Same "billed usage" definition used everywhere else: data + index, not
+    // the compressed on-disk storage size.
+    totalSize: totals.dataSize + totals.indexSize,
+    failedDatabases,
+    perDatabase: perDatabase.sort((a, b) => b.totalSize - a.totalSize),
+  };
+}
+
+/**
+ * Resolves which database a request should read from. Reuses the existing
+ * connection pool (no new connection) — just points at a different database
+ * on the same cluster. Only ever call with a name that has been validated
+ * against listClusterDatabases() to avoid touching system databases.
+ */
+export function resolveDb(databaseName?: string | null): Db {
+  const defaultDb = mongoose.connection.db;
+  if (!defaultDb) throw new Error('Database connection unavailable');
+  if (!databaseName || databaseName === defaultDb.databaseName) return defaultDb;
+  return mongoose.connection.getClient().db(databaseName);
+}
+
+export const COMPANY_GROUP_LIMIT = 5000;
+export const COMPANY_FIELD_CANDIDATES = [
+  'company',
+  'companyId',
+  'company_id',
+  'public_circles_company',
+] as const;
+
+// Exact sizes require a full $bsonSize scan (MongoDB keeps no per-company size
+// statistics), so give the aggregation a generous budget.
+const COMPANY_AGG_TIMEOUT_MS = 120_000;
 
 export function isObjectIdLike(value: unknown): boolean {
   return (
@@ -17,21 +172,16 @@ export function isObjectIdLike(value: unknown): boolean {
   );
 }
 
-export type CompanySizeCacheDoc = {
-  _id: string; // collection name
-  field: string;
-  computedAt: Date;
-  durationMs: number;
-  truncated: boolean;
-  rows: {
-    companyId: string | null;
-    count: number;
-    size: number;
-    avgSize: number;
-  }[];
-};
+export async function detectCompanyField(
+  coll: Collection,
+  collectionName?: string
+): Promise<string | null> {
+  // The companies collection doesn't reference a company via a foreign key —
+  // each document's own _id IS the company, so group by that directly.
+  if (collectionName === 'companies') {
+    return '_id';
+  }
 
-export async function detectCompanyField(coll: Collection): Promise<string | null> {
   const probe = await coll
     .find({}, { projection: Object.fromEntries(COMPANY_FIELD_CANDIDATES.map((f) => [f, 1])) })
     .limit(25)
@@ -70,37 +220,33 @@ async function resolveCompanyNames(
   return new Map(companyDocs.map((c) => [String(c._id), String(c.name ?? '')]));
 }
 
-function getStatsCache(db: Db) {
-  return db.collection<CompanySizeCacheDoc>(DB_ANALYTICS_STATS_COLLECTION);
-}
-
 /**
- * Per-company stats: live counts (count-only $group, cheap) merged with the
- * most recent exact-size computation from the cache (if one exists).
+ * Per-company document counts and exact sizes, computed upfront via a full
+ * $bsonSize group scan — the only way MongoDB can produce per-company sizes.
  */
-export async function getCompanyStats(coll: Collection, db: Db, name: string) {
-  const companyField = await detectCompanyField(coll);
+export async function getCompanyStats(coll: Collection, db: Db, collectionName?: string) {
+  const companyField = await detectCompanyField(coll, collectionName);
   if (!companyField) return null;
 
   const groups = await coll
     .aggregate(
       [
-        { $group: { _id: `$${companyField}`, count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
+        {
+          $group: {
+            _id: `$${companyField}`,
+            count: { $sum: 1 },
+            size: { $sum: { $bsonSize: '$$ROOT' } },
+          },
+        },
+        { $sort: { size: -1 } },
         { $limit: COMPANY_GROUP_LIMIT + 1 },
       ],
-      { allowDiskUse: true, maxTimeMS: COUNT_AGG_TIMEOUT_MS }
+      { allowDiskUse: true, maxTimeMS: COMPANY_AGG_TIMEOUT_MS }
     )
     .toArray();
 
   const truncated = groups.length > COMPANY_GROUP_LIMIT;
   const top = groups.slice(0, COMPANY_GROUP_LIMIT);
-
-  const cache = await getStatsCache(db).findOne({ _id: name });
-  const cacheValid = cache && cache.field === companyField;
-  const sizeByCompany = new Map(
-    (cacheValid ? cache.rows : []).map((r) => [r.companyId ?? '__none__', r])
-  );
 
   const nameById = await resolveCompanyNames(
     db,
@@ -111,66 +257,14 @@ export async function getCompanyStats(coll: Collection, db: Db, name: string) {
     field: companyField,
     totalCompanies: top.filter((g) => g._id != null).length,
     truncated,
-    sizesComputedAt: cacheValid ? cache.computedAt.toISOString() : null,
     rows: top.map((g) => {
       const companyId = g._id != null ? String(g._id) : null;
-      const cached = sizeByCompany.get(companyId ?? '__none__');
       return {
         companyId,
         companyName: companyId ? (nameById.get(companyId) || null) : null,
         count: Number(g.count) || 0,
-        size: cached ? cached.size : null,
-        avgSize: cached ? cached.avgSize : null,
+        size: Number(g.size) || 0,
       };
     }),
   };
-}
-
-/**
- * Exact per-company sizes via a full $bsonSize scan (the only way MongoDB can
- * produce them). Explicitly triggered by the admin; result is cached so the
- * page reads it instantly afterwards.
- */
-export async function computeExactCompanySizes(coll: Collection, db: Db, name: string) {
-  const companyField = await detectCompanyField(coll);
-  if (!companyField) return null;
-
-  const started = Date.now();
-  const groups = await coll
-    .aggregate(
-      [
-        {
-          $group: {
-            _id: `$${companyField}`,
-            count: { $sum: 1 },
-            size: { $sum: { $bsonSize: '$$ROOT' } },
-            avgSize: { $avg: { $bsonSize: '$$ROOT' } },
-          },
-        },
-        { $sort: { size: -1 } },
-        { $limit: COMPANY_GROUP_LIMIT + 1 },
-      ],
-      { allowDiskUse: true, maxTimeMS: EXACT_SIZE_TIMEOUT_MS }
-    )
-    .toArray();
-
-  const truncated = groups.length > COMPANY_GROUP_LIMIT;
-  const top = groups.slice(0, COMPANY_GROUP_LIMIT);
-
-  const cacheDoc: CompanySizeCacheDoc = {
-    _id: name,
-    field: companyField,
-    computedAt: new Date(),
-    durationMs: Date.now() - started,
-    truncated,
-    rows: top.map((g) => ({
-      companyId: g._id != null ? String(g._id) : null,
-      count: Number(g.count) || 0,
-      size: Number(g.size) || 0,
-      avgSize: Number(g.avgSize) || 0,
-    })),
-  };
-
-  await getStatsCache(db).replaceOne({ _id: name }, cacheDoc, { upsert: true });
-  return cacheDoc;
 }

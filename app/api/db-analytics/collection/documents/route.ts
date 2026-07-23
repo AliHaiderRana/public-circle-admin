@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import mongoose from 'mongoose';
 import { ObjectId } from 'mongodb';
 import dbConnect from '@/lib/db';
 import { requireSuperAdminSession } from '@/lib/auth';
+import { isSystemDatabase, resolveDb } from '@/lib/db-analytics.server';
 
 const QUERY_TIMEOUT_MS = 15_000;
 const MAX_LIMIT = 50;
@@ -85,8 +85,12 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const name = (searchParams.get('name') || '').trim();
+    const databaseName = (searchParams.get('database') || '').trim();
     if (!name) {
       return NextResponse.json({ error: 'name query param is required' }, { status: 400 });
+    }
+    if (databaseName && isSystemDatabase(databaseName)) {
+      return NextResponse.json({ error: 'That database is not available here' }, { status: 400 });
     }
 
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
@@ -126,10 +130,7 @@ export async function GET(request: Request) {
     }
 
     await dbConnect();
-    const db = mongoose.connection.db;
-    if (!db) {
-      return NextResponse.json({ error: 'Database connection unavailable' }, { status: 500 });
-    }
+    const db = resolveDb(databaseName || undefined);
 
     const existing = await db.listCollections({}, { nameOnly: true }).toArray();
     if (!existing.some((c) => c.name === name && c.type !== 'view')) {

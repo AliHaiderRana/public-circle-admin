@@ -80,6 +80,10 @@ function CompanyDocumentsContent() {
   const companyParam = (searchParams.get('company') || '').trim();
   const companyId = companyParam === 'none' ? null : companyParam;
   const companyName = (searchParams.get('companyName') || '').trim();
+  const databaseName = (searchParams.get('database') || '').trim();
+  const collectionHref = databaseName
+    ? `/dashboard/db-analytics/${encodeURIComponent(collectionName)}?database=${encodeURIComponent(databaseName)}`
+    : `/dashboard/db-analytics/${encodeURIComponent(collectionName)}`;
 
   const [docs, setDocs] = useState<Record<string, unknown>[]>([]);
   const [total, setTotal] = useState(0);
@@ -109,6 +113,7 @@ function CompanyDocumentsContent() {
           limit: String(nextLimit),
           filter,
         });
+        if (databaseName) qs.set('database', databaseName);
         const res = await fetch(`/api/db-analytics/collection/documents?${qs}`);
         const json = await res.json();
         if (!res.ok) throw new Error(json?.error || 'Failed to load documents');
@@ -124,7 +129,7 @@ function CompanyDocumentsContent() {
         setLoading(false);
       }
     },
-    [collectionName, field, companyId]
+    [collectionName, field, companyId, databaseName]
   );
 
   useEffect(() => {
@@ -133,7 +138,7 @@ function CompanyDocumentsContent() {
       setPage(1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user, collectionName, field, companyParam]);
+  }, [authLoading, user, collectionName, field, companyParam, databaseName]);
 
   if (authLoading || !user?.isSuperAdmin) {
     return (
@@ -151,7 +156,7 @@ function CompanyDocumentsContent() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <Button variant="ghost" size="sm" className="gap-2 -ml-2 h-8" asChild>
-            <Link href={`/dashboard/db-analytics/${encodeURIComponent(collectionName)}`}>
+            <Link href={collectionHref}>
               <ArrowLeft className="h-4 w-4" />
               <span className="font-mono">{collectionName}</span>
             </Link>

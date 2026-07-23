@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import mongoose from 'mongoose';
 import dbConnect from '@/lib/db';
 import { requireSuperAdminSession } from '@/lib/auth';
+import { isSystemDatabase, resolveDb } from '@/lib/db-analytics.server';
 
 type CollectionAnalytics = {
   name: string;
@@ -17,16 +17,19 @@ type CollectionAnalytics = {
   error?: string;
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   const { error } = await requireSuperAdminSession();
   if (error) return error;
 
   try {
-    await dbConnect();
-    const db = mongoose.connection.db;
-    if (!db) {
-      return NextResponse.json({ error: 'Database connection unavailable' }, { status: 500 });
+    const { searchParams } = new URL(request.url);
+    const databaseName = (searchParams.get('database') || '').trim();
+    if (databaseName && isSystemDatabase(databaseName)) {
+      return NextResponse.json({ error: 'That database is not available here' }, { status: 400 });
     }
+
+    await dbConnect();
+    const db = resolveDb(databaseName || undefined);
 
     const [dbStats, collectionInfos] = await Promise.all([
       db.command({ dbStats: 1 }),
@@ -76,9 +79,8 @@ export async function GET() {
         })
     );
 
-    collections.sort(
-      (a, b) => b.storageSize + b.totalIndexSize - (a.storageSize + a.totalIndexSize)
-    );
+    // Same default ordering as Compass: storage size, largest first
+    collections.sort((a, b) => b.storageSize - a.storageSize);
 
     return NextResponse.json({
       database: {
@@ -91,7 +93,10 @@ export async function GET() {
         storageSize: Number(dbStats.storageSize ?? 0),
         indexes: Number(dbStats.indexes ?? 0),
         indexSize: Number(dbStats.indexSize ?? 0),
-        totalSize: Number(dbStats.totalSize ?? 0),
+        // MongoDB Atlas bills against logical data size + index size, not the
+        // compressed on-disk storage size — so total size follows that, not
+        // dbStats.totalSize (which reflects storage, not billed usage).
+        totalSize: Number(dbStats.dataSize ?? 0) + Number(dbStats.indexSize ?? 0),
         fsUsedSize: Number(dbStats.fsUsedSize ?? 0),
         fsTotalSize: Number(dbStats.fsTotalSize ?? 0),
       },

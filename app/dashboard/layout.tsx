@@ -42,6 +42,7 @@ import {
   Bell,
   MailWarning,
   Database,
+  Cloud,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -138,6 +139,12 @@ const sidebarItems: SidebarItem[] = [
     name: "DB Analytics",
     href: "/dashboard/db-analytics",
     icon: Database,
+    superAdminOnly: true,
+  },
+  {
+    name: "AWS Analytics",
+    href: "/dashboard/aws-analytics",
+    icon: Cloud,
     superAdminOnly: true,
   },
   {

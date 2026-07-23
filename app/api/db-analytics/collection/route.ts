@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-import mongoose from 'mongoose';
 import type { Collection } from 'mongodb';
 import dbConnect from '@/lib/db';
 import { requireSuperAdminSession } from '@/lib/auth';
-import { getCompanyStats } from '@/lib/db-analytics.server';
+import { getCompanyStats, isSystemDatabase, resolveDb } from '@/lib/db-analytics.server';
 
 /** Storage/index metadata straight from $collStats — no document reads, effectively instant. */
 async function getStorageStats(coll: Collection, name: string, totalCount: number) {
@@ -48,15 +47,16 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const name = (searchParams.get('name') || '').trim();
     const section = (searchParams.get('section') || 'storage').trim();
+    const databaseName = (searchParams.get('database') || '').trim();
     if (!name) {
       return NextResponse.json({ error: 'name query param is required' }, { status: 400 });
     }
+    if (databaseName && isSystemDatabase(databaseName)) {
+      return NextResponse.json({ error: 'That database is not available here' }, { status: 400 });
+    }
 
     await dbConnect();
-    const db = mongoose.connection.db;
-    if (!db) {
-      return NextResponse.json({ error: 'Database connection unavailable' }, { status: 500 });
-    }
+    const db = resolveDb(databaseName || undefined);
 
     const existing = await db.listCollections({}, { nameOnly: true }).toArray();
     if (!existing.some((c) => c.name === name && c.type !== 'view')) {

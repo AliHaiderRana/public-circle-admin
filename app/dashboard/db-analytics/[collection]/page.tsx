@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -24,6 +24,10 @@ import {
   Building2,
   Database,
   Eye,
+  FileStack,
+  HardDrive,
+  Key,
+  Layers,
   RefreshCw,
   Search,
 } from 'lucide-react';
@@ -35,18 +39,9 @@ import {
   type CompanyStats,
   type CompanyStatsRow,
 } from '../format';
+import { StatCard } from '../StatCard';
 
 const COMPANY_PAGE_SIZE_DEFAULT = 25;
-
-function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="rounded-md border bg-muted/30 p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-semibold tabular-nums">{value}</p>
-      {hint && <p className="truncate text-[11px] text-muted-foreground">{hint}</p>}
-    </div>
-  );
-}
 
 function SectionError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
@@ -59,11 +54,16 @@ function SectionError({ message, onRetry }: { message: string; onRetry: () => vo
   );
 }
 
-export default function DbCollectionDetailPage() {
+function DbCollectionDetailContent() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const params = useParams<{ collection: string }>();
+  const searchParams = useSearchParams();
   const collectionName = decodeURIComponent(params.collection ?? '');
+  const databaseName = searchParams.get('database') || '';
+  const backHref = databaseName
+    ? `/dashboard/db-analytics/database/${encodeURIComponent(databaseName)}`
+    : '/dashboard/db-analytics';
 
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -77,8 +77,6 @@ export default function DbCollectionDetailPage() {
   const [companyLoaded, setCompanyLoaded] = useState(false);
   const [companyLoading, setCompanyLoading] = useState(false);
   const [companyError, setCompanyError] = useState<string | null>(null);
-  const [computingSizes, setComputingSizes] = useState(false);
-  const [computeError, setComputeError] = useState<string | null>(null);
   const [companySearch, setCompanySearch] = useState('');
   const [companyPage, setCompanyPage] = useState(1);
   const [companyLimit, setCompanyLimit] = useState(COMPANY_PAGE_SIZE_DEFAULT);
@@ -93,9 +91,9 @@ export default function DbCollectionDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
-        `/api/db-analytics/collection?name=${encodeURIComponent(collectionName)}`
-      );
+      const qs = new URLSearchParams({ name: collectionName });
+      if (databaseName) qs.set('database', databaseName);
+      const res = await fetch(`/api/db-analytics/collection?${qs}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || 'Failed to load collection stats');
       setStorage(json.storage ?? null);
@@ -105,15 +103,15 @@ export default function DbCollectionDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [collectionName]);
+  }, [collectionName, databaseName]);
 
   const fetchCompanyStats = useCallback(async () => {
     setCompanyLoading(true);
     setCompanyError(null);
     try {
-      const res = await fetch(
-        `/api/db-analytics/collection?name=${encodeURIComponent(collectionName)}&section=companies`
-      );
+      const qs = new URLSearchParams({ name: collectionName, section: 'companies' });
+      if (databaseName) qs.set('database', databaseName);
+      const res = await fetch(`/api/db-analytics/collection?${qs}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || 'Failed to load company stats');
       setCompanyStats(json.companyStats ?? null);
@@ -125,7 +123,7 @@ export default function DbCollectionDetailPage() {
     } finally {
       setCompanyLoading(false);
     }
-  }, [collectionName]);
+  }, [collectionName, databaseName]);
 
   useEffect(() => {
     if (!authLoading && user?.isSuperAdmin && collectionName) {
@@ -138,24 +136,6 @@ export default function DbCollectionDetailPage() {
       void fetchCompanyStats();
     }
   }, [activeTab, companyLoaded, companyLoading, user, fetchCompanyStats]);
-
-  const computeExactSizes = useCallback(async () => {
-    setComputingSizes(true);
-    setComputeError(null);
-    try {
-      const res = await fetch(
-        `/api/db-analytics/collection/company-sizes?name=${encodeURIComponent(collectionName)}`,
-        { method: 'POST' }
-      );
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || 'Failed to compute sizes');
-      setCompanyStats(json.companyStats ?? null);
-    } catch (err) {
-      setComputeError(err instanceof Error ? err.message : 'Failed to compute sizes');
-    } finally {
-      setComputingSizes(false);
-    }
-  }, [collectionName]);
 
   const handleRefresh = useCallback(() => {
     void fetchStorage();
@@ -199,9 +179,10 @@ export default function DbCollectionDetailPage() {
         company: row.companyId ?? 'none',
       });
       if (row.companyName) qs.set('companyName', row.companyName);
+      if (databaseName) qs.set('database', databaseName);
       return `/dashboard/db-analytics/${encodeURIComponent(collectionName)}/documents?${qs}`;
     },
-    [collectionName, companyStats]
+    [collectionName, companyStats, databaseName]
   );
 
   const indexEntries = useMemo(
@@ -223,7 +204,7 @@ export default function DbCollectionDetailPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <Button variant="ghost" size="sm" className="gap-2 -ml-2 h-8" asChild>
-            <Link href="/dashboard/db-analytics">
+            <Link href={backHref}>
               <ArrowLeft className="h-4 w-4" />
               DB Analytics
             </Link>
@@ -238,6 +219,11 @@ export default function DbCollectionDetailPage() {
               </Badge>
             )}
           </h1>
+          {databaseName && (
+            <Badge variant="outline" className="font-mono text-xs font-normal">
+              {databaseName}
+            </Badge>
+          )}
         </div>
         <Button
           type="button"
@@ -273,21 +259,33 @@ export default function DbCollectionDetailPage() {
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <StatTile
+            <StatCard
+              icon={HardDrive}
+              label="Total size (billed usage)"
+              value={formatBytes(storage.size + storage.totalIndexSize)}
+              hint={`${formatBytes(storage.size)} data · ${formatBytes(storage.totalIndexSize)} indexes`}
+            />
+            <StatCard
+              icon={FileStack}
+              label="Data size"
+              value={formatBytes(storage.size)}
+              hint={
+                storage.storageSize > 0
+                  ? `${(storage.size / storage.storageSize).toFixed(1)}× compression ratio`
+                  : undefined
+              }
+            />
+            <StatCard
+              icon={Layers}
               label="Documents"
               value={formatCount(storage.count)}
               hint={`avg ${formatBytes(storage.avgObjSize)} each`}
             />
-            <StatTile label="Data size" value={formatBytes(storage.size)} />
-            <StatTile
-              label="Storage (compressed)"
-              value={formatBytes(storage.storageSize)}
-              hint={`${formatBytes(storage.freeStorageSize)} reusable`}
-            />
-            <StatTile
-              label="Index size"
+            <StatCard
+              icon={Key}
+              label="Total index size"
               value={formatBytes(storage.totalIndexSize)}
-              hint={`${storage.nindexes} indexes`}
+              hint={`${storage.nindexes} indexes total`}
             />
           </div>
 
@@ -341,6 +339,10 @@ export default function DbCollectionDetailPage() {
                 <CardContent className="p-0">
                   {companyLoading ? (
                     <div className="space-y-2 p-4">
+                      <p className="pb-1 text-xs text-muted-foreground">
+                        Measuring exact per-company sizes — this can take a while on large
+                        collections.
+                      </p>
                       {Array.from({ length: 6 }).map((_, i) => (
                         <Skeleton key={i} className="h-9 w-full" />
                       ))}
@@ -368,55 +370,17 @@ export default function DbCollectionDetailPage() {
                               showing top {formatCount(companyStats.rows.length)} by count
                             </Badge>
                           )}
-                          {companyStats.sizesComputedAt ? (
-                            <Badge variant="outline" className="text-[10px] font-normal">
-                              exact sizes as of{' '}
-                              {new Date(companyStats.sizesComputedAt).toLocaleString()}
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary" className="text-[10px] font-normal">
-                              sizes not computed yet
-                            </Badge>
-                          )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div className="relative w-56">
-                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                              placeholder="Search company name or ID…"
-                              className="h-8 pl-9"
-                              value={companySearch}
-                              onChange={(e) => setCompanySearch(e.target.value)}
-                            />
-                          </div>
-                          {!companyStats.sizesComputedAt && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 gap-1.5 shrink-0"
-                              onClick={() => void computeExactSizes()}
-                              disabled={computingSizes}
-                            >
-                              <RefreshCw
-                                className={cn('h-3.5 w-3.5', computingSizes && 'animate-spin')}
-                              />
-                              {computingSizes ? 'Computing…' : 'Compute exact sizes'}
-                            </Button>
-                          )}
+                        <div className="relative w-56">
+                          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <Input
+                            placeholder="Search company name or ID…"
+                            className="h-8 pl-9"
+                            value={companySearch}
+                            onChange={(e) => setCompanySearch(e.target.value)}
+                          />
                         </div>
                       </div>
-                      {computingSizes && (
-                        <p className="border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
-                          Scanning every document to measure exact sizes — this can take up to
-                          a couple of minutes on large collections.
-                        </p>
-                      )}
-                      {computeError && (
-                        <p className="border-b px-4 py-2 text-sm text-destructive">
-                          {computeError}
-                        </p>
-                      )}
                       <Table>
                         <TableHeader>
                           <TableRow className="hover:bg-transparent">
@@ -461,11 +425,7 @@ export default function DbCollectionDetailPage() {
                                   {formatCount(row.count)}
                                 </TableCell>
                                 <TableCell className="py-2 text-right tabular-nums text-sm">
-                                  {row.size != null ? (
-                                    formatBytes(row.size)
-                                  ) : (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
+                                  {formatBytes(row.size)}
                                 </TableCell>
                                 <TableCell className="py-2 pr-4 text-right">
                                   <Button
@@ -506,8 +466,9 @@ export default function DbCollectionDetailPage() {
                       <p className="text-sm font-medium">No company field detected</p>
                       <p className="max-w-sm text-xs text-muted-foreground">
                         Documents in this collection don&apos;t reference a company
-                        (checked: company, companyId, company_id), so a per-company
-                        breakdown isn&apos;t available.
+                        (checked: company, companyId, company_id,
+                        public_circles_company), so a per-company breakdown isn&apos;t
+                        available.
                       </p>
                     </div>
                   )}
@@ -517,7 +478,21 @@ export default function DbCollectionDetailPage() {
           </Tabs>
         </>
       )}
-
     </div>
+  );
+}
+
+export default function DbCollectionDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-52" />
+          <Skeleton className="h-96 w-full" />
+        </div>
+      }
+    >
+      <DbCollectionDetailContent />
+    </Suspense>
   );
 }
