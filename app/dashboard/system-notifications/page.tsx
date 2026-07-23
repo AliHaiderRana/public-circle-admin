@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, Bell, CheckCircle2, Mail, MailWarning, XCircle } from 'lucide-react';
+import { Loader2, Bell, CheckCircle2, Database, Mail, MailWarning, XCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   ConfirmToggleDialog,
@@ -25,6 +25,7 @@ import {
 import {
   computeSupportRecipients,
   computeDlqRecipients,
+  computeDbRecipients,
   type AdminRecipient,
   type TeamRecipient,
   type SystemNotificationSettings,
@@ -34,6 +35,7 @@ type SettingsState = SystemNotificationSettings & {
   adminRecipients: AdminRecipient[];
   supportRecipients: TeamRecipient[];
   dlqRecipients: TeamRecipient[];
+  dbRecipients: TeamRecipient[];
 };
 
 type PendingToggle = ConfirmToggleRequest & {
@@ -148,6 +150,14 @@ export default function SystemNotificationsPage() {
     });
   }, [settings]);
 
+  const dbRecipients = useMemo(() => {
+    if (!settings) return [];
+    return computeDbRecipients({
+      dbSendAlertEmail: settings.dbSendAlertEmail,
+      adminRecipients: settings.adminRecipients,
+    });
+  }, [settings]);
+
   const ToggleRow = ({
     id,
     label,
@@ -189,7 +199,9 @@ export default function SystemNotificationsPage() {
             key={`${row.source}-${row.email}`}
             className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
           >
-            <span className="font-medium">{row.email}</span>
+            <span className="font-medium min-w-0 flex-1 truncate" title={row.email}>
+              {row.email}
+            </span>
             <Badge variant="outline" className="font-normal shrink-0">
               {row.source}
             </Badge>
@@ -276,6 +288,22 @@ export default function SystemNotificationsPage() {
                   })
                 }
               />
+              <ToggleRow
+                id="dbSendAlertEmail"
+                label="DB storage alerts"
+                description="Notification once total MongoDB cluster storage crosses 4 GB. Checked daily."
+                checked={settings.dbSendAlertEmail}
+                onRequestChange={(nextValue) =>
+                  requestBooleanToggle({
+                    title: nextValue ? 'Enable DB storage alert emails?' : 'Disable DB storage alert emails?',
+                    description: nextValue
+                      ? 'Selected admins can receive DB storage alert emails.'
+                      : 'DB storage alert emails will stop being sent.',
+                    nextValue,
+                    patchBody: { dbSendAlertEmail: nextValue },
+                  })
+                }
+              />
             </>
           )}
         </CardContent>
@@ -302,6 +330,7 @@ export default function SystemNotificationsPage() {
                   <TableHead>Email</TableHead>
                   <TableHead className="w-[120px] text-center">Support</TableHead>
                   <TableHead className="w-[120px] text-center">DLQ</TableHead>
+                  <TableHead className="w-[120px] text-center">DB</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -370,6 +399,31 @@ export default function SystemNotificationsPage() {
                         disabled={toggleSaving || !settings.dlqSendAlertEmail}
                       />
                     </TableCell>
+                    <TableCell className="text-center">
+                      <Switch
+                        checked={admin.notifyDbAlertEmail}
+                        onCheckedChange={() =>
+                          requestBooleanToggle({
+                            title: admin.notifyDbAlertEmail
+                              ? `Stop DB storage alerts for ${admin.email}?`
+                              : `Send DB storage alerts to ${admin.email}?`,
+                            description: admin.notifyDbAlertEmail
+                              ? `${admin.email} will no longer receive DB storage alert emails.`
+                              : `${admin.email} will receive DB storage alert emails.`,
+                            nextValue: !admin.notifyDbAlertEmail,
+                            patchBody: {
+                              adminPreferences: [
+                                {
+                                  adminId: admin.id,
+                                  notifyDbAlertEmail: !admin.notifyDbAlertEmail,
+                                },
+                              ],
+                            },
+                          })
+                        }
+                        disabled={toggleSaving || !settings.dbSendAlertEmail}
+                      />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -378,7 +432,7 @@ export default function SystemNotificationsPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-3">
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
@@ -400,6 +454,18 @@ export default function SystemNotificationsPage() {
           </CardHeader>
           <CardContent>
             <RecipientList recipients={dlqRecipients} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Database className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-base">DB alert recipients</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <RecipientList recipients={dbRecipients} />
           </CardContent>
         </Card>
       </div>

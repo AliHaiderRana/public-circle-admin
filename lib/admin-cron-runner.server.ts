@@ -1,5 +1,6 @@
 import CronHistory, { CRON_HISTORY_STATUS } from '@/lib/models/CronHistory';
 import { archiveAdminActivityLogs } from '@/lib/admin-activity-archive.server';
+import { checkAndSendDbStorageAlert } from '@/lib/db-storage-alert.server';
 import { getAdminLocalCronDefinition } from '@/lib/admin-cron-definitions';
 import dbConnect from '@/lib/db';
 
@@ -42,6 +43,15 @@ export async function runAdminLocalCron(name: string) {
 
       if (result.failedMonths.length > 0) {
         error = `Partial failure for months: ${result.failedMonths.join(', ')}`;
+        status = CRON_HISTORY_STATUS.FAILED;
+      }
+    } else if (name === 'dbStorageAlert') {
+      const result = await checkAndSendDbStorageAlert();
+      recordsUpdated = result.alertSent ? result.recipientCount : 0;
+      metadata = result as unknown as Record<string, unknown>;
+
+      if (result.error) {
+        error = result.error;
         status = CRON_HISTORY_STATUS.FAILED;
       }
     }

@@ -42,6 +42,15 @@ const schema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    dbSendAlertEmail: {
+      type: Boolean,
+      default: true,
+    },
+    /** Tracks whether the cluster is currently above the DB storage alert threshold, so the daily check emails once per crossing instead of every run. */
+    dbAlertThresholdBreached: {
+      type: Boolean,
+      default: false,
+    },
     supportSendDetailEmail: {
       type: Boolean,
       default: true,
