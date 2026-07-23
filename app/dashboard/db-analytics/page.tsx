@@ -76,7 +76,6 @@ export default function DbAnalyticsPage() {
   const [clusterDatabases, setClusterDatabases] = useState<
     ClusterDatabaseOption[]
   >([]);
-  const [currentDbName, setCurrentDbName] = useState("");
   const [clusterName, setClusterName] = useState<string | null>(null);
   const [clusterStats, setClusterStats] = useState<ClusterWideStats | null>(
     null,
@@ -96,7 +95,6 @@ export default function DbAnalyticsPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error);
       setClusterDatabases(json.databases ?? []);
-      setCurrentDbName(json.current ?? "");
       setClusterName(json.cluster ?? null);
       setClusterStats(json.clusterStats ?? null);
     } catch {
