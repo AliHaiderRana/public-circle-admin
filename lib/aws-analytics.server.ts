@@ -53,6 +53,8 @@ export type CompanyUsageRow = {
   objects: number;
   bytes: number;
   buckets: CompanyBucketUsage[];
+  /** True when this id only resolved via the archived-companies record (the live company document is gone). */
+  archived: boolean;
 };
 
 export type AwsAnalytics = {
@@ -88,7 +90,7 @@ function getAllowedBucketNames(): Set<string> | null {
   return names.length ? new Set(names) : null;
 }
 
-function createClient(): { client: S3Client; region: string } | null {
+export function createClient(): { client: S3Client; region: string } | null {
   const region = (process.env.AWS_REGION || 'ca-central-1').trim();
   const accessKeyId = (process.env.AWS_ACCESS_KEY_ID || '').trim();
   const secretAccessKey = (process.env.AWS_SECRET_ACCESS_KEY || '').trim();
@@ -377,8 +379,11 @@ async function computeAwsAnalytics(db: Db): Promise<AwsAnalytics> {
     .filter((b): b is BucketStats => b !== null)
     .sort((a, b) => b.bytes - a.bytes);
 
-  // Only ids that exist in the companies collection count as company usage;
-  // other id-like segments (users, templates) fall into "unattributed".
+  // Ids that exist in the companies collection count as company usage; ids
+  // that no longer have a live company (archived) still resolve via the
+  // archived-companies record, so backed-up files stay attributed by name
+  // instead of falling into "unattributed". Everything else (users,
+  // templates, etc.) falls into "unattributed".
   const candidateIds = [...byCandidate.keys()];
   const companyDocs = candidateIds.length
     ? await db
@@ -391,13 +396,27 @@ async function computeAwsAnalytics(db: Db): Promise<AwsAnalytics> {
     : [];
   const nameById = new Map(companyDocs.map((c) => [String(c._id), String(c.name ?? '')]));
 
+  const unresolvedIds = candidateIds.filter((id) => !nameById.has(id));
+  const archivedDocs = unresolvedIds.length
+    ? await db
+        .collection('archived-companies')
+        .find({ companyId: { $in: unresolvedIds } }, { projection: { companyId: 1, companyName: 1 } })
+        .toArray()
+    : [];
+  const archivedNameById = new Map(
+    archivedDocs.map((c) => [String(c.companyId), String(c.companyName ?? '')])
+  );
+
   const companies: CompanyUsageRow[] = [];
   const unattributed = { ...noCandidate };
   for (const [id, agg] of byCandidate) {
-    if (nameById.has(id)) {
+    const liveName = nameById.get(id);
+    const archivedName = archivedNameById.get(id);
+    if (liveName !== undefined || archivedName !== undefined) {
       companies.push({
         companyId: id,
-        companyName: nameById.get(id) || null,
+        companyName: (liveName ?? archivedName) || null,
+        archived: liveName === undefined,
         objects: agg.objects,
         bytes: agg.bytes,
         buckets: [...agg.buckets.entries()]
@@ -513,16 +532,62 @@ async function collectCompanyKeysInBucket(
 }
 
 /**
+ * Buckets that hold this company's LIVE data — excludes AWS_BACKUP_BUCKET,
+ * whose contents are, by construction, keyed by companyId too (so they'd
+ * otherwise look like more of "this company's data" to delete/copy). The
+ * backup bucket still shows up in getCompanyAwsUsage for display/attribution
+ * in AWS Analytics; it's only excluded from these operational paths.
+ */
+function excludeBackupBucket(buckets: CompanyBucketUsage[]): CompanyBucketUsage[] {
+  const backupBucket = (process.env.AWS_BACKUP_BUCKET || '').trim();
+  if (!backupBucket) return buckets;
+  return buckets.filter((b) => b.bucket !== backupBucket);
+}
+
+/**
+ * Every real {bucket, key, size} for a company's S3 objects, across only the
+ * buckets the cached account-wide scan already found it in. Used by Archive
+ * to know exactly what to copy into the backup bucket before anything is
+ * deleted (deleteCompanyObjects only needs keys transiently; this exposes
+ * them to a caller).
+ */
+export async function listCompanyObjectLocations(
+  db: Db,
+  companyId: string
+): Promise<{ bucket: string; key: string; size: number }[]> {
+  const usage = await getCompanyAwsUsage(db, companyId);
+  const buckets = excludeBackupBucket(usage?.buckets ?? []);
+  if (buckets.length === 0) return [];
+
+  const setup = createClient();
+  if (!setup) {
+    throw new Error('AWS credentials are not configured');
+  }
+  const { client } = setup;
+
+  const perBucket = await Promise.all(
+    buckets.map(async ({ bucket }) => {
+      const keys = await collectCompanyKeysInBucket(client, bucket, companyId);
+      return keys.map((k) => ({ bucket, key: k.key, size: k.size }));
+    })
+  );
+
+  return perBucket.flat();
+}
+
+/**
  * Permanently deletes every S3 object belonging to this company, across only
- * the buckets the cached account-wide scan already found it in. Invalidates
- * that cache afterward so the next analytics view reflects the deletion.
+ * the buckets the cached account-wide scan already found it in (excluding
+ * the backup bucket — see excludeBackupBucket). Invalidates that cache
+ * afterward so the next analytics view reflects the deletion.
  */
 export async function deleteCompanyObjects(
   db: Db,
   companyId: string
 ): Promise<{ deletedObjects: number; deletedBytes: number; errors: string[] }> {
   const usage = await getCompanyAwsUsage(db, companyId);
-  if (!usage || usage.buckets.length === 0) {
+  const buckets = excludeBackupBucket(usage?.buckets ?? []);
+  if (buckets.length === 0) {
     return { deletedObjects: 0, deletedBytes: 0, errors: [] };
   }
 
@@ -536,7 +601,7 @@ export async function deleteCompanyObjects(
   let deletedBytes = 0;
   const errors: string[] = [];
 
-  for (const { bucket } of usage.buckets) {
+  for (const { bucket } of buckets) {
     try {
       const keys = await collectCompanyKeysInBucket(client, bucket, companyId);
       for (let i = 0; i < keys.length; i += 1000) {

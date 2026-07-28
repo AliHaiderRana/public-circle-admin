@@ -59,6 +59,8 @@ export const USER_STATUS = {
   SUSPENDED: "SUSPENDED",
   BLOCKED: "BLOCKED",
   DELETED: "DELETED",
+  // Company-only: set when a company is Archived (all other data backed up + removed).
+  ARCHIVED: "ARCHIVED",
 };
 
 export const USER_KIND = {

@@ -310,7 +310,7 @@ const FOOTPRINT_COUNT_TIMEOUT_MS = 5000;
  * the best-effort count/size aggregate below so a slow count can never cause
  * a collection to be silently skipped at delete time.
  */
-async function detectCompanyReferencingCollections(): Promise<{ name: string; field: string }[]> {
+export async function detectCompanyReferencingCollections(): Promise<{ name: string; field: string }[]> {
   const db = mongoose.connection.db;
   if (!db) throw new Error('Database connection unavailable');
 

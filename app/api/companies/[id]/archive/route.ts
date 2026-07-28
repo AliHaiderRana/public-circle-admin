@@ -6,15 +6,14 @@ import {
   ADMIN_AUDIT_ACTION,
   ADMIN_AUDIT_CATEGORY,
 } from '@/lib/admin-audit';
-import { performCompanyDeletion } from '@/lib/company-deletion.server';
+import { performCompanyArchive } from '@/lib/company-archive.server';
 
 /**
- * POST /api/companies/[id]/delete
- * Super-admin only. Permanently deletes a company: cancels its Stripe
- * subscriptions, deletes its S3 objects, then deletes every MongoDB document
- * that references it. Irreversible. Requires the caller to re-enter their
- * own admin password (re-authentication before an irreversible action),
- * checked server-side behind the admin UI's own confirmation safeguard.
+ * POST /api/companies/[id]/archive
+ * Super-admin only. Backs up the company's MongoDB documents and S3 files to
+ * AWS_BACKUP_BUCKET, then cancels its Stripe subscriptions and removes the
+ * live DB/S3 data — recoverable later via /api/companies/archived/[id]/restore.
+ * Requires the caller to re-enter their own admin password, same as delete.
  */
 export async function POST(
   request: NextRequest,
@@ -45,21 +44,24 @@ export async function POST(
   }
 
   try {
-    const result = await performCompanyDeletion(id);
+    const result = await performCompanyArchive(id, session.email);
 
     const auditSession = toAdminAuditSession(session);
     if (auditSession) {
       await logAdminActivity(auditSession, {
-        action: ADMIN_AUDIT_ACTION.COMPANY_DELETE,
+        action: ADMIN_AUDIT_ACTION.COMPANY_ARCHIVE,
         category: ADMIN_AUDIT_CATEGORY.COMPANY,
         resourceType: 'company',
         resourceId: id,
         details: {
           companyName: result.companyName,
-          dbDocumentsDeleted: result.db.deletedDocuments,
-          dbCollectionsAffected: result.db.deletedCollections,
-          awsObjectsDeleted: result.aws.deletedObjects,
-          awsBytesDeleted: result.aws.deletedBytes,
+          archivedCompanyId: result.archivedCompanyId,
+          backupPrefix: result.backupPrefix,
+          dbBackedUpDocuments: result.db.backedUpDocuments,
+          dbDeletedDocuments: result.db.deletedDocuments,
+          awsBackedUpObjects: result.aws.backedUpObjects,
+          awsBackedUpBytes: result.aws.backedUpBytes,
+          awsDeletedObjects: result.aws.deletedObjects,
           awsErrors: result.aws.errors,
           stripeSubscriptionsCancelled: result.stripe.cancelled,
           stripeErrors: result.stripe.errors,
@@ -68,12 +70,12 @@ export async function POST(
     }
 
     return NextResponse.json({
-      message: `Company "${result.companyName}" permanently deleted`,
+      message: `Company "${result.companyName}" archived`,
       data: result,
     });
   } catch (err) {
-    console.error('Error deleting company:', err);
-    const message = err instanceof Error ? err.message : 'Failed to delete company';
+    console.error('Error archiving company:', err);
+    const message = err instanceof Error ? err.message : 'Failed to archive company';
     const status = message === 'Company not found' ? 404 : 500;
     return NextResponse.json({ error: message }, { status });
   }

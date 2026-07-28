@@ -295,6 +295,32 @@ export function buildAuditSummary(
         parts.length ? ` (${parts.join(', ')})` : ''
       }`;
     }
+    case ADMIN_AUDIT_ACTION.COMPANY_ARCHIVE: {
+      const dbCount = typeof d.dbBackedUpDocuments === 'number' ? d.dbBackedUpDocuments : null;
+      const objCount = typeof d.awsBackedUpObjects === 'number' ? d.awsBackedUpObjects : null;
+      const subsCount = typeof d.stripeSubscriptionsCancelled === 'number' ? d.stripeSubscriptionsCancelled : null;
+      const parts = [
+        dbCount != null ? `${dbCount} document(s)` : null,
+        objCount != null ? `${objCount} S3 object(s)` : null,
+        subsCount != null ? `${subsCount} Stripe subscription(s)` : null,
+      ].filter(Boolean);
+      return `Archived company${d.companyName ? ` “${d.companyName}”` : ''}${
+        parts.length ? ` (backed up ${parts.join(', ')})` : ''
+      }`;
+    }
+    case ADMIN_AUDIT_ACTION.COMPANY_RESTORE: {
+      const dbCount = typeof d.dbRestoredDocuments === 'number' ? d.dbRestoredDocuments : null;
+      const objCount = typeof d.awsRestoredObjects === 'number' ? d.awsRestoredObjects : null;
+      const subsCount = typeof d.stripeSubscriptionsCreated === 'number' ? d.stripeSubscriptionsCreated : null;
+      const parts = [
+        dbCount != null ? `${dbCount} document(s)` : null,
+        objCount != null ? `${objCount} S3 object(s)` : null,
+        subsCount != null ? `${subsCount} Stripe subscription(s)` : null,
+      ].filter(Boolean);
+      return `Restored archived company${d.companyName ? ` “${d.companyName}”` : ''}${
+        parts.length ? ` (restored ${parts.join(', ')})` : ''
+      }`;
+    }
     case ADMIN_AUDIT_ACTION.PLAN_QUOTA_UPDATE:
       return `Updated plan quota${d.planName ? ` for “${d.planName}”` : ''}${formatQuotaChangeSuffix(d)}`;
     case ADMIN_AUDIT_ACTION.CRON_TRIGGER:

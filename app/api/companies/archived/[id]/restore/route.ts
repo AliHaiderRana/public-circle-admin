@@ -6,15 +6,14 @@ import {
   ADMIN_AUDIT_ACTION,
   ADMIN_AUDIT_CATEGORY,
 } from '@/lib/admin-audit';
-import { performCompanyDeletion } from '@/lib/company-deletion.server';
+import { performCompanyRestore } from '@/lib/company-archive.server';
 
 /**
- * POST /api/companies/[id]/delete
- * Super-admin only. Permanently deletes a company: cancels its Stripe
- * subscriptions, deletes its S3 objects, then deletes every MongoDB document
- * that references it. Irreversible. Requires the caller to re-enter their
- * own admin password (re-authentication before an irreversible action),
- * checked server-side behind the admin UI's own confirmation safeguard.
+ * POST /api/companies/archived/[id]/restore
+ * Super-admin only. Restores an archived company: re-inserts its MongoDB
+ * documents, copies its S3 files back, and recreates its Stripe
+ * subscription(s) (new subscription ids, billed immediately). Requires the
+ * caller to re-enter their own admin password, same as archive/delete.
  */
 export async function POST(
   request: NextRequest,
@@ -25,7 +24,7 @@ export async function POST(
 
   const { id } = await params;
   if (!mongoose.Types.ObjectId.isValid(id)) {
-    return NextResponse.json({ error: 'Invalid company ID' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid archived company ID' }, { status: 400 });
   }
 
   let password: string;
@@ -45,36 +44,38 @@ export async function POST(
   }
 
   try {
-    const result = await performCompanyDeletion(id);
+    const result = await performCompanyRestore(id, session.email);
 
     const auditSession = toAdminAuditSession(session);
     if (auditSession) {
       await logAdminActivity(auditSession, {
-        action: ADMIN_AUDIT_ACTION.COMPANY_DELETE,
+        action: ADMIN_AUDIT_ACTION.COMPANY_RESTORE,
         category: ADMIN_AUDIT_CATEGORY.COMPANY,
-        resourceType: 'company',
+        resourceType: 'archived_company',
         resourceId: id,
         details: {
           companyName: result.companyName,
-          dbDocumentsDeleted: result.db.deletedDocuments,
-          dbCollectionsAffected: result.db.deletedCollections,
-          awsObjectsDeleted: result.aws.deletedObjects,
-          awsBytesDeleted: result.aws.deletedBytes,
+          dbRestoredDocuments: result.db.restoredDocuments,
+          dbRestoredCollections: result.db.restoredCollections,
+          awsRestoredObjects: result.aws.restoredObjects,
           awsErrors: result.aws.errors,
-          stripeSubscriptionsCancelled: result.stripe.cancelled,
+          stripeSubscriptionsCreated: result.stripe.createdSubscriptions,
           stripeErrors: result.stripe.errors,
         },
       });
     }
 
+    const hadErrors = result.aws.errors.length > 0 || result.stripe.errors.length > 0;
     return NextResponse.json({
-      message: `Company "${result.companyName}" permanently deleted`,
+      message: hadErrors
+        ? `Company "${result.companyName}" partially restored — some steps need attention`
+        : `Company "${result.companyName}" restored`,
       data: result,
     });
   } catch (err) {
-    console.error('Error deleting company:', err);
-    const message = err instanceof Error ? err.message : 'Failed to delete company';
-    const status = message === 'Company not found' ? 404 : 500;
+    console.error('Error restoring company:', err);
+    const message = err instanceof Error ? err.message : 'Failed to restore company';
+    const status = message === 'Archived company record not found' ? 404 : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 import {
   Search,
   Building2,
@@ -41,6 +42,7 @@ import {
   ArrowDown,
   Send,
   Mail,
+  Archive,
 } from "lucide-react";
 
 export default function CompaniesPage() {
@@ -162,6 +164,13 @@ export default function CompaniesPage() {
           <p className="text-muted-foreground">
             Manage all registered organizations and their settings.
           </p>
+          <Link
+            href="/dashboard/companies/archived"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mt-1"
+          >
+            <Archive className="h-3.5 w-3.5" />
+            Archived companies
+          </Link>
         </div>
         <div className="flex items-center gap-4 text-sm text-muted-foreground bg-card p-2 rounded-lg border">
           <div className="flex items-center gap-1 px-2 border-r">
@@ -288,6 +297,7 @@ export default function CompaniesPage() {
                 <SelectItem value="SUSPENDED">Suspended</SelectItem>
                 <SelectItem value="BLOCKED">Blocked</SelectItem>
                 <SelectItem value="DELETED">Deleted</SelectItem>
+                <SelectItem value="ARCHIVED">Archived</SelectItem>
               </SelectContent>
             </Select>
 

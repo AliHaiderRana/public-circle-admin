@@ -17,6 +17,8 @@ import {
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
 export type CompanyStripeSubscriptionItemRow = {
+  /** Stripe Price id — needed to recreate this item on restore. */
+  priceId: string | null;
   productName: string | null;
   amount: number | null;
   currency: string | null;
@@ -41,7 +43,7 @@ export type CompanyDeletionPreview = {
   };
 };
 
-async function listCancelableSubscriptions(
+export async function listCancelableSubscriptions(
   customerId: string
 ): Promise<CompanyStripeSubscriptionRow[]> {
   const subs = await stripe.subscriptions.list({
@@ -77,6 +79,7 @@ async function listCancelableSubscriptions(
     items: s.items.data.map((item) => {
       const productId = typeof item.price?.product === 'string' ? item.price.product : null;
       return {
+        priceId: item.price?.id ?? null,
         productName: (productId && productNameById.get(productId)) || null,
         amount: item.price?.unit_amount ?? null,
         currency: item.price?.currency ?? null,
@@ -87,7 +90,7 @@ async function listCancelableSubscriptions(
   }));
 }
 
-async function cancelCompanySubscriptions(
+export async function cancelCompanySubscriptions(
   customerId: string
 ): Promise<{ cancelled: number; errors: string[] }> {
   const subs = await listCancelableSubscriptions(customerId);
