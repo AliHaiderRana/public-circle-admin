@@ -10,13 +10,13 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import {
-  ArrowLeft, 
-  Building2, 
-  Users, 
-  Mail, 
-  Send, 
-  FileText, 
-  Pause, 
+  ArrowLeft,
+  Building2,
+  Users,
+  Mail,
+  Send,
+  FileText,
+  Pause,
   Archive,
   UserPlus,
   Activity,
@@ -26,9 +26,11 @@ import {
   Loader2,
   Play,
   LogIn,
+  Trash2,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { startImpersonation } from '@/lib/impersonate-client';
+import { DeleteCompanyDialog } from '@/components/DeleteCompanyDialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -93,10 +95,12 @@ export default function CompanyDetailPage() {
   const router = useRouter();
   const { token: adminToken, user: authUser } = useAuth();
   const isPartnerView = Boolean(authUser?.isPartner);
+  const isSuperAdmin = Boolean(authUser?.isSuperAdmin);
   const [companyDetails, setCompanyDetails] = useState<CompanyDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [impersonateUserId, setImpersonateUserId] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     if (params.id) {
@@ -371,6 +375,16 @@ export default function CompanyDetailPage() {
               </AlertDialogContent>
             </AlertDialog>
           ) : null}
+          {isSuperAdmin && (
+            <Button
+              variant="destructive"
+              className="flex items-center gap-2"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete Company
+            </Button>
+          )}
         </div>
       </div>
 
@@ -759,6 +773,19 @@ export default function CompanyDetailPage() {
         </Card>
 
       </div>
+
+      {isSuperAdmin && (
+        <DeleteCompanyDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          companyId={companyDetails.company.id}
+          companyName={companyDetails.company.name}
+          onDeleted={() => {
+            toast.success(`"${companyDetails.company.name}" permanently deleted`);
+            router.push('/dashboard/companies');
+          }}
+        />
+      )}
     </div>
   );
 }

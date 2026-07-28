@@ -282,6 +282,19 @@ export function buildAuditSummary(
       return `Blocked company${d.companyName ? ` “${d.companyName}”` : ''}${formatImpactSuffix(d)}`;
     case ADMIN_AUDIT_ACTION.COMPANY_UNBLOCK:
       return `Unblocked company${d.companyName ? ` “${d.companyName}”` : ''}${formatImpactSuffix(d)}`;
+    case ADMIN_AUDIT_ACTION.COMPANY_DELETE: {
+      const dbCount = typeof d.dbDocumentsDeleted === 'number' ? d.dbDocumentsDeleted : null;
+      const objCount = typeof d.awsObjectsDeleted === 'number' ? d.awsObjectsDeleted : null;
+      const subsCount = typeof d.stripeSubscriptionsCancelled === 'number' ? d.stripeSubscriptionsCancelled : null;
+      const parts = [
+        dbCount != null ? `${dbCount} document(s)` : null,
+        objCount != null ? `${objCount} S3 object(s)` : null,
+        subsCount != null ? `${subsCount} Stripe subscription(s)` : null,
+      ].filter(Boolean);
+      return `Permanently deleted company${d.companyName ? ` “${d.companyName}”` : ''}${
+        parts.length ? ` (${parts.join(', ')})` : ''
+      }`;
+    }
     case ADMIN_AUDIT_ACTION.PLAN_QUOTA_UPDATE:
       return `Updated plan quota${d.planName ? ` for “${d.planName}”` : ''}${formatQuotaChangeSuffix(d)}`;
     case ADMIN_AUDIT_ACTION.CRON_TRIGGER:

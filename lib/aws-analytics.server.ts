@@ -1,4 +1,5 @@
 import {
+  DeleteObjectsCommand,
   GetObjectCommand,
   ListBucketsCommand,
   ListObjectsV2Command,
@@ -463,4 +464,106 @@ export async function getCompanyAwsUsage(
 ): Promise<CompanyUsageRow | null> {
   const analytics = await getAwsAnalytics(db);
   return analytics.companies.find((c) => c.companyId === companyId.toLowerCase()) ?? null;
+}
+
+/**
+ * Same lookup as getCompanyAwsUsage, but never blocks on a full account-wide
+ * scan — used where response time matters more than freshness (e.g. the
+ * company deletion preview). Returns null immediately if the cache hasn't
+ * been warmed yet, kicking off a background refresh so a later call (or the
+ * AWS Analytics page) finds it ready.
+ */
+export async function peekCompanyAwsUsage(
+  db: Db,
+  companyId: string
+): Promise<CompanyUsageRow | null> {
+  if (!cache) {
+    void startRefresh(db).catch(() => {});
+    return null;
+  }
+  if (Date.now() - cache.cachedAt >= CACHE_TTL_MS) {
+    void startRefresh(db).catch(() => {});
+  }
+  return cache.data.companies.find((c) => c.companyId === companyId.toLowerCase()) ?? null;
+}
+
+/** Every object key belonging to this company within one bucket, paginated with the same safety cap as a full bucket scan. */
+async function collectCompanyKeysInBucket(
+  client: S3Client,
+  bucketName: string,
+  companyId: string
+): Promise<{ key: string; size: number }[]> {
+  const matches: { key: string; size: number }[] = [];
+  let token: string | undefined;
+  let pages = 0;
+  do {
+    const res = await client.send(
+      new ListObjectsV2Command({ Bucket: bucketName, ContinuationToken: token, MaxKeys: 1000 })
+    );
+    pages += 1;
+    for (const obj of res.Contents ?? []) {
+      if (obj.Key && keyBelongsToCompany(obj.Key, companyId)) {
+        matches.push({ key: obj.Key, size: obj.Size ?? 0 });
+      }
+    }
+    token = res.IsTruncated ? res.NextContinuationToken : undefined;
+    if (pages >= MAX_PAGES_PER_BUCKET && token) break;
+  } while (token);
+  return matches;
+}
+
+/**
+ * Permanently deletes every S3 object belonging to this company, across only
+ * the buckets the cached account-wide scan already found it in. Invalidates
+ * that cache afterward so the next analytics view reflects the deletion.
+ */
+export async function deleteCompanyObjects(
+  db: Db,
+  companyId: string
+): Promise<{ deletedObjects: number; deletedBytes: number; errors: string[] }> {
+  const usage = await getCompanyAwsUsage(db, companyId);
+  if (!usage || usage.buckets.length === 0) {
+    return { deletedObjects: 0, deletedBytes: 0, errors: [] };
+  }
+
+  const setup = createClient();
+  if (!setup) {
+    throw new Error('AWS credentials are not configured');
+  }
+  const { client } = setup;
+
+  let deletedObjects = 0;
+  let deletedBytes = 0;
+  const errors: string[] = [];
+
+  for (const { bucket } of usage.buckets) {
+    try {
+      const keys = await collectCompanyKeysInBucket(client, bucket, companyId);
+      for (let i = 0; i < keys.length; i += 1000) {
+        const batch = keys.slice(i, i + 1000);
+        const res = await client.send(
+          new DeleteObjectsCommand({
+            Bucket: bucket,
+            Delete: { Objects: batch.map((k) => ({ Key: k.key })), Quiet: true },
+          })
+        );
+        const failedKeys = new Set((res.Errors ?? []).map((e) => e.Key));
+        for (const k of batch) {
+          if (!failedKeys.has(k.key)) {
+            deletedObjects += 1;
+            deletedBytes += k.size;
+          }
+        }
+        for (const err of res.Errors ?? []) {
+          errors.push(`${bucket}/${err.Key}: ${err.Message}`);
+        }
+      }
+    } catch (err) {
+      errors.push(`${bucket}: ${err instanceof Error ? err.message : 'Failed to delete objects'}`);
+    }
+  }
+
+  cache = null;
+
+  return { deletedObjects, deletedBytes, errors };
 }

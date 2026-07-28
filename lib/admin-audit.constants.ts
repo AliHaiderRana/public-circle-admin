@@ -26,6 +26,7 @@ export const ADMIN_AUDIT_ACTION = {
   CUSTOMER_REQUEST_STATUS: 'customer_request.status_update',
   COMPANY_BLOCK: 'company.block',
   COMPANY_UNBLOCK: 'company.unblock',
+  COMPANY_DELETE: 'company.delete',
   PLAN_QUOTA_UPDATE: 'plan.quota_update',
   CRON_TRIGGER: 'cron.trigger',
   CRON_SEED: 'cron.seed',
