@@ -17,7 +17,6 @@ import { runWithOptionalTransaction } from '@/lib/run-with-optional-transaction'
 import {
   detectCompanyReferencingCollections,
   deleteCompanyDbFootprint,
-  getClusterName,
 } from '@/lib/db-analytics.server';
 import {
   createClient,
@@ -31,16 +30,16 @@ import {
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
+/**
+ * AWS_BACKUP_BUCKET is set per deployment (public-circle-admin-staging vs
+ * public-circle-admin-production), matching this app's existing per-env
+ * bucket convention — so the path within it needs no separate staging/prod
+ * folder, just companies/<companyId>/.
+ */
 function getBackupBucket(): string {
   const bucket = (process.env.AWS_BACKUP_BUCKET || '').trim();
   if (!bucket) throw new Error('AWS_BACKUP_BUCKET is not configured');
   return bucket;
-}
-
-/** "staging" or "prod" — reuses the same cluster-hostname signal as DB Analytics. */
-function getBackupEnvFolder(): 'staging' | 'prod' {
-  const clusterName = (getClusterName() || '').toLowerCase();
-  return clusterName.includes('staging') ? 'staging' : 'prod';
 }
 
 /** Encodes each path segment individually so CopySource stays valid for keys containing slashes. */
@@ -134,7 +133,7 @@ export async function performCompanyArchive(
   const db = mongoose.connection.db;
   if (!db) throw new Error('Database connection unavailable');
 
-  const prefix = `${getBackupEnvFolder()}/companies/${companyId}/`;
+  const prefix = `companies/${companyId}/`;
   const objectId = new mongoose.Types.ObjectId(companyId);
 
   // --- Step 1: back up MongoDB documents ---
