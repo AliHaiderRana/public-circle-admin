@@ -1,5 +1,5 @@
 const PUBLIC_CIRCLES_LOGO_URL =
-  'https://publiccircles.s3.ca-central-1.amazonaws.com/PCLogoWhitetext.png';
+  'https://public-circle-production.s3.ca-central-1.amazonaws.com/PCLogoWhitetext.png';
 const FOOTER_LOGO_HEIGHT = 33;
 const FOOTER_LOGO_WIDTH = 161;
 const FOOTER_LOGO_IMG_STYLE = `height:${FOOTER_LOGO_HEIGHT}px !important; width:auto !important; max-height:${FOOTER_LOGO_HEIGHT}px !important; border:0; display:block; -ms-interpolation-mode:bicubic;`;
