@@ -8,6 +8,7 @@ export type PartnerSocketEvent = {
   method: 'SOCKET';
   path: string;
   enabled: boolean;
+  adminEnabled?: boolean;
   label: string;
   auth: string;
   builtin?: boolean;
@@ -22,6 +23,7 @@ export type HttpIntegrationEndpoint = {
   method: string;
   path: string;
   enabled: boolean;
+  adminEnabled?: boolean;
   label: string;
   auth: string;
   builtin?: boolean;
@@ -55,6 +57,7 @@ export const DEFAULT_PARTNER_SOCKET_EVENTS: PartnerSocketEvent[] = [
     method: 'SOCKET',
     path: PARTNER_SOCKET_EVENT_NAMES.UNREAD_MESSAGES,
     enabled: true,
+    adminEnabled: true,
     label: 'Unread chat messages (server → client)',
     auth: SOCKET_AUTH,
     builtin: true,
@@ -67,6 +70,7 @@ export const DEFAULT_PARTNER_SOCKET_EVENTS: PartnerSocketEvent[] = [
     method: 'SOCKET',
     path: PARTNER_SOCKET_EVENT_NAMES.UNREAD_MESSAGES_REFRESH,
     enabled: true,
+    adminEnabled: true,
     label: 'Refresh unread messages (client → server)',
     auth: SOCKET_AUTH,
     builtin: true,
@@ -79,6 +83,7 @@ export const DEFAULT_PARTNER_SOCKET_EVENTS: PartnerSocketEvent[] = [
     method: 'SOCKET',
     path: PARTNER_SOCKET_EVENT_NAMES.OPEN_TICKETS,
     enabled: true,
+    adminEnabled: true,
     label: 'Open support tickets (server → client)',
     auth: SOCKET_AUTH,
     builtin: true,
@@ -91,6 +96,7 @@ export const DEFAULT_PARTNER_SOCKET_EVENTS: PartnerSocketEvent[] = [
     method: 'SOCKET',
     path: PARTNER_SOCKET_EVENT_NAMES.OPEN_TICKETS_REFRESH,
     enabled: true,
+    adminEnabled: true,
     label: 'Refresh open tickets (client → server)',
     auth: SOCKET_AUTH,
     builtin: true,
@@ -106,6 +112,7 @@ export const DEFAULT_HTTP_INTEGRATION_ENDPOINTS: HttpIntegrationEndpoint[] = [
     method: 'POST',
     path: THIRD_PARTY_USER_PROVISION_PATH,
     enabled: true,
+    adminEnabled: true,
     label: 'Provision referral user on signup',
     auth: HTTP_AUTH,
     builtin: true,
@@ -145,6 +152,7 @@ function mergeSocketEndpoints(stored: Partial<AdminIntegrationEndpoint>[]): Part
       return {
         ...defaultEntry,
         enabled: item.enabled ?? defaultEntry.enabled,
+        adminEnabled: item.adminEnabled ?? defaultEntry.adminEnabled,
         path: item.path?.trim() || defaultEntry.path,
         requestBodySample: item.requestBodySample ?? defaultEntry.requestBodySample,
         responseSample: item.responseSample ?? defaultEntry.responseSample,
@@ -159,6 +167,7 @@ function mergeSocketEndpoints(stored: Partial<AdminIntegrationEndpoint>[]): Part
       method: 'SOCKET',
       path: item.path?.trim() || 'partner.custom-event',
       enabled: item.enabled ?? true,
+      adminEnabled: item.adminEnabled ?? true,
       label: item.label?.trim() || item.path || 'Custom socket event',
       auth: item.auth?.trim() || SOCKET_AUTH,
       builtin: false,
@@ -187,6 +196,7 @@ function mergeHttpEndpoints(stored: Partial<AdminIntegrationEndpoint>[]): HttpIn
     return {
       ...base,
       enabled: item.enabled ?? base.enabled,
+      adminEnabled: item.adminEnabled ?? base.adminEnabled,
       path: item.path?.trim() || base.path,
       label: item.label?.trim() || base.label,
       requestBodySample: item.requestBodySample ?? base.requestBodySample,
@@ -221,9 +231,13 @@ export function mergePartnerSocketEvents(
 }
 
 export function getEnabledListenEvents(events: PartnerSocketEvent[]): string[] {
-  return events.filter((e) => e.enabled && e.kind === 'socket-listen').map((e) => e.path);
+  return events
+    .filter((e) => e.enabled && e.adminEnabled !== false && e.kind === 'socket-listen')
+    .map((e) => e.path);
 }
 
 export function getEnabledEmitEvents(events: PartnerSocketEvent[]): string[] {
-  return events.filter((e) => e.enabled && e.kind === 'socket-emit').map((e) => e.path);
+  return events
+    .filter((e) => e.enabled && e.adminEnabled !== false && e.kind === 'socket-emit')
+    .map((e) => e.path);
 }

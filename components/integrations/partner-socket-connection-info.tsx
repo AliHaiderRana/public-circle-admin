@@ -11,6 +11,7 @@ type PartnerSocketConnectionInfoProps = {
   partnerRealtimeSocketUrl?: string;
   serverBaseUrl?: string;
   onPartnerRealtimeSocketUrlChange?: (value: string) => void;
+  disabled?: boolean;
 };
 
 export function PartnerSocketConnectionInfo({
@@ -18,6 +19,7 @@ export function PartnerSocketConnectionInfo({
   partnerRealtimeSocketUrl = '',
   serverBaseUrl,
   onPartnerRealtimeSocketUrlChange,
+  disabled = false,
 }: PartnerSocketConnectionInfoProps) {
   const connection = buildPartnerRealtimeConnectionInfo({
     adminPortalUrl,
@@ -40,6 +42,7 @@ export function PartnerSocketConnectionInfo({
           id="partner-socket-url"
           placeholder={connection.connectionUrl}
           value={partnerRealtimeSocketUrl}
+          disabled={disabled}
           onChange={(event) => onPartnerRealtimeSocketUrlChange?.(event.target.value)}
         />
         <p className="text-xs text-muted-foreground">

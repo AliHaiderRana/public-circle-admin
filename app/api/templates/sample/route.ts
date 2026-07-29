@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import mongoose from 'mongoose';
 import dbConnect from '@/lib/db';
 import { getServerSession, toAdminAuditSession } from '@/lib/auth';
 import {
@@ -168,12 +169,15 @@ export async function POST(request: Request) {
       );
     }
 
+    const templateId = new mongoose.Types.ObjectId();
+
     const thumbnailURL = await generateTemplateThumbnailUrl({
       html: payload.body,
-      templateName: payload.name,
+      templateId: String(templateId),
     });
 
     const template = await Template.create({
+      _id: templateId,
       name: payload.name,
       description: payload.description,
       kind: TEMPLATE_KINDS.SAMPLE,

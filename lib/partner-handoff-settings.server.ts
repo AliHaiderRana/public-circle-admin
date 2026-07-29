@@ -6,6 +6,7 @@ export async function isPartnerHandoffEnabled(): Promise<boolean> {
   return Boolean(
     adminPortal.enabled &&
       adminPortal.referralEnabled &&
+      adminPortal.partnerSidebarEnabled &&
       adminPortal.adminPortalUrl?.trim() &&
       resolveCustomerPortalSecret(adminPortal),
   );
@@ -22,6 +23,9 @@ export async function assertPartnerHandoffEnabled(): Promise<void> {
   }
   if (!adminPortal.referralEnabled) {
     throw new Error('Customer portal integration is disabled on the referral app');
+  }
+  if (!adminPortal.partnerSidebarEnabled) {
+    throw new Error('Customer portal child integration is disabled');
   }
   if (!adminPortal.adminPortalUrl?.trim() || !resolveCustomerPortalSecret(adminPortal)) {
     throw new Error('Customer portal integration is not configured');
