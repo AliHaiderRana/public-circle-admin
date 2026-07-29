@@ -185,7 +185,7 @@ export async function PATCH(
       updateDoc.size = Buffer.byteLength(payload.body, 'utf-8');
       updateDoc.thumbnailURL = await generateTemplateThumbnailUrl({
         html: payload.body,
-        templateName: payload.name || currentTemplate.name,
+        templateId: id,
       });
     }
 

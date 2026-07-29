@@ -33,15 +33,6 @@ function normalizeHtml(html: string) {
   return `<!doctype html><html><head><meta charset="utf-8" /></head><body>${cleaned}</body></html>`;
 }
 
-function sanitizeFilename(value = '') {
-  return String(value)
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-zA-Z0-9.-]/g, '')
-    .replace(/-+/g, '-')
-    .toLowerCase();
-}
-
 function createS3Client() {
   const region = process.env.AWS_REGION || process.env.S3_REGION;
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
@@ -86,28 +77,41 @@ async function renderThumbnailBuffer(html: string) {
   }
 }
 
+/**
+ * Sample thumbnails live ONLY on the main server bucket:
+ * sample-templates/{templateId}/{timestamp}.png
+ *
+ * Do not use admin S3BUCKET — that bucket is for admin assets/archives only.
+ */
 export async function generateTemplateThumbnailUrl({
   html,
-  templateName,
+  templateId,
 }: {
   html: string;
-  templateName?: string;
+  templateId: string;
 }) {
+  if (!templateId) {
+    throw new Error('templateId is required to store sample thumbnail');
+  }
+
   const buffer = await renderThumbnailBuffer(html);
 
-  const bucket =
-    process.env.S3BUCKET ||
-    process.env.AWS_S3_BUCKET ||
-    process.env.TEMPLATE_THUMBNAILS_BUCKET;
+  // Server / public-circle bucket only (never admin bucket)
+  const bucket = (
+    process.env.TEMPLATE_THUMBNAILS_BUCKET ||
+    process.env.PUBLIC_CIRCLE_S3BUCKET ||
+    ''
+  ).trim();
   const region = process.env.AWS_REGION || process.env.S3_REGION;
   const s3Client = createS3Client();
 
   if (!bucket || !region || !s3Client) {
-    throw new Error('S3 thumbnail configuration is missing');
+    throw new Error(
+      'S3 thumbnail configuration is missing (set TEMPLATE_THUMBNAILS_BUCKET to the server bucket)',
+    );
   }
 
-  const basename = sanitizeFilename(templateName || 'sample-template') || 'sample-template';
-  const key = `thumbnails/admin/${basename}.png`;
+  const key = `sample-templates/${templateId}/${Date.now()}.png`;
 
   await s3Client.send(
     new PutObjectCommand({
@@ -116,7 +120,7 @@ export async function generateTemplateThumbnailUrl({
       Body: buffer,
       ContentType: 'image/png',
       CacheControl: 'public, max-age=31536000, immutable',
-    })
+    }),
   );
 
   const publicBaseUrl = process.env.TEMPLATE_THUMBNAIL_PUBLIC_BASE_URL?.trim();
