@@ -2,8 +2,6 @@
 
 # dependencies
 /node_modules
-.env
-.env.local
 /.pnp
 .pnp.*
 .yarn/*
@@ -41,3 +39,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 config.bat
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
