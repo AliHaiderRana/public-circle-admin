@@ -11,6 +11,7 @@ import {
   ADMIN_AUDIT_ACTION,
   ADMIN_AUDIT_CATEGORY,
 } from '@/lib/admin-audit';
+import { internalApiFetch } from '@/lib/internal-api.server';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
@@ -205,6 +206,31 @@ export async function PATCH(
 
         await company.save();
       }
+    }
+
+    // Push the status change to the customer's connected sockets so their UI
+    // updates (e.g. primary key unlock) without a page reload.
+    try {
+      const notifyRes = await internalApiFetch('/customer-requests/notify-update', {
+        method: 'POST',
+        body: JSON.stringify({
+          companyId: String(custRequest.companyId ?? ''),
+          requestId: String(custRequest._id),
+          type: custRequest.type,
+          status,
+          projectId:
+            typeof custRequest.metadata?.projectId === 'string'
+              ? custRequest.metadata.projectId
+              : null,
+        }),
+      });
+      if (!notifyRes.ok) {
+        console.error(
+          `Customer request broadcast failed: ${notifyRes.status} ${await notifyRes.text()}`,
+        );
+      }
+    } catch (notifyErr) {
+      console.error('Failed to broadcast customer request update:', notifyErr);
     }
 
     const companyForAudit = await Company.findById(custRequest.companyId)

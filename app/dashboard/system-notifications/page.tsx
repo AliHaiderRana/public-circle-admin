@@ -16,7 +16,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, Bell, Mail, MailWarning } from 'lucide-react';
+import { Loader2, Bell, CheckCircle2, Database, Mail, MailWarning, XCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   ConfirmToggleDialog,
   type ConfirmToggleRequest,
@@ -24,6 +25,7 @@ import {
 import {
   computeSupportRecipients,
   computeDlqRecipients,
+  computeDbRecipients,
   type AdminRecipient,
   type TeamRecipient,
   type SystemNotificationSettings,
@@ -33,6 +35,7 @@ type SettingsState = SystemNotificationSettings & {
   adminRecipients: AdminRecipient[];
   supportRecipients: TeamRecipient[];
   dlqRecipients: TeamRecipient[];
+  dbRecipients: TeamRecipient[];
 };
 
 type PendingToggle = ConfirmToggleRequest & {
@@ -147,6 +150,14 @@ export default function SystemNotificationsPage() {
     });
   }, [settings]);
 
+  const dbRecipients = useMemo(() => {
+    if (!settings) return [];
+    return computeDbRecipients({
+      dbSendAlertEmail: settings.dbSendAlertEmail,
+      adminRecipients: settings.adminRecipients,
+    });
+  }, [settings]);
+
   const ToggleRow = ({
     id,
     label,
@@ -167,7 +178,7 @@ export default function SystemNotificationsPage() {
         <Label htmlFor={id} className="text-sm font-medium leading-none">
           {label}
         </Label>
-        <p className="text-sm text-neutral-500">{description}</p>
+        <p className="text-sm text-muted-foreground">{description}</p>
       </div>
       <Switch
         id={id}
@@ -181,14 +192,16 @@ export default function SystemNotificationsPage() {
   const RecipientList = ({ recipients }: { recipients: TeamRecipient[] }) => (
     <div className="rounded-lg border bg-neutral-50 dark:bg-neutral-900/40 divide-y">
       {recipients.length === 0 ? (
-        <p className="p-4 text-sm text-neutral-500">No alert email recipients selected.</p>
+        <p className="p-4 text-sm text-muted-foreground">No alert email recipients selected.</p>
       ) : (
         recipients.map((row) => (
           <div
             key={`${row.source}-${row.email}`}
             className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
           >
-            <span className="font-medium">{row.email}</span>
+            <span className="font-medium min-w-0 flex-1 truncate" title={row.email}>
+              {row.email}
+            </span>
             <Badge variant="outline" className="font-normal shrink-0">
               {row.source}
             </Badge>
@@ -201,7 +214,7 @@ export default function SystemNotificationsPage() {
   if (authLoading || !user?.isSuperAdmin) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-neutral-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -210,22 +223,21 @@ export default function SystemNotificationsPage() {
     <div className="max-w-5xl space-y-8">
       <div>
         <h2 className="text-3xl font-bold tracking-tight">System Notifications</h2>
-        <p className="text-neutral-500">
+        <p className="text-muted-foreground">
           Super admins control which alert emails are sent and which admin users receive them.
           In-app bell notifications are not configured here.
         </p>
       </div>
 
       {feedback && (
-        <p
-          className={
-            feedback.type === 'success'
-              ? 'rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800'
-              : 'rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800'
-          }
-        >
-          {feedback.text}
-        </p>
+        <Alert variant={feedback.type === 'error' ? 'destructive' : 'default'}>
+          {feedback.type === 'success' ? (
+            <CheckCircle2 className="h-4 w-4" />
+          ) : (
+            <XCircle className="h-4 w-4" />
+          )}
+          <AlertDescription>{feedback.text}</AlertDescription>
+        </Alert>
       )}
 
       <Card>
@@ -276,6 +288,22 @@ export default function SystemNotificationsPage() {
                   })
                 }
               />
+              <ToggleRow
+                id="dbSendAlertEmail"
+                label="DB storage alerts"
+                description="Notification once total MongoDB cluster storage crosses 4 GB. Checked daily."
+                checked={settings.dbSendAlertEmail}
+                onRequestChange={(nextValue) =>
+                  requestBooleanToggle({
+                    title: nextValue ? 'Enable DB storage alert emails?' : 'Disable DB storage alert emails?',
+                    description: nextValue
+                      ? 'Selected admins can receive DB storage alert emails.'
+                      : 'DB storage alert emails will stop being sent.',
+                    nextValue,
+                    patchBody: { dbSendAlertEmail: nextValue },
+                  })
+                }
+              />
             </>
           )}
         </CardContent>
@@ -293,7 +321,7 @@ export default function SystemNotificationsPage() {
           {loading || !settings ? (
             <Skeleton className="h-48 w-full" />
           ) : settings.adminRecipients.length === 0 ? (
-            <p className="text-sm text-neutral-500">No admin users found.</p>
+            <p className="text-sm text-muted-foreground">No admin users found.</p>
           ) : (
             <Table>
               <TableHeader>
@@ -302,6 +330,7 @@ export default function SystemNotificationsPage() {
                   <TableHead>Email</TableHead>
                   <TableHead className="w-[120px] text-center">Support</TableHead>
                   <TableHead className="w-[120px] text-center">DLQ</TableHead>
+                  <TableHead className="w-[120px] text-center">DB</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -318,7 +347,7 @@ export default function SystemNotificationsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <p className="text-sm text-neutral-600">{admin.email}</p>
+                      <p className="text-sm text-muted-foreground">{admin.email}</p>
                     </TableCell>
                     <TableCell className="text-center">
                       <Switch
@@ -370,6 +399,31 @@ export default function SystemNotificationsPage() {
                         disabled={toggleSaving || !settings.dlqSendAlertEmail}
                       />
                     </TableCell>
+                    <TableCell className="text-center">
+                      <Switch
+                        checked={admin.notifyDbAlertEmail}
+                        onCheckedChange={() =>
+                          requestBooleanToggle({
+                            title: admin.notifyDbAlertEmail
+                              ? `Stop DB storage alerts for ${admin.email}?`
+                              : `Send DB storage alerts to ${admin.email}?`,
+                            description: admin.notifyDbAlertEmail
+                              ? `${admin.email} will no longer receive DB storage alert emails.`
+                              : `${admin.email} will receive DB storage alert emails.`,
+                            nextValue: !admin.notifyDbAlertEmail,
+                            patchBody: {
+                              adminPreferences: [
+                                {
+                                  adminId: admin.id,
+                                  notifyDbAlertEmail: !admin.notifyDbAlertEmail,
+                                },
+                              ],
+                            },
+                          })
+                        }
+                        disabled={toggleSaving || !settings.dbSendAlertEmail}
+                      />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -378,11 +432,11 @@ export default function SystemNotificationsPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-3">
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <Mail className="h-4 w-4 text-neutral-500" />
+              <Mail className="h-4 w-4 text-muted-foreground" />
               <CardTitle className="text-base">Support alert recipients</CardTitle>
             </div>
           </CardHeader>
@@ -394,12 +448,24 @@ export default function SystemNotificationsPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <MailWarning className="h-4 w-4 text-neutral-500" />
+              <MailWarning className="h-4 w-4 text-muted-foreground" />
               <CardTitle className="text-base">DLQ alert recipients</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
             <RecipientList recipients={dlqRecipients} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Database className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-base">DB alert recipients</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <RecipientList recipients={dbRecipients} />
           </CardContent>
         </Card>
       </div>

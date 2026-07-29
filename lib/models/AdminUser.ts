@@ -32,6 +32,10 @@ const schema = new mongoose.Schema(
         type: Boolean,
         default: true,
       },
+      dbAlertEmail: {
+        type: Boolean,
+        default: true,
+      },
       supportDetailEmail: {
         type: Boolean,
         default: true,

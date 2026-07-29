@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Layers, Loader2, Save } from 'lucide-react';
+import { CheckCircle2, Layers, Loader2, Save, XCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -218,21 +219,23 @@ export default function PlanQuotasPage() {
     <div className="max-w-5xl space-y-8">
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Plan Quotas</h2>
-        <p className="text-neutral-500">
+        <p className="text-muted-foreground">
           Edit subscription plan limits shown to customers (emails, bandwidth, contacts, projects).
           Prices shown in USD from Stripe (same as the customer app). Only quotas are editable here.
         </p>
       </div>
 
       {errorMessage ? (
-        <p className="text-sm text-red-600" role="alert">
-          {errorMessage}
-        </p>
+        <Alert variant="destructive">
+          <XCircle className="h-4 w-4" />
+          <AlertDescription>{errorMessage}</AlertDescription>
+        </Alert>
       ) : null}
       {successMessage ? (
-        <p className="text-sm text-green-600" role="status">
-          {successMessage}
-        </p>
+        <Alert role="status">
+          <CheckCircle2 className="h-4 w-4" />
+          <AlertDescription>{successMessage}</AlertDescription>
+        </Alert>
       ) : null}
 
       {loading ? (
@@ -249,7 +252,7 @@ export default function PlanQuotasPage() {
         </Card>
       ) : plans.length === 0 ? (
         <Card>
-          <CardContent className="py-10 text-center text-neutral-500">No plans found.</CardContent>
+          <CardContent className="py-10 text-center text-muted-foreground">No plans found.</CardContent>
         </Card>
       ) : (
         <div className="space-y-6">
@@ -266,7 +269,7 @@ export default function PlanQuotasPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <Layers className="h-5 w-5 text-primary" />
                         <CardTitle>{plan.name}</CardTitle>
-                        <span className="text-sm font-normal text-neutral-500">
+                        <span className="text-sm font-normal text-muted-foreground">
                           {plan.stripePrice ? (
                             <>
                               ${formatUsdPrice(plan.stripePrice.unitAmount)}{' '}
@@ -326,12 +329,12 @@ export default function PlanQuotasPage() {
                           }
                         />
                         {field.key === 'bandwidth' ? (
-                          <p className="text-xs text-neutral-500">
+                          <p className="text-xs text-muted-foreground">
                             Customer display: {formatByteUnit(draft?.bandwidth ?? 0)}
                           </p>
                         ) : null}
                         {field.hint && field.key !== 'bandwidth' ? (
-                          <p className="text-xs text-neutral-500">{field.hint}</p>
+                          <p className="text-xs text-muted-foreground">{field.hint}</p>
                         ) : null}
                       </div>
                     ))}
@@ -344,7 +347,7 @@ export default function PlanQuotasPage() {
       )}
 
       {changedPlanCount > 0 && !loading ? (
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-muted-foreground">
           {changedPlanCount} plan{changedPlanCount === 1 ? '' : 's'} with unsaved changes.
         </p>
       ) : null}

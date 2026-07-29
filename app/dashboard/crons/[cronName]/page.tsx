@@ -207,7 +207,7 @@ export default function CronDetailPage() {
   if (authLoading || (isSuperAdminDlqCron(cronName) && !user?.isSuperAdmin)) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-neutral-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -215,7 +215,7 @@ export default function CronDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-neutral-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -229,11 +229,11 @@ export default function CronDetailPage() {
         </Button>
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <AlertCircle className="h-12 w-12 text-neutral-400 mb-4" />
-            <h3 className="text-lg font-medium text-neutral-900 mb-2">
+            <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium text-foreground mb-2">
               Cron Not Found
             </h3>
-            <p className="text-neutral-500">
+            <p className="text-muted-foreground">
               The requested cron job could not be found.
             </p>
           </CardContent>
@@ -276,7 +276,7 @@ export default function CronDetailPage() {
               <h2 className="text-2xl xl:text-3xl font-bold tracking-tight break-words">
                 {cron.displayName}
               </h2>
-              <p className="text-neutral-500 break-words">{cron.description}</p>
+              <p className="text-muted-foreground break-words">{cron.description}</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -308,40 +308,36 @@ export default function CronDetailPage() {
 
         {/* Message */}
         {message && (
-          <div
-            className={`p-4 rounded-lg flex items-center gap-2 ${
-              message.type === "success"
-                ? "bg-green-50 text-green-700 border border-green-200"
-                : message.type === "error"
-                ? "bg-red-50 text-red-700 border border-red-200"
-                : "bg-blue-50 text-blue-700 border border-blue-200"
-            }`}
+          <Alert
+            variant={message.type === "error" ? "destructive" : "default"}
           >
             {message.type === "success" ? (
               <CheckCircle2 className="h-4 w-4" />
+            ) : message.type === "error" ? (
+              <XCircle className="h-4 w-4" />
             ) : (
-              <AlertCircle className="h-4 w-4" />
+              <Info className="h-4 w-4" />
             )}
-            <p className="text-sm">{message.text}</p>
-          </div>
+            <AlertDescription>{message.text}</AlertDescription>
+          </Alert>
         )}
 
         {/* Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-neutral-500">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
                 Schedule
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-neutral-400" />
+                <Clock className="h-4 w-4 text-muted-foreground" />
                 <div className="min-w-0">
                   <div className="font-mono text-sm font-bold break-all">
                     {cron.schedule || "Not scheduled"}
                   </div>
-                  <div className="text-xs text-neutral-500 break-words">
+                  <div className="text-xs text-muted-foreground break-words">
                     {getCronScheduleDescription(cron.schedule)}
                   </div>
                 </div>
@@ -351,18 +347,18 @@ export default function CronDetailPage() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-neutral-500">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
                 Last Run
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-neutral-400" />
+                <Calendar className="h-4 w-4 text-muted-foreground" />
                 <div>
                   <div className="text-sm font-bold">
                     {formatCronDateTime(cron.lastRunAt)}
                   </div>
-                  <div className="text-xs text-neutral-500">
+                  <div className="text-xs text-muted-foreground">
                     Duration: {formatDuration(cron.lastDurationMs)}
                   </div>
                 </div>
@@ -372,7 +368,7 @@ export default function CronDetailPage() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-neutral-500">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
                 Last Status
               </CardTitle>
             </CardHeader>
@@ -386,19 +382,17 @@ export default function CronDetailPage() {
                 ) : cron.lastRunAt ? (
                   <>
                     <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    <Badge className="bg-green-50 text-green-700 border-green-200">
-                      Success
-                    </Badge>
+                    <Badge>Success</Badge>
                   </>
                 ) : (
                   <>
-                    <Clock className="h-4 w-4 text-neutral-400" />
+                    <Clock className="h-4 w-4 text-muted-foreground" />
                     <Badge variant="secondary">Pending</Badge>
                   </>
                 )}
               </div>
               {cron.lastError && (
-                <p className="text-xs text-red-600 mt-2 truncate">
+                <p className="text-xs text-destructive mt-2 truncate">
                   {cron.lastError}
                 </p>
               )}
@@ -407,20 +401,20 @@ export default function CronDetailPage() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-neutral-500">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
                 {isDiskMaintenance ? "Space Reclaimed" : "Records Updated"}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2">
-                <Database className="h-4 w-4 text-neutral-400" />
+                <Database className="h-4 w-4 text-muted-foreground" />
                 <div>
                   <div className="text-2xl font-bold">
                     {isDiskMaintenance
                       ? formatReclaimedKb(cron.lastRecordsUpdated)
                       : cron.lastRecordsUpdated}
                   </div>
-                  <div className="text-xs text-neutral-500">Last run</div>
+                  <div className="text-xs text-muted-foreground">Last run</div>
                 </div>
               </div>
             </CardContent>
@@ -438,13 +432,13 @@ export default function CronDetailPage() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <div className="text-sm text-neutral-500 mb-1">
+                <div className="text-sm text-muted-foreground mb-1">
                   Total Executions
                 </div>
                 <div className="text-2xl font-bold">{totalCount}</div>
               </div>
               <div>
-                <div className="text-sm text-neutral-500 mb-1">
+                <div className="text-sm text-muted-foreground mb-1">
                   Success Rate
                 </div>
                 <div className="text-2xl font-bold text-green-600">
@@ -454,7 +448,7 @@ export default function CronDetailPage() {
                 </div>
               </div>
               <div>
-                <div className="text-sm text-neutral-500 mb-1">
+                <div className="text-sm text-muted-foreground mb-1">
                   Failed Executions
                 </div>
                 <div className="text-2xl font-bold text-red-600">
@@ -476,8 +470,9 @@ export default function CronDetailPage() {
                 </CardDescription>
               </div>
             </div>
-            <Alert className="mt-4 bg-blue-50 border-blue-200">
-              <AlertDescription className="text-blue-800">
+            <Alert className="mt-4">
+              <Info className="h-4 w-4" />
+              <AlertDescription>
                 We're maintaining only the 30 most recent execution records for this cron job. Historical data beyond the most recent 30 records will not be available.
               </AlertDescription>
             </Alert>
@@ -485,11 +480,11 @@ export default function CronDetailPage() {
           <CardContent className="p-0">
             {historyLoading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-neutral-500" />
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : history.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-neutral-500">
-                <Activity className="h-12 w-12 mb-4 text-neutral-300" />
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <Activity className="h-12 w-12 mb-4 text-muted-foreground/50" />
                 <p>No execution history found</p>
               </div>
             ) : (
@@ -511,7 +506,7 @@ export default function CronDetailPage() {
                       <TableRow key={item._id}>
                         <TableCell className="whitespace-normal">
                           <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-neutral-400" />
+                            <Clock className="h-4 w-4 text-muted-foreground" />
                             <span className="text-sm">
                               {formatCronDateTime(item.startTime)}
                             </span>
@@ -519,7 +514,7 @@ export default function CronDetailPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <Timer className="h-4 w-4 text-neutral-400" />
+                            <Timer className="h-4 w-4 text-muted-foreground" />
                             <span className="text-sm font-mono">
                               {formatDuration(item.duration)}
                             </span>
@@ -527,7 +522,7 @@ export default function CronDetailPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <Database className="h-4 w-4 text-neutral-400" />
+                            <Database className="h-4 w-4 text-muted-foreground" />
                             <span className="text-sm">
                               {formatHistoryMetric(item)}
                             </span>
@@ -535,7 +530,7 @@ export default function CronDetailPage() {
                         </TableCell>
                         <TableCell>
                           {item.status === "SUCCESS" ? (
-                            <Badge className="bg-green-50 text-green-700 border-green-200">
+                            <Badge>
                               <CheckCircle2 className="mr-1 h-3 w-3" />
                               Success
                             </Badge>
@@ -578,7 +573,7 @@ export default function CronDetailPage() {
                 {/* Pagination */}
                 {totalPages > 1 && (
                   <div className="flex items-center justify-between px-6 py-4 border-t">
-                    <div className="text-sm text-neutral-500">
+                    <div className="text-sm text-muted-foreground">
                       Page {page} of {totalPages}
                     </div>
                     <div className="flex gap-2">
@@ -626,7 +621,7 @@ export default function CronDetailPage() {
             <div>
               <div className="text-sm font-medium mb-2">Error Message:</div>
               <div className="h-[200px] w-full rounded-md border p-4 overflow-auto">
-                <pre className="text-sm text-red-600 whitespace-pre-wrap font-mono">
+                <pre className="text-sm text-destructive whitespace-pre-wrap font-mono">
                   {selectedError?.error || "No error message available"}
                 </pre>
               </div>
@@ -643,13 +638,13 @@ export default function CronDetailPage() {
             )}
             <div className="grid grid-cols-2 gap-4 pt-4 border-t">
               <div>
-                <div className="text-xs text-neutral-500 mb-1">Start Time</div>
+                <div className="text-xs text-muted-foreground mb-1">Start Time</div>
                 <div className="text-sm">
                   {formatCronDateTime(selectedError?.startTime)}
                 </div>
               </div>
               <div>
-                <div className="text-xs text-neutral-500 mb-1">Duration</div>
+                <div className="text-xs text-muted-foreground mb-1">Duration</div>
                 <div className="text-sm">
                   {formatDuration(selectedError?.duration || null)}
                 </div>

@@ -74,7 +74,7 @@ export async function uploadSupportChatImageToS3(
       reject(
         new Error(
           xhr.status === 404
-            ? 'Image upload failed: S3 bucket not found. Check S3_SUPPORT_CHAT_BUCKET on the server.'
+            ? 'Image upload failed: S3 bucket not found. Check S3BUCKET on the server.'
             : `Failed to upload image to storage (HTTP ${xhr.status}).`,
         ),
       );

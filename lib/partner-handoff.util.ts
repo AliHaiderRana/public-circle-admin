@@ -14,7 +14,7 @@ export function resolveCustomerPortalSecret(
   );
 }
 
-export function isPartnerHandoffActive(adminPortal: AdminPortalIntegration): boolean {
+function isIntegrationActive(adminPortal: AdminPortalIntegration): boolean {
   return Boolean(
     adminPortal.enabled &&
       adminPortal.referralEnabled &&
@@ -23,9 +23,23 @@ export function isPartnerHandoffActive(adminPortal: AdminPortalIntegration): boo
   );
 }
 
+export function isPartnerHandoffActive(adminPortal: AdminPortalIntegration): boolean {
+  return isIntegrationActive(adminPortal) && adminPortal.partnerSidebarEnabled;
+}
+
 /** Live badges + Support Panel require the customer portal toggle + shared secret. */
 export function isPartnerStatsDeliveryEnabled(
   adminPortal: AdminPortalIntegration,
 ): boolean {
-  return isPartnerHandoffActive(adminPortal);
+  return (
+    isIntegrationActive(adminPortal) &&
+    Boolean(
+      adminPortal.adminIntegrationEndpoints?.some(
+        (entry) =>
+          entry.enabled &&
+          entry.adminEnabled !== false &&
+          (entry.kind === 'socket-listen' || entry.kind === 'socket-emit'),
+      ),
+    )
+  );
 }

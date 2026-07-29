@@ -15,6 +15,7 @@ type SecretInputProps = {
   placeholder?: string;
   helperText?: string;
   readOnly?: boolean;
+  disabled?: boolean;
 };
 
 export function SecretInput({
@@ -25,6 +26,7 @@ export function SecretInput({
   placeholder,
   helperText,
   readOnly = false,
+  disabled = false,
 }: SecretInputProps) {
   const [visible, setVisible] = useState(false);
 
@@ -37,6 +39,7 @@ export function SecretInput({
           type={visible ? 'text' : 'password'}
           value={value}
           readOnly={readOnly}
+          disabled={disabled}
           placeholder={placeholder}
           onChange={onChange ? (event) => onChange(event.target.value) : undefined}
           className="pr-10"
@@ -47,6 +50,7 @@ export function SecretInput({
           size="icon"
           className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
           onClick={() => setVisible((prev) => !prev)}
+          disabled={disabled}
           aria-label={visible ? 'Hide secret' : 'Show secret'}
         >
           {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

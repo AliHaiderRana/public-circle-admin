@@ -60,7 +60,9 @@ import {
   Globe,
   Pencil,
   Settings2,
+  XCircle,
 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   TRANSLATION_PREFIXES,
   TRANSLATION_KEY_EXAMPLES,
@@ -511,7 +513,7 @@ export default function TranslationsPage() {
   if (authLoading || !user) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-neutral-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -798,14 +800,18 @@ export default function TranslationsPage() {
         </div>
       )}
       {backendError && (
-        <p className="text-sm text-destructive rounded-md border border-destructive/30 bg-destructive/10 px-3 py-3">
-          <strong>Backend unavailable.</strong> {backendError}
-        </p>
+        <Alert variant="destructive">
+          <XCircle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Backend unavailable.</strong> {backendError}
+          </AlertDescription>
+        </Alert>
       )}
       {saveError && (
-        <p className="text-sm text-destructive rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
-          {saveError}
-        </p>
+        <Alert variant="destructive">
+          <XCircle className="h-4 w-4" />
+          <AlertDescription>{saveError}</AlertDescription>
+        </Alert>
       )}
 
       <div className="flex items-center gap-2 text-sm text-muted-foreground">

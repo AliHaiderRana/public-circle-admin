@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 type SupportCountBadgeProps = {
@@ -16,17 +17,15 @@ export function SupportCountBadge({
   const label = count > 99 ? '99+' : String(count);
 
   return (
-    <span
+    <Badge
+      variant={variant === 'destructive' ? 'destructive' : 'default'}
       className={cn(
-        'inline-flex min-h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums leading-none',
-        variant === 'destructive'
-          ? 'bg-destructive text-white'
-          : 'bg-primary text-white',
+        'min-h-5 min-w-5 px-1.5 py-0 text-[10px] font-semibold tabular-nums leading-none',
         className,
       )}
       aria-label={`${count} items`}
     >
       {label}
-    </span>
+    </Badge>
   );
 }

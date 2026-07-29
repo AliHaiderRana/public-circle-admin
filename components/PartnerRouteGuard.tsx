@@ -1,6 +1,7 @@
 'use client';
 
 import { useAuth } from '@/context/AuthContext';
+import { Spinner } from '@/components/ui/spinner';
 import { isPartnerAllowedPath, PARTNER_HOME_PATH } from '@/lib/partner-routes.util';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
@@ -30,7 +31,7 @@ export default function PartnerRouteGuard({ children }: { children: React.ReactN
   if (user?.isPartner && pathname && !isPartnerAllowedPath(pathname)) {
     return (
       <div className="flex items-center justify-center min-h-[40vh]">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary" />
+        <Spinner className="size-10" />
       </div>
     );
   }

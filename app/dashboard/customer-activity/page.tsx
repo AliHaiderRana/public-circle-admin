@@ -51,7 +51,7 @@ function CustomerActivityPageContent() {
           <ShieldAlert className="h-8 w-8 text-amber-600" />
           Login as user activity
         </h2>
-        {userEmail && <p className="text-neutral-500 mt-1">{userEmail}</p>}
+        {userEmail && <p className="text-muted-foreground mt-1">{userEmail}</p>}
       </div>
 
       <UnifiedAdminActivityPanel

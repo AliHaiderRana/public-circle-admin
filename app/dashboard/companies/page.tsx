@@ -159,21 +159,21 @@ export default function CompaniesPage() {
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Companies</h2>
-          <p className="text-neutral-500">
+          <p className="text-muted-foreground">
             Manage all registered organizations and their settings.
           </p>
         </div>
-        <div className="flex items-center gap-4 text-sm text-neutral-500 bg-white dark:bg-neutral-800 p-2 rounded-lg border">
+        <div className="flex items-center gap-4 text-sm text-muted-foreground bg-card p-2 rounded-lg border">
           <div className="flex items-center gap-1 px-2 border-r">
             <Building2 size={16} />
-            <span className="font-bold text-neutral-900">
+            <span className="font-bold text-foreground">
               {pagination.total}
             </span>{" "}
             Total
           </div>
           <div className="flex items-center gap-1 px-2">
             <Globe size={16} />
-            <span className="font-bold text-neutral-900">
+            <span className="font-bold text-foreground">
               {filterOptions.countries.length}
             </span>{" "}
             Countries
@@ -194,7 +194,7 @@ export default function CompaniesPage() {
             </div>
             <div className="flex items-center gap-2">
               <div className="relative w-72">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 h-4 w-4" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
                   placeholder="Search companies..."
                   className="pl-10"
@@ -208,7 +208,7 @@ export default function CompaniesPage() {
           {/* Filters */}
           <div className="flex items-center gap-4 pt-4 border-t">
             <div className="flex items-center gap-2">
-              <Filter size={16} className="text-neutral-500" />
+              <Filter size={16} className="text-muted-foreground" />
               <span className="text-sm font-medium">Filters:</span>
             </div>
 
@@ -392,10 +392,10 @@ export default function CompaniesPage() {
                 <TableRow>
                   <TableCell
                     colSpan={8}
-                    className="text-center h-48 text-neutral-500"
+                    className="text-center h-48 text-muted-foreground"
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <Building2 size={40} className="text-neutral-300" />
+                      <Building2 size={40} className="text-muted-foreground/50" />
                       <p>No companies found matching your search.</p>
                       <Button
                         variant="outline"
@@ -420,7 +420,7 @@ export default function CompaniesPage() {
                           />
                         ) : (
                           <div className="w-6 h-6 bg-neutral-100 flex items-center justify-center rounded-sm">
-                            <Building2 size={12} className="text-neutral-400" />
+                            <Building2 size={12} className="text-muted-foreground" />
                           </div>
                         )}
                         {company.name}
@@ -428,16 +428,16 @@ export default function CompaniesPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1 text-sm">
-                        <MapPin size={12} className="text-neutral-400" />
+                        <MapPin size={12} className="text-muted-foreground" />
                         {company.city}, {company.country}
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm text-neutral-600">
+                    <TableCell className="text-sm text-muted-foreground">
                       {company.companySize || "N/A"}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Send size={14} className="text-neutral-500" />
+                        <Send size={14} className="text-muted-foreground" />
                         <span className="font-medium">
                           {company.campaignCount || 0}
                         </span>
@@ -445,7 +445,7 @@ export default function CompaniesPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Mail size={14} className="text-neutral-500" />
+                        <Mail size={14} className="text-muted-foreground" />
                         <span className="font-medium">
                           {company.contactCount || 0}
                         </span>
@@ -453,17 +453,14 @@ export default function CompaniesPage() {
                     </TableCell>
                     <TableCell>
                       <Badge
-                        className={
-                          company.status === "ACTIVE"
-                            ? "bg-neutral-900 text-white"
-                            : company.status === "BLOCKED"
-                              ? "bg-red-500 text-white"
-                              : company.status === "SUSPENDED"
-                                ? "bg-yellow-500 text-white"
-                                : ""
-                        }
                         variant={
-                          company.status === "ACTIVE" ? "default" : "secondary"
+                          company.status === "ACTIVE"
+                            ? "default"
+                            : company.status === "BLOCKED"
+                              ? "destructive"
+                              : company.status === "SUSPENDED"
+                                ? "outline"
+                                : "secondary"
                         }
                       >
                         {company.status}
@@ -473,7 +470,7 @@ export default function CompaniesPage() {
                       <div>
                         {new Date(company.createdAt).toLocaleDateString()}
                       </div>
-                      <div className="text-xs text-neutral-500">
+                      <div className="text-xs text-muted-foreground">
                         {new Date(company.createdAt).toLocaleTimeString()}
                       </div>
                     </TableCell>
@@ -496,7 +493,7 @@ export default function CompaniesPage() {
 
           {pagination.total > 0 && (
             <div className="flex items-center justify-between px-6 py-4 border-t">
-              <div className="text-sm text-neutral-500">
+              <div className="text-sm text-muted-foreground">
                 Page {pagination.page} of {pagination.pages} ({pagination.total}{" "}
                 total companies)
               </div>

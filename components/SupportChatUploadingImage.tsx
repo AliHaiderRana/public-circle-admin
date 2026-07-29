@@ -1,4 +1,5 @@
 import { Loader2 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 
 type SupportChatUploadingImageProps = {
@@ -30,12 +31,10 @@ export function SupportChatUploadingImage({
       ) : (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50 px-3 py-4">
           <Loader2 className="size-6 animate-spin text-white" />
-          <div className="h-1.5 w-full max-w-[10rem] overflow-hidden rounded-full bg-white/25">
-            <div
-              className="h-full rounded-full bg-white transition-[width] duration-150 ease-out"
-              style={{ width: `${Math.min(100, Math.max(progress, 6))}%` }}
-            />
-          </div>
+          <Progress
+            value={Math.min(100, Math.max(progress, 6))}
+            className="h-1.5 w-full max-w-[10rem]"
+          />
           <span className="text-[10px] font-medium text-white tabular-nums">
             {progress < 100 ? `Uploading ${progress}%` : 'Sending…'}
           </span>

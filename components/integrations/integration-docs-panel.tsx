@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { CheckCircle2, Circle, BookOpen, ArrowRight } from 'lucide-react';
+import { CheckCircle2, Circle, BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type IntegrationDocsPanelProps = {
@@ -26,19 +26,21 @@ type IntegrationDocsPanelProps = {
   internalApiKey: string;
 };
 
-const METHOD_STYLES: Record<HttpMethod, string> = {
-  GET: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
-  POST: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300',
-  PUT: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
-  PATCH: 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300',
-  WS: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300',
+type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline';
+
+const METHOD_VARIANTS: Record<HttpMethod, BadgeVariant> = {
+  GET: 'secondary',
+  POST: 'default',
+  PUT: 'outline',
+  PATCH: 'outline',
+  WS: 'outline',
 };
 
-const CALLER_STYLES: Record<IntegrationCaller, string> = {
-  'venndii-referral-app': 'border-pink-200 bg-pink-50 text-pink-900 dark:border-pink-900 dark:bg-pink-950/40 dark:text-pink-200',
-  'venndii-referral-be': 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200',
-  'public-circle-admin': 'border-indigo-200 bg-indigo-50 text-indigo-900 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-200',
-  'public-circle-server': 'border-slate-300 bg-slate-50 text-slate-900 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200',
+const CALLER_VARIANTS: Record<IntegrationCaller, BadgeVariant> = {
+  'venndii-referral-app': 'outline',
+  'venndii-referral-be': 'outline',
+  'public-circle-admin': 'outline',
+  'public-circle-server': 'secondary',
 };
 
 function ConfigChecklist({ section }: { section: IntegrationDocSection }) {
@@ -114,14 +116,14 @@ function ApiCallList({ section }: { section: IntegrationDocSection }) {
     <div className="space-y-5">
       {grouped.map(([caller, calls]) => (
         <div key={caller} className="space-y-3">
-          <Badge variant="outline" className={cn('font-normal', CALLER_STYLES[caller])}>
+          <Badge variant={CALLER_VARIANTS[caller]} className="font-normal">
             {getIntegrationCallerLabel(caller)}
           </Badge>
           <div className="space-y-3">
             {calls.map((call) => (
               <div key={call.id} className="rounded-lg border bg-card p-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge className={cn('font-mono text-[11px]', METHOD_STYLES[call.method])}>
+                  <Badge variant={METHOD_VARIANTS[call.method]} className="font-mono text-[11px]">
                     {call.method}
                   </Badge>
                   <code className="break-all text-sm font-medium">{call.resolvedPath}</code>
@@ -285,17 +287,6 @@ export function IntegrationDocsPanel({
             <p className="text-muted-foreground">Public Circle server base</p>
             <code className="break-all">{docs.bases.serverBaseUrl}</code>
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <ArrowRight className="size-3.5" />
-          <span>Pink = Referral App</span>
-          <span>·</span>
-          <span>Sky = Referral API</span>
-          <span>·</span>
-          <span>Indigo = Admin</span>
-          <span>·</span>
-          <span>Slate = Public Circle Server</span>
         </div>
 
         <Tabs defaultValue={defaultTab}>

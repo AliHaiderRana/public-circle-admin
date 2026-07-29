@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -453,7 +454,7 @@ export default function TemplatesPage() {
               />
             </div>
             <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'ACTIVE' | 'ARCHIVED' | 'ALL')}>
-              <SelectTrigger className="h-12 rounded-xl bg-white">
+              <SelectTrigger className="h-12 rounded-xl">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
               <SelectContent>
@@ -811,8 +812,8 @@ export default function TemplatesPage() {
             ) : (
               <div className="space-y-2">
                 <label className="text-sm font-medium">HTML code</label>
-                <textarea
-                  className="min-h-44 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                <Textarea
+                  className="min-h-44"
                   placeholder="Paste full HTML here"
                   value={htmlContent}
                   onChange={(event) => {

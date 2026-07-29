@@ -2,6 +2,7 @@
 
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Maximize2, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { SupportChatZoomableImage } from '@/components/SupportChatZoomableImage';
 
@@ -44,17 +45,19 @@ export function SupportChatImagePreview({
           </DialogPrimitive.Description>
 
           <div className="absolute right-3 top-3 z-10 sm:right-5 sm:top-5">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               onClick={(event) => {
                 event.stopPropagation();
                 onOpenChange(false);
               }}
-              className="inline-flex size-10 items-center justify-center rounded-full border border-white/15 bg-black/45 text-white shadow-lg transition hover:bg-black/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+              className="size-10 rounded-full text-white hover:bg-white/15 hover:text-white"
               aria-label="Close image preview"
             >
               <X className="size-5" />
-            </button>
+            </Button>
           </div>
 
           {src && open ? (

@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Select,
   SelectContent,
@@ -29,17 +30,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
   Search,
   Send,
-  BarChart3,
   Mail,
-  CheckCircle2,
-  Clock,
-  ChevronLeft,
-  ChevronRight,
   Filter,
   Building2,
-  ArrowUpDown,
   ArrowUp,
   ArrowDown,
   Play,
@@ -170,13 +172,13 @@ export default function CampaignsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "ACTIVE":
-        return <Badge className="bg-neutral-900 text-white">Active</Badge>;
+        return <Badge>Active</Badge>;
       case "PAUSED":
-        return <Badge variant="secondary">Paused</Badge>;
+        return <Badge variant="outline">Paused</Badge>;
       case "DRAFT":
-        return <Badge variant="outline">Draft</Badge>;
+        return <Badge variant="secondary">Draft</Badge>;
       case "ARCHIVED":
-        return <Badge variant="destructive">Archived</Badge>;
+        return <Badge variant="secondary">Archived</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
@@ -190,20 +192,20 @@ export default function CampaignsPage() {
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Campaigns</h2>
-          <p className="text-neutral-500">
+          <p className="text-muted-foreground">
             Manage email campaigns across all companies.
           </p>
         </div>
-        <div className="flex items-center gap-4 text-sm text-neutral-500 bg-white dark:bg-neutral-800 p-2 rounded-lg border">
+        <div className="flex items-center gap-4 text-sm text-muted-foreground bg-card p-2 rounded-lg border">
           <div className="flex items-center gap-1 px-2">
             <Send size={16} />
-            <span className="font-bold text-neutral-900">
+            <span className="font-bold text-foreground">
               {pagination.total}
             </span>{" "}
             Total
           </div>
           <div className="flex items-center gap-1 px-2 border-l">
-            <span className="font-bold text-neutral-900">
+            <span className="font-bold text-foreground">
               {campaigns.filter((c) => c.status === "ACTIVE").length}
             </span>{" "}
             Active
@@ -224,7 +226,7 @@ export default function CampaignsPage() {
                 </CardDescription>
               </div>
               <div className="relative w-72">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 h-4 w-4" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
                   placeholder="Search campaigns..."
                   className="pl-10"
@@ -237,7 +239,7 @@ export default function CampaignsPage() {
             {/* Filters */}
             <div className="flex items-center gap-4 pt-2 border-t">
               <div className="flex items-center gap-2">
-                <Filter size={16} className="text-neutral-500" />
+                <Filter size={16} className="text-muted-foreground" />
                 <span className="text-sm font-medium">Filters:</span>
               </div>
 
@@ -270,12 +272,12 @@ export default function CampaignsPage() {
                 <SelectTrigger className="w-56">
                   <SelectValue placeholder="Company">
                     {companiesLoading ? (
-                      <span className="text-neutral-400">
+                      <span className="text-muted-foreground">
                         Loading companies...
                       </span>
                     ) : companyFilter ? (
                       <div className="flex items-center gap-2">
-                        <Building2 size={14} className="text-neutral-500" />
+                        <Building2 size={14} className="text-muted-foreground" />
                         <span className="truncate">
                           {getCompanyNameById(companyFilter) ||
                             "Selected Company"}
@@ -390,10 +392,10 @@ export default function CampaignsPage() {
                 <TableRow>
                   <TableCell
                     colSpan={7}
-                    className="text-center h-48 text-neutral-500"
+                    className="text-center h-48 text-muted-foreground"
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <Send size={40} className="text-neutral-300" />
+                      <Send size={40} className="text-muted-foreground/50" />
                       <p>No campaigns found matching your filters.</p>
                       <Button
                         variant="outline"
@@ -410,15 +412,17 @@ export default function CampaignsPage() {
                   <TableRow key={campaign._id}>
                     <TableCell className="pl-6 font-medium">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center">
-                          <Mail className="w-4 h-4 text-white" />
-                        </div>
+                        <Avatar>
+                          <AvatarFallback>
+                            <Mail className="w-4 h-4" />
+                          </AvatarFallback>
+                        </Avatar>
                         {campaign.campaignName || campaign.name}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1 text-sm">
-                        <Building2 size={12} className="text-neutral-400" />
+                        <Building2 size={12} className="text-muted-foreground" />
                         {campaign.company?.name || "No Company"}
                       </div>
                     </TableCell>
@@ -433,21 +437,21 @@ export default function CampaignsPage() {
                       {campaign.campaignRunsCount > 0 ? (
                         <div className="flex items-center gap-2">
                           <div className="flex items-center gap-1 text-sm">
-                            <Play size={14} className="text-neutral-500" />
+                            <Play size={14} className="text-muted-foreground" />
                             <span className="font-medium">
                               {campaign.campaignRunsCount}
                             </span>
-                            <span className="text-neutral-500 text-xs">
+                            <span className="text-muted-foreground text-xs">
                               {campaign.campaignRunsCount === 1 ? "run" : "runs"}
                             </span>
                           </div>
                           {campaign.campaignRuns && campaign.campaignRuns.length > 0 && (
-                            <div className="text-xs text-neutral-500">
+                            <div className="text-xs text-muted-foreground">
                               <div>
                                 Latest: {new Date(campaign.campaignRuns[0].createdAt).toLocaleDateString()}
                               </div>
                               {campaign.campaignRuns[0].emailsSentCount > 0 && (
-                                <div className="text-neutral-400">
+                                <div className="text-muted-foreground">
                                   {campaign.campaignRuns[0].emailsSentCount} emails
                                 </div>
                               )}
@@ -455,14 +459,14 @@ export default function CampaignsPage() {
                           )}
                         </div>
                       ) : (
-                        <span className="text-sm text-neutral-400">No runs</span>
+                        <span className="text-sm text-muted-foreground">No runs</span>
                       )}
                     </TableCell>
                     <TableCell className="text-sm">
                       <div>
                         {new Date(campaign.createdAt).toLocaleDateString()}
                       </div>
-                      <div className="text-xs text-neutral-500">
+                      <div className="text-xs text-muted-foreground">
                         {new Date(campaign.createdAt).toLocaleTimeString()}
                       </div>
                     </TableCell>
@@ -485,7 +489,7 @@ export default function CampaignsPage() {
 
           {pagination.pages > 1 && (
             <div className="flex items-center justify-between px-6 py-4 border-t">
-              <div className="text-sm text-neutral-500">
+              <div className="text-sm text-muted-foreground">
                 Page {pagination.page} of {pagination.pages} ({pagination.total}{" "}
                 total campaigns)
               </div>
@@ -511,24 +515,40 @@ export default function CampaignsPage() {
                   </SelectContent>
                 </Select>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(pagination.page - 1)}
-                  disabled={pagination.page === 1}
-                >
-                  <ChevronLeft size={16} />
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(pagination.page + 1)}
-                  disabled={pagination.page === pagination.pages}
-                >
-                  Next
-                  <ChevronRight size={16} />
-                </Button>
+                <Pagination className="mx-0 w-auto">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handlePageChange(pagination.page - 1);
+                        }}
+                        aria-disabled={pagination.page === 1}
+                        className={
+                          pagination.page === 1
+                            ? "pointer-events-none opacity-50"
+                            : ""
+                        }
+                      />
+                    </PaginationItem>
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handlePageChange(pagination.page + 1);
+                        }}
+                        aria-disabled={pagination.page === pagination.pages}
+                        className={
+                          pagination.page === pagination.pages
+                            ? "pointer-events-none opacity-50"
+                            : ""
+                        }
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
               </div>
             </div>
           )}

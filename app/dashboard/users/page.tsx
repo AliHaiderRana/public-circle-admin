@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Card,
   CardContent,
@@ -43,6 +43,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/components/ui/avatar";
+import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { startImpersonation } from "@/lib/impersonate-client";
 
@@ -53,13 +72,11 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [companySearchTerm, setCompanySearchTerm] = useState("");
   const [companyFilter, setCompanyFilter] = useState("all");
   const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [impersonateUserId, setImpersonateUserId] = useState<string | null>(null);
   const [tourModalUser, setTourModalUser] = useState<any>(null);
-  const companyDropdownRef = useRef<HTMLDivElement | null>(null);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
@@ -144,28 +161,11 @@ export default function UsersPage() {
     setPagination(prev => ({ ...prev, page: 1 }));
   };
 
-  const filteredCompanies = useMemo(() => {
-    const term = companySearchTerm.trim().toLowerCase();
-    if (!term) return companies;
-    return companies.filter((company) => company.name.toLowerCase().includes(term));
-  }, [companies, companySearchTerm]);
-
   const selectedCompanyLabel = useMemo(() => {
     if (companyFilter === 'all') return 'All companies';
     const selected = companies.find((c) => c._id === companyFilter);
     return selected?.name || 'All companies';
   }, [companies, companyFilter]);
-
-  useEffect(() => {
-    const onDocClick = (event: MouseEvent) => {
-      if (!companyDropdownRef.current) return;
-      if (!companyDropdownRef.current.contains(event.target as Node)) {
-        setCompanyDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, []);
 
   const toggleSortOrder = () => {
     setSortOrder((prev) => (prev === "desc" ? "asc" : "desc"));
@@ -175,7 +175,7 @@ export default function UsersPage() {
   const handleLoginAsUser = async (user: any) => {
     const companyId = user?.company?._id;
     if (!companyId) {
-      alert('User does not belong to a company.');
+      toast.error('User does not belong to a company.');
       return;
     }
 
@@ -188,7 +188,7 @@ export default function UsersPage() {
       });
       window.open(redirectUrl, '_blank', 'noopener,noreferrer');
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to login as user');
+      toast.error(error instanceof Error ? error.message : 'Failed to login as user');
     } finally {
       setImpersonateUserId(null);
     }
@@ -199,7 +199,7 @@ export default function UsersPage() {
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">System Users</h2>
-          <p className="text-neutral-500">
+          <p className="text-muted-foreground">
             Manage administrative and platform users across all companies.
           </p>
         </div>
@@ -217,47 +217,37 @@ export default function UsersPage() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-4">
-              <div className="relative w-64" ref={companyDropdownRef}>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full justify-between"
-                  onClick={() => setCompanyDropdownOpen((prev) => !prev)}
-                >
-                  <span className="truncate">{selectedCompanyLabel}</span>
-                  <ChevronsUpDown className="h-4 w-4 opacity-60" />
-                </Button>
-                {companyDropdownOpen && (
-                  <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg">
-                    <div className="p-2 border-b">
-                      <div className="relative">
-                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-neutral-500 h-4 w-4" />
-                        <Input
-                          placeholder="Search company..."
-                          className="pl-8 h-8"
-                          value={companySearchTerm}
-                          onChange={(e) => setCompanySearchTerm(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto p-1">
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-neutral-100"
-                        onClick={() => handleCompanyFilter("all")}
-                      >
-                        <Building2 size={14} className="text-neutral-500" />
-                        <span className="truncate">All companies</span>
-                      </button>
-                      {filteredCompanies.length === 0 ? (
-                        <div className="px-2 py-2 text-xs text-neutral-500">No company found</div>
-                      ) : (
-                        filteredCompanies.map((company) => (
-                          <button
+              <Popover open={companyDropdownOpen} onOpenChange={setCompanyDropdownOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={companyDropdownOpen}
+                    className="w-64 justify-between"
+                  >
+                    <span className="truncate">{selectedCompanyLabel}</span>
+                    <ChevronsUpDown className="h-4 w-4 opacity-60" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-0">
+                  <Command>
+                    <CommandInput placeholder="Search company..." />
+                    <CommandList>
+                      <CommandEmpty>No company found</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="All companies"
+                          onSelect={() => handleCompanyFilter("all")}
+                        >
+                          <Building2 className="size-3.5 text-muted-foreground" />
+                          <span className="truncate">All companies</span>
+                        </CommandItem>
+                        {companies.map((company) => (
+                          <CommandItem
                             key={company._id}
-                            type="button"
-                            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-neutral-100"
-                            onClick={() => handleCompanyFilter(company._id)}
+                            value={`${company.name} ${company._id}`}
+                            onSelect={() => handleCompanyFilter(company._id)}
                           >
                             {company.logo ? (
                               <img
@@ -266,18 +256,18 @@ export default function UsersPage() {
                                 className="h-5 w-5 rounded object-cover border"
                               />
                             ) : (
-                              <div className="h-5 w-5 rounded bg-neutral-100 border flex items-center justify-center">
-                                <Building2 size={12} className="text-neutral-500" />
+                              <div className="h-5 w-5 rounded bg-muted border flex items-center justify-center">
+                                <Building2 size={12} className="text-muted-foreground" />
                               </div>
                             )}
                             <span className="truncate">{company.name}</span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
               <Button
                 variant="outline"
                 size="sm"
@@ -297,7 +287,7 @@ export default function UsersPage() {
                 )}
               </Button>
               <div className="relative w-72">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 h-4 w-4" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
                   placeholder="Search users..."
                   className="pl-10"
@@ -352,10 +342,10 @@ export default function UsersPage() {
                 <TableRow>
                   <TableCell
                     colSpan={7}
-                    className="text-center h-48 text-neutral-500"
+                    className="text-center h-48 text-muted-foreground"
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <User size={40} className="text-neutral-300" />
+                      <User size={40} className="text-muted-foreground" />
                       <p>No users found matching your search.</p>
                       <Button
                         variant="outline"
@@ -375,23 +365,24 @@ export default function UsersPage() {
                   <TableRow key={user._id}>
                     <TableCell className="pl-6 font-medium">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary overflow-hidden">
-                          {user.profilePicture ? (
-                            <img
+                        <Avatar className="size-8">
+                          {user.profilePicture && (
+                            <AvatarImage
                               src={user.profilePicture}
                               alt=""
-                              className="w-full h-full object-cover"
+                              className="object-cover"
                             />
-                          ) : (
-                            <User size={14} />
                           )}
-                        </div>
+                          <AvatarFallback>
+                            <User size={14} />
+                          </AvatarFallback>
+                        </Avatar>
                         <div>
                           <div className="text-sm">
                             {user.firstName} {user.lastName}
                           </div>
                           {user.isEmailVerified && (
-                            <div className="flex items-center text-[10px] text-neutral-900 gap-0.5">
+                            <div className="flex items-center text-[10px] text-foreground gap-0.5">
                               <ShieldCheck size={10} /> Verified
                             </div>
                           )}
@@ -400,13 +391,13 @@ export default function UsersPage() {
                     </TableCell>
                     <TableCell className="text-sm">
                       <div className="flex items-center gap-1">
-                        <Mail size={12} className="text-neutral-400" />
+                        <Mail size={12} className="text-muted-foreground" />
                         {user.emailAddress}
                       </div>
                     </TableCell>
                     <TableCell className="text-sm">
                       <div className="flex items-center gap-1">
-                        <Building2 size={12} className="text-neutral-400" />
+                        <Building2 size={12} className="text-muted-foreground" />
                         {user.company?.name || "No Company"}
                       </div>
                     </TableCell>
@@ -422,7 +413,7 @@ export default function UsersPage() {
                     </TableCell>
                     <TableCell>
                       <Badge
-                        className={`text-[10px] ${user.status === "ACTIVE" ? "bg-neutral-900 text-white" : ""}`}
+                        className="text-[10px]"
                         variant={
                           user.status === "ACTIVE" ? "default" : "destructive"
                         }
@@ -434,9 +425,9 @@ export default function UsersPage() {
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1">
                           <CheckCircle2
-                            className={`h-3.5 w-3.5 shrink-0 ${user.tourSteps?.isCompleted ? 'text-green-600' : 'text-neutral-200'}`}
+                            className={`h-3.5 w-3.5 shrink-0 ${user.tourSteps?.isCompleted ? 'text-green-600' : 'text-muted'}`}
                           />
-                          <span className={`text-xs font-medium ${user.tourSteps?.isCompleted ? 'text-green-600' : 'text-neutral-600'}`}>
+                          <span className={`text-xs font-medium ${user.tourSteps?.isCompleted ? 'text-green-600' : 'text-muted-foreground'}`}>
                             {user.tourSteps ? user.tourSteps.completed : 0}/{user.tourSteps ? user.tourSteps.total : 9}
                           </span>
                         </div>
@@ -444,7 +435,7 @@ export default function UsersPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-6 px-2 text-xs text-neutral-500 hover:text-neutral-900"
+                            className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
                             onClick={() => setTourModalUser(user)}
                           >
                             View
@@ -478,7 +469,7 @@ export default function UsersPage() {
 
           {pagination.pages > 1 && (
             <div className="flex items-center justify-between px-6 py-4 border-t">
-              <div className="text-sm text-neutral-500">
+              <div className="text-sm text-muted-foreground">
                 Page {pagination.page} of {pagination.pages} ({pagination.total}{" "}
                 total users)
               </div>
@@ -512,7 +503,7 @@ export default function UsersPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-neutral-500" />
+              <MapPin className="h-4 w-4 text-muted-foreground" />
               Tour Steps —{" "}
               {tourModalUser?.firstName
                 ? `${tourModalUser.firstName} ${tourModalUser.lastName || ''}`.trim()
@@ -524,18 +515,14 @@ export default function UsersPage() {
             <div className="space-y-1 pt-2">
               {/* Summary */}
               <div className="flex items-center justify-between pb-3 border-b mb-3">
-                <span className="text-sm text-neutral-500">
+                <span className="text-sm text-muted-foreground">
                   {tourModalUser.tourSteps.completed} of {tourModalUser.tourSteps.total} steps completed
                 </span>
                 {tourModalUser.tourSteps.isCompleted && (
-                  <span className="text-xs font-medium text-green-600 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
-                    Tour Complete
-                  </span>
+                  <Badge>Tour Complete</Badge>
                 )}
                 {tourModalUser.tourSteps.isSkipped && (
-                  <span className="text-xs font-medium text-neutral-500 bg-neutral-100 border px-2 py-0.5 rounded-full">
-                    Skipped
-                  </span>
+                  <Badge variant="secondary">Skipped</Badge>
                 )}
               </div>
 
@@ -546,14 +533,14 @@ export default function UsersPage() {
                     {step.isCompleted ? (
                       <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
                     ) : (
-                      <Circle className="h-4 w-4 text-neutral-300 mt-0.5 shrink-0" />
+                      <Circle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                     )}
                     <div>
-                      <p className={`text-sm font-medium leading-tight ${step.isCompleted ? 'text-neutral-900' : 'text-neutral-400'}`}>
+                      <p className={`text-sm font-medium leading-tight ${step.isCompleted ? 'text-foreground' : 'text-muted-foreground'}`}>
                         {step.title || `Step ${i + 1}`}
                       </p>
                       {step.description && (
-                        <p className="text-xs text-neutral-400 mt-0.5">{step.description}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{step.description}</p>
                       )}
                     </div>
                   </div>

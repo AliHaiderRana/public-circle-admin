@@ -1,4 +1,5 @@
 import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 type SupportChatSendButtonProps = {
@@ -8,6 +9,7 @@ type SupportChatSendButtonProps = {
   title?: string;
   className?: string;
   iconClassName?: string;
+  variant?: 'default' | 'secondary';
 };
 
 /**
@@ -41,26 +43,24 @@ export function SupportChatSendButton({
   title,
   className,
   iconClassName = 'size-4',
+  variant = 'default',
 }: SupportChatSendButtonProps) {
   return (
-    <button
+    <Button
       type="button"
+      variant={variant}
+      size="icon"
       onClick={onClick}
       disabled={disabled || loading}
       title={title}
       aria-label={title}
-      className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-full border-0 p-0 transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        'disabled:pointer-events-none disabled:opacity-50',
-        className,
-      )}
+      className={cn('rounded-full', className)}
     >
       {loading ? (
         <Loader2 className={cn(iconClassName, 'animate-spin')} aria-hidden />
       ) : (
         <SendIcon className={iconClassName} />
       )}
-    </button>
+    </Button>
   );
 }

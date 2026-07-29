@@ -25,10 +25,13 @@ import {
   Clock,
   AlertCircle,
   CheckCircle2,
+  Info,
   Loader2,
   Database,
   History,
+  XCircle,
 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -212,7 +215,7 @@ export default function CronsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-neutral-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -223,7 +226,7 @@ export default function CronsPage() {
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-3xl font-bold tracking-tight">Cron Jobs</h2>
-            <p className="text-neutral-500">
+            <p className="text-muted-foreground">
               Manage and trigger scheduled tasks
             </p>
           </div>
@@ -240,34 +243,28 @@ export default function CronsPage() {
         </div>
 
         {message && (
-          <div
-            className={`p-4 rounded-lg flex items-center gap-2 ${
-              message.type === "success"
-                ? "bg-green-50 text-green-700 border border-green-200"
-                : message.type === "error"
-                ? "bg-red-50 text-red-700 border border-red-200"
-                : "bg-blue-50 text-blue-700 border border-blue-200"
-            }`}
+          <Alert
+            variant={message.type === "error" ? "destructive" : "default"}
           >
             {message.type === "success" ? (
               <CheckCircle2 className="h-4 w-4" />
             ) : message.type === "error" ? (
-              <AlertCircle className="h-4 w-4" />
+              <XCircle className="h-4 w-4" />
             ) : (
-              <AlertCircle className="h-4 w-4" />
+              <Info className="h-4 w-4" />
             )}
-            <p className="text-sm">{message.text}</p>
-          </div>
+            <AlertDescription>{message.text}</AlertDescription>
+          </Alert>
         )}
 
         {crons.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
-              <Database className="h-12 w-12 text-neutral-400 mb-4" />
-              <h3 className="text-lg font-medium text-neutral-900 mb-2">
+              <Database className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium text-foreground mb-2">
                 No cron jobs found
               </h3>
-              <p className="text-neutral-500 mb-4">
+              <p className="text-muted-foreground mb-4">
                 Click the button below to seed the cron metadata
               </p>
               <Button onClick={seedCrons} disabled={seeding}>
@@ -304,7 +301,7 @@ export default function CronsPage() {
                       <TableCell className="align-top whitespace-normal break-words">
                         <div>
                           <div className="font-medium">{cron.displayName}</div>
-                          <div className="text-xs text-neutral-500 hidden xl:block">
+                          <div className="text-xs text-muted-foreground hidden xl:block">
                             {cron.description}
                           </div>
                         </div>
@@ -315,19 +312,19 @@ export default function CronsPage() {
                             <div className="font-mono text-xs break-all">
                               {cron.schedule}
                             </div>
-                            <div className="text-xs text-neutral-500 hidden xl:block">
+                            <div className="text-xs text-muted-foreground hidden xl:block">
                               {getCronScheduleDescription(cron.schedule)}
                             </div>
                           </div>
                         ) : (
-                          <span className="text-xs text-neutral-400 italic">
+                          <span className="text-xs text-muted-foreground italic">
                             Not scheduled
                           </span>
                         )}
                       </TableCell>
                       <TableCell className="whitespace-normal">
                         <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-neutral-400" />
+                          <Clock className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm">
                             {formatCronDateTime(cron.lastRunAt)}
                           </span>
@@ -345,12 +342,12 @@ export default function CronsPage() {
                       </TableCell>
                       <TableCell>
                         {cronStatuses[cron.name] === 'in-progress' ? (
-                          <Badge className="text-xs bg-blue-100 text-blue-700 border-blue-200">
+                          <Badge variant="outline" className="text-xs">
                             <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                             In Progress
                           </Badge>
                         ) : cronStatuses[cron.name] === 'completed' ? (
-                          <Badge className="text-xs bg-green-100 text-green-700 border-green-200">
+                          <Badge className="text-xs">
                             <CheckCircle2 className="mr-1 h-3 w-3" />
                             Success
                           </Badge>
@@ -362,17 +359,14 @@ export default function CronsPage() {
                         ) : cron.lastError ? (
                           <Badge 
                             variant="destructive" 
-                            className="text-xs cursor-pointer hover:bg-red-600" 
+                            className="text-xs cursor-pointer"
                             onClick={() => setErrorDialogCron(cron)}
                           >
                             <AlertCircle className="mr-1 h-3 w-3" />
                             Error
                           </Badge>
                         ) : cron.lastRunAt ? (
-                          <Badge
-                            variant="outline"
-                            className="text-xs bg-green-50 text-green-700 border-green-200"
-                          >
+                          <Badge variant="outline" className="text-xs">
                             Success
                           </Badge>
                         ) : (

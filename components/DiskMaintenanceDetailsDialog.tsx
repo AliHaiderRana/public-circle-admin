@@ -17,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { HardDrive, AlertCircle } from "lucide-react";
+import { HardDrive, AlertTriangle } from "lucide-react";
 import type { DiskMaintenanceMetadata } from "@/lib/disk-maintenance-format";
 import { formatCronDateTime } from "@/lib/cron-display-format";
 
@@ -52,19 +52,19 @@ export function DiskMaintenanceDetailsDialog({
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="rounded-lg border p-4">
-            <div className="text-xs text-neutral-500 mb-1">Space Reclaimed</div>
-            <div className="text-2xl font-bold text-green-700">
+            <div className="text-xs text-muted-foreground mb-1">Space Reclaimed</div>
+            <div className="text-2xl font-bold text-foreground">
               {metadata.reclaimedHuman || "0K"}
             </div>
           </div>
           <div className="rounded-lg border p-4">
-            <div className="text-xs text-neutral-500 mb-1">Disk Usage</div>
+            <div className="text-xs text-muted-foreground mb-1">Disk Usage</div>
             <div className="text-lg font-semibold">
               {metadata.diskUsePercentBefore ?? "?"}% → {metadata.diskUsePercentAfter ?? "?"}%
             </div>
           </div>
           <div className="rounded-lg border p-4">
-            <div className="text-xs text-neutral-500 mb-1">Free Space</div>
+            <div className="text-xs text-muted-foreground mb-1">Free Space</div>
             <div className="text-lg font-semibold">
               {metadata.freeHumanBefore || "?"} → {metadata.freeHumanAfter || "?"}
             </div>
@@ -72,9 +72,9 @@ export function DiskMaintenanceDetailsDialog({
         </div>
 
         {metadata.warning ? (
-          <Alert className="bg-amber-50 border-amber-200">
-            <AlertCircle className="h-4 w-4 text-amber-700" />
-            <AlertDescription className="text-amber-900">
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
               {metadata.warning}
             </AlertDescription>
           </Alert>
@@ -93,7 +93,7 @@ export function DiskMaintenanceDetailsDialog({
                 <Badge variant="outline">compressed</Badge>
               ) : null}
             </div>
-            <div className="text-sm text-neutral-600">
+            <div className="text-sm text-muted-foreground">
               PM2 logs freed:{" "}
               <span className="font-medium">
                 {Math.max(0, metadata.pm2Logrotate.logsFreedKb || 0) >= 1024
@@ -120,7 +120,7 @@ export function DiskMaintenanceDetailsDialog({
                   <TableRow key={`${action.name}-${action.freedKb}`}>
                     <TableCell>{action.name}</TableCell>
                     <TableCell>{action.beforeHuman || "-"}</TableCell>
-                    <TableCell className="font-medium text-green-700">
+                    <TableCell className="font-medium text-foreground">
                       {action.freedHuman || "0K"}
                     </TableCell>
                   </TableRow>
@@ -153,7 +153,7 @@ export function DiskMaintenanceDetailsDialog({
         ) : null}
 
         {(metadata.logFile || metadata.reportFile) && (
-          <div className="text-xs text-neutral-500 space-y-1 border-t pt-3">
+          <div className="text-xs text-muted-foreground space-y-1 border-t pt-3">
             {metadata.reportFile ? <div>Report: {metadata.reportFile}</div> : null}
             {metadata.logFile ? <div>Run log: {metadata.logFile}</div> : null}
             {metadata.hostname ? <div>Host: {metadata.hostname}</div> : null}

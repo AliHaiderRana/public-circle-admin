@@ -34,14 +34,20 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
-  ChevronLeft,
-  ChevronRight,
   Mail,
   RefreshCw,
   ScrollText,
   Search,
   UserRound,
 } from 'lucide-react';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 
 type ThirdPartyUserRow = {
   id: string;
@@ -303,9 +309,11 @@ export default function ThirdPartyUsersPage() {
                   <TableRow key={row.id}>
                     <TableCell>
                       <div className="flex items-start gap-3">
-                        <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
-                          <UserRound className="h-4 w-4" />
-                        </div>
+                        <Avatar className="mt-0.5">
+                          <AvatarFallback>
+                            <UserRound className="h-4 w-4" />
+                          </AvatarFallback>
+                        </Avatar>
                         <div className="min-w-0">
                           <div className="font-medium truncate">{row.name}</div>
                           <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -387,26 +395,36 @@ export default function ThirdPartyUsersPage() {
             <p className="text-sm text-muted-foreground">
               Page {page} of {totalPages}
             </p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1 || loading}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages || loading}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+            <Pagination className="mx-0 w-auto justify-end">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setPage((p) => Math.max(1, p - 1));
+                    }}
+                    aria-disabled={page <= 1 || loading}
+                    className={
+                      page <= 1 || loading ? 'pointer-events-none opacity-50' : undefined
+                    }
+                  />
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setPage((p) => p + 1);
+                    }}
+                    aria-disabled={page >= totalPages || loading}
+                    className={
+                      page >= totalPages || loading ? 'pointer-events-none opacity-50' : undefined
+                    }
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
           </div>
         </CardContent>
       </Card>

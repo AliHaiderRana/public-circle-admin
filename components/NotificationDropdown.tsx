@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, Check, Trash2, CheckCheck, Loader2 } from 'lucide-react';
+import { Bell, Check, CheckCheck, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { getAdminNotificationDisplay, dedupeNotificationsForDisplay } from '@/lib/support-notifications';
 import { ADMIN_NOTIFICATION_TYPES } from '@/lib/constants';
 import {
@@ -49,7 +50,6 @@ export default function NotificationDropdown({
   const [hasMore, setHasMore] = useState(false);
   const [marking, setMarking] = useState<string | null>(null);
   const [socketConnected, setSocketConnected] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const isOpenRef = useRef(isOpen);
@@ -199,18 +199,6 @@ export default function NotificationDropdown({
     };
   }, [isOpen, hasMore, loadingMore, loading, page, fetchNotifications]);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   // Mark notification as read
   const markAsRead = async (id: string) => {
     setMarking(id);
@@ -303,25 +291,24 @@ export default function NotificationDropdown({
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
-      <Button 
-        variant="ghost" 
-        size="icon" 
-        className="relative"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        <Bell size={20} />
-        {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1">
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </span>
-        )}
-      </Button>
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="icon" className="relative">
+          <Bell size={20} />
+          {unreadCount > 0 && (
+            <Badge
+              variant="destructive"
+              className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full px-1 flex items-center justify-center"
+            >
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </Badge>
+          )}
+        </Button>
+      </PopoverTrigger>
 
-      {isOpen && (
-        <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-neutral-800 rounded-lg shadow-lg border border-neutral-200 dark:border-neutral-700 z-50 overflow-hidden">
+      <PopoverContent align="end" className="w-96 p-0 overflow-hidden">
           {/* Header */}
-          <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
+          <div className="px-4 py-3 border-b flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h3 className="font-semibold">Notifications</h3>
               {unreadCount > 0 && (
@@ -351,12 +338,12 @@ export default function NotificationDropdown({
           {/* Notifications list */}
           <div className="max-h-[400px] overflow-y-auto">
             {loading ? (
-              <div className="p-8 text-center text-neutral-500">
+              <div className="p-8 text-center text-muted-foreground">
                 <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                 <p className="text-sm">Loading notifications...</p>
               </div>
             ) : notifications.length === 0 ? (
-              <div className="p-8 text-center text-neutral-500">
+              <div className="p-8 text-center text-muted-foreground">
                 <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">No notifications yet</p>
               </div>
@@ -366,21 +353,21 @@ export default function NotificationDropdown({
                 return (
                 <div
                   key={notification._id}
-                  className={`px-4 py-3 border-b border-neutral-100 dark:border-neutral-700 last:border-0 cursor-pointer transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-700/50 ${
-                    !notification.isRead ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''
+                  className={`px-4 py-3 border-b last:border-0 cursor-pointer transition-colors hover:bg-accent ${
+                    !notification.isRead ? 'bg-accent/50' : ''
                   }`}
                   onClick={() => handleNotificationClick(notification)}
                 >
                   <div className="flex items-start gap-3">
                     <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
-                      notification.isRead ? 'bg-transparent' : 'bg-blue-500'
+                      notification.isRead ? 'bg-transparent' : 'bg-primary'
                     }`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                      <p className="text-sm font-medium text-foreground">
                         {display.title}
                       </p>
                       {display.description ? (
-                        <p className="text-sm text-neutral-600 dark:text-neutral-400 line-clamp-2">
+                        <p className="text-sm text-muted-foreground line-clamp-2">
                           {display.description}
                         </p>
                       ) : null}
@@ -389,7 +376,7 @@ export default function NotificationDropdown({
                           {notification.metadata.requestTypeLabel}
                         </Badge>
                       )}
-                      <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">
+                      <p className="text-xs text-muted-foreground mt-1">
                         {formatTimeAgo(notification.createdAt)}
                       </p>
                     </div>
@@ -407,7 +394,7 @@ export default function NotificationDropdown({
                       </Button>
                     )}
                     {marking === notification._id && (
-                      <Loader2 className="h-4 w-4 animate-spin text-neutral-400" />
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                     )}
                   </div>
                 </div>
@@ -417,7 +404,7 @@ export default function NotificationDropdown({
             {!loading && notifications.length > 0 && (
               <div ref={loadMoreRef} className="py-3 flex justify-center">
                 {loadingMore && (
-                  <Loader2 className="h-4 w-4 animate-spin text-neutral-400" />
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 )}
               </div>
             )}
@@ -425,11 +412,11 @@ export default function NotificationDropdown({
 
           {/* Footer */}
           {notifications.length > 0 && (
-            <div className="px-4 py-2 border-t border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
+            <div className="px-4 py-2 border-t">
               <Button
                 variant="ghost"
                 size="sm"
-                className="w-full text-xs text-neutral-600"
+                className="w-full text-xs text-muted-foreground"
                 onClick={() => {
                   setIsOpen(false);
                   router.push('/dashboard/support-requests');
@@ -439,8 +426,7 @@ export default function NotificationDropdown({
               </Button>
             </div>
           )}
-        </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }

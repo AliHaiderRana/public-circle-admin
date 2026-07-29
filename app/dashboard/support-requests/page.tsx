@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,6 +15,15 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 import {
   Dialog,
   DialogContent,
@@ -43,13 +52,13 @@ import {
 } from '@/lib/constants';
 import {
   Loader2,
-  ChevronLeft,
-  ChevronRight,
   MessageCircle,
   Inbox,
   Settings2,
   RefreshCw,
   Trash2,
+  Info,
+  AlertCircle,
 } from 'lucide-react';
 import { useSupportStats } from '@/hooks/use-support-stats';
 import { SupportCountBadge } from '@/components/SupportCountBadge';
@@ -1026,22 +1035,14 @@ export default function SupportRequestsPage() {
       case SUPPORT_REQUEST_STATUS.RESOLVED:
       case SUPPORT_REQUEST_STATUS.CLOSED:
         return (
-          <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white font-normal">
+          <Badge>
             {status === SUPPORT_REQUEST_STATUS.CLOSED ? 'Closed' : label}
           </Badge>
         );
       case SUPPORT_REQUEST_STATUS.IN_PROGRESS:
-        return (
-          <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-400">
-            {label}
-          </Badge>
-        );
+        return <Badge variant="outline">{label}</Badge>;
       case SUPPORT_REQUEST_STATUS.PENDING_RESOLUTION:
-        return (
-          <Badge variant="outline" className="border-blue-500 text-blue-700 dark:text-blue-400">
-            {label}
-          </Badge>
-        );
+        return <Badge variant="outline">{label}</Badge>;
       case SUPPORT_REQUEST_STATUS.OPEN:
       default:
         return <Badge variant="destructive">{label}</Badge>;
@@ -1225,14 +1226,16 @@ export default function SupportRequestsPage() {
                           ref={isHighlighted ? highlightedRowRef : null}
                           onClick={() => selectTicket(request._id)}
                           className={cn(
-                            'min-w-0 flex-1 px-3 py-3 text-left transition-colors hover:bg-muted/60',
+                            'min-w-0 flex-1 px-3 py-3 text-left transition-colors hover:bg-accent',
                             isSelected && 'hover:bg-primary/10',
                           )}
                         >
                           <div className="flex items-start gap-2">
-                            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                              {getSupportTicketAvatarInitials(getCompanyName(request))}
-                            </div>
+                            <Avatar className="size-9 shrink-0">
+                              <AvatarFallback className="text-xs font-semibold">
+                                {getSupportTicketAvatarInitials(getCompanyName(request))}
+                              </AvatarFallback>
+                            </Avatar>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start justify-between gap-2">
                                 <p
@@ -1362,26 +1365,32 @@ export default function SupportRequestsPage() {
                     <span className="text-[11px] text-muted-foreground tabular-nums">
                       {pagination.page}/{Math.max(pagination.pages, 1)}
                     </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-7"
-                      onClick={() => handlePageChange(pagination.page - 1)}
-                      disabled={pagination.page === 1}
-                      aria-label="Previous page"
-                    >
-                      <ChevronLeft className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-7"
-                      onClick={() => handlePageChange(pagination.page + 1)}
-                      disabled={pagination.page >= pagination.pages}
-                      aria-label="Next page"
-                    >
-                      <ChevronRight className="size-4" />
-                    </Button>
+                    <Pagination className="mx-0 w-auto">
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handlePageChange(pagination.page - 1);
+                            }}
+                            aria-disabled={pagination.page === 1}
+                            className={pagination.page === 1 ? 'pointer-events-none opacity-50' : ''}
+                          />
+                        </PaginationItem>
+                        <PaginationItem>
+                          <PaginationNext
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handlePageChange(pagination.page + 1);
+                            }}
+                            aria-disabled={pagination.page >= pagination.pages}
+                            className={pagination.page >= pagination.pages ? 'pointer-events-none opacity-50' : ''}
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
                   </div>
                 </div>
               </div>
@@ -1635,10 +1644,13 @@ export default function SupportRequestsPage() {
                       </p>
                     </div>
                     {manageRequest.status === SUPPORT_REQUEST_STATUS.PENDING_RESOLUTION && (
-                      <p className="text-xs text-muted-foreground rounded-md border bg-blue-50 px-3 py-2 dark:bg-blue-950/20">
-                        Waiting for the customer to confirm resolution. The ticket stays
-                        open until they confirm or reopen it.
-                      </p>
+                      <Alert>
+                        <Info className="h-4 w-4" />
+                        <AlertDescription className="text-xs">
+                          Waiting for the customer to confirm resolution. The ticket stays
+                          open until they confirm or reopen it.
+                        </AlertDescription>
+                      </Alert>
                     )}
                     {(manageRequest.status === SUPPORT_REQUEST_STATUS.RESOLVED ||
                       manageRequest.status === SUPPORT_REQUEST_STATUS.CLOSED) && (
@@ -1773,7 +1785,12 @@ export default function SupportRequestsPage() {
               </div>
 
               {manageSaveError ? (
-                <p className="border-t px-6 py-2 text-sm text-destructive">{manageSaveError}</p>
+                <div className="border-t px-6 py-2">
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{manageSaveError}</AlertDescription>
+                  </Alert>
+                </div>
               ) : null}
 
               <DialogFooter className="gap-2 border-t px-6 py-4 sm:justify-between">
@@ -1833,7 +1850,7 @@ export default function SupportRequestsPage() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={Boolean(deletingTicketId)}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className={buttonVariants({ variant: "destructive" })}
               disabled={Boolean(deletingTicketId)}
               onClick={(event) => {
                 event.preventDefault();

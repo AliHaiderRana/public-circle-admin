@@ -2,18 +2,14 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Building2,
   Users,
-  Settings,
-  TrendingUp,
   Mail,
   Target,
-  Activity,
-  ArrowUp,
-  ArrowDown,
   AlertCircle,
   CheckCircle,
   Clock,
@@ -32,37 +28,6 @@ import {
   TabsSkeleton,
 } from "@/components/SkeletonLoaders";
 import RefreshButton from "@/components/RefreshButton";
-
-const stats = [
-  {
-    name: "Total Companies",
-    value: "128",
-    icon: Building2,
-    change: "+12%",
-    changeType: "increase",
-  },
-  {
-    name: "Active Users",
-    value: "2,451",
-    icon: Users,
-    change: "+5.4%",
-    changeType: "increase",
-  },
-  {
-    name: "Pending Approvals",
-    value: "14",
-    icon: TrendingUp,
-    change: "-3",
-    changeType: "decrease",
-  },
-  {
-    name: "System Status",
-    value: "Healthy",
-    icon: Settings,
-    change: "100%",
-    changeType: "neutral",
-  },
-];
 
 interface AccountData {
   companyCount: number;
@@ -197,106 +162,14 @@ export default function DashboardPage() {
   const isLoading =
     accountLoading || campaignLoading || emailLoading || reputationLoading;
 
-  const statsList = [
-    {
-      name: "Total Companies",
-      value: accountData?.companyCount?.toLocaleString() || "0",
-      icon: Building2,
-      change: "+12%",
-      changeType: "increase",
-      color: "text-blue-600",
-      bgColor: "bg-blue-50",
-    },
-    {
-      name: "Active Users",
-      value: accountData?.userCount?.toLocaleString() || "0",
-      icon: Users,
-      change: "+5.4%",
-      changeType: "increase",
-      color: "text-green-600",
-      bgColor: "bg-green-50",
-    },
-    {
-      name: "Active Campaigns",
-      value: campaignData?.activeCampaigns?.toLocaleString() || "0",
-      icon: Target,
-      change: "Live now",
-      changeType: "neutral",
-      color: "text-purple-600",
-      bgColor: "bg-purple-50",
-    },
-    {
-      name: "Pending Requests",
-      value: campaignData?.pendingRequests?.toLocaleString() || "0",
-      icon: Activity,
-      change: "Requires Action",
-      changeType: "decrease",
-      color: "text-orange-600",
-      bgColor: "bg-orange-50",
-    },
-    {
-      name: "Emails This Month",
-      value: emailData?.thisMonthEmails?.toLocaleString() || "0",
-      icon: Mail,
-      change:
-        emailData && emailData.emailGrowth > 0
-          ? `+${emailData.emailGrowth}%`
-          : `${emailData?.emailGrowth ?? 0}%`,
-      changeType:
-        (emailData?.emailGrowth ?? 0) > 0
-          ? "increase"
-          : (emailData?.emailGrowth ?? 0) < 0
-            ? "decrease"
-            : "neutral",
-      color: "text-cyan-600",
-      bgColor: "bg-cyan-50",
-    },
-    {
-      name: "Total Campaigns",
-      value: campaignData?.totalCampaigns?.toLocaleString() || "0",
-      icon: TrendingUp,
-      change: "All time",
-      changeType: "neutral",
-      color: "text-indigo-600",
-      bgColor: "bg-indigo-50",
-    },
-  ];
-
-  const formatChange = (change: string, type: string) => {
-    const isPositive = type === "increase";
-    const isNegative = type === "decrease";
-
-    if (isPositive) {
-      return (
-        <div className="flex items-center text-green-600">
-          <ArrowUp className="w-4 h-4 mr-1" />
-          <span className="text-sm font-medium">{change}</span>
-        </div>
-      );
-    } else if (isNegative) {
-      return (
-        <div className="flex items-center text-red-600">
-          <ArrowDown className="w-4 h-4 mr-1" />
-          <span className="text-sm font-medium">{change}</span>
-        </div>
-      );
-    } else {
-      return (
-        <div className="flex items-center text-gray-600">
-          <span className="text-sm font-medium">{change}</span>
-        </div>
-      );
-    }
-  };
-
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900">
+          <h1 className="text-4xl font-bold tracking-tight text-foreground">
             Dashboard Overview
           </h1>
-          <p className="text-gray-500 mt-2">
+          <p className="text-muted-foreground mt-2">
             Welcome back! Here's what's happening across your platform today.
           </p>
         </div>
@@ -308,41 +181,22 @@ export default function DashboardPage() {
         <AlertSkeleton />
       ) : reputationData ? (
         <Alert
-          className={
-            reputationData.status === "Healthy"
-              ? "border-green-200 bg-green-50"
-              : reputationData.status === "Warning"
-                ? "border-yellow-200 bg-yellow-50"
-                : "border-red-200 bg-red-50"
+          variant={
+            reputationData.status === "Healthy" ||
+            reputationData.status === "Warning"
+              ? "default"
+              : "destructive"
           }
         >
           {reputationData.status === "Healthy" ? (
-            <CheckCircle className="h-4 w-4 text-green-600" />
-          ) : reputationData.status === "Warning" ? (
-            <AlertCircle className="h-4 w-4 text-yellow-600" />
+            <CheckCircle className="h-4 w-4" />
           ) : (
-            <AlertCircle className="h-4 w-4 text-red-600" />
+            <AlertCircle className="h-4 w-4" />
           )}
-          <AlertTitle
-            className={
-              reputationData.status === "Healthy"
-                ? "text-green-800"
-                : reputationData.status === "Warning"
-                  ? "text-yellow-800"
-                  : "text-red-800"
-            }
-          >
+          <AlertTitle>
             Email Reputation: {reputationData.status}
           </AlertTitle>
-          <AlertDescription
-            className={
-              reputationData.status === "Healthy"
-                ? "text-green-700"
-                : reputationData.status === "Warning"
-                  ? "text-yellow-700"
-                  : "text-red-700"
-            }
-          >
+          <AlertDescription>
             {reputationData.status === "Healthy"
               ? "Your email reputation is excellent. Continue maintaining good sending practices."
               : reputationData.status === "Warning"
@@ -363,118 +217,118 @@ export default function DashboardPage() {
           {/* Stats Grid */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {/* Companies Card */}
-            <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-shadow duration-200">
+            <Card>
               <CardContent className="p-3">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <p className="text-xs font-medium text-blue-600">
+                    <p className="text-xs font-medium text-muted-foreground">
                       Companies
                     </p>
-                    <p className="text-xl font-bold text-blue-900">
+                    <div className="text-xl font-bold">
                       {accountLoading ? (
-                        <span className="inline-block h-6 w-14 bg-blue-200 rounded animate-pulse"></span>
+                        <Skeleton className="inline-block h-6 w-14" />
                       ) : (
                         accountData?.companyCount?.toLocaleString() || "0"
                       )}
-                    </p>
-                    <p className="text-xs text-blue-700">
+                    </div>
+                    <div className="text-xs text-muted-foreground">
                       {accountLoading ? (
-                        <span className="inline-block h-3 w-10 bg-blue-200 rounded animate-pulse"></span>
+                        <Skeleton className="inline-block h-3 w-10" />
                       ) : (
                         `${accountData?.activeCompanyCount?.toLocaleString() || "0"} active`
                       )}
-                    </p>
+                    </div>
                   </div>
-                  <div className="p-2 bg-blue-200 rounded-full">
-                    <Building2 className="w-5 h-5 text-blue-700" />
+                  <div className="p-2 bg-muted rounded-full">
+                    <Building2 className="w-5 h-5 text-muted-foreground" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             {/* Users Card */}
-            <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-shadow duration-200">
+            <Card>
               <CardContent className="p-3">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <p className="text-xs font-medium text-green-600">Users</p>
-                    <p className="text-xl font-bold text-green-900">
+                    <p className="text-xs font-medium text-muted-foreground">Users</p>
+                    <div className="text-xl font-bold">
                       {accountLoading ? (
-                        <span className="inline-block h-6 w-14 bg-green-200 rounded animate-pulse"></span>
+                        <Skeleton className="inline-block h-6 w-14" />
                       ) : (
                         accountData?.userCount?.toLocaleString() || "0"
                       )}
-                    </p>
-                    <p className="text-xs text-green-700">
+                    </div>
+                    <div className="text-xs text-muted-foreground">
                       {accountLoading ? (
-                        <span className="inline-block h-3 w-10 bg-green-200 rounded animate-pulse"></span>
+                        <Skeleton className="inline-block h-3 w-10" />
                       ) : (
                         `${accountData?.activeUserCount?.toLocaleString() || "0"} active`
                       )}
-                    </p>
+                    </div>
                   </div>
-                  <div className="p-2 bg-green-200 rounded-full">
-                    <Users className="w-5 h-5 text-green-700" />
+                  <div className="p-2 bg-muted rounded-full">
+                    <Users className="w-5 h-5 text-muted-foreground" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             {/* Campaigns Card */}
-            <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 hover:shadow-lg transition-shadow duration-200">
+            <Card>
               <CardContent className="p-3">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <p className="text-xs font-medium text-purple-600">
+                    <p className="text-xs font-medium text-muted-foreground">
                       Campaigns
                     </p>
-                    <p className="text-xl font-bold text-purple-900">
+                    <div className="text-xl font-bold">
                       {campaignLoading ? (
-                        <span className="inline-block h-6 w-14 bg-purple-200 rounded animate-pulse"></span>
+                        <Skeleton className="inline-block h-6 w-14" />
                       ) : (
                         campaignData?.totalCampaigns?.toLocaleString() || "0"
                       )}
-                    </p>
-                    <p className="text-xs text-purple-700">
+                    </div>
+                    <div className="text-xs text-muted-foreground">
                       {campaignLoading ? (
-                        <span className="inline-block h-3 w-10 bg-purple-200 rounded animate-pulse"></span>
+                        <Skeleton className="inline-block h-3 w-10" />
                       ) : (
                         `${campaignData?.activeCampaigns?.toLocaleString() || "0"} active`
                       )}
-                    </p>
+                    </div>
                   </div>
-                  <div className="p-2 bg-purple-200 rounded-full">
-                    <Target className="w-5 h-5 text-purple-700" />
+                  <div className="p-2 bg-muted rounded-full">
+                    <Target className="w-5 h-5 text-muted-foreground" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             {/* Emails Card */}
-            <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 hover:shadow-lg transition-shadow duration-200">
+            <Card>
               <CardContent className="p-3">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <p className="text-xs font-medium text-orange-600">
+                    <p className="text-xs font-medium text-muted-foreground">
                       Emails
                     </p>
-                    <div className="text-xl font-bold text-orange-900">
+                    <div className="text-xl font-bold">
                       {emailLoading ? (
-                        <span className="inline-block h-6 w-14 bg-orange-200 rounded animate-pulse"></span>
+                        <Skeleton className="inline-block h-6 w-14" />
                       ) : (
                         emailData?.thisMonthEmails?.toLocaleString() || "0"
                       )}
                     </div>
-                    <div className="text-xs text-orange-700">
+                    <div className="text-xs text-muted-foreground">
                       {emailLoading ? (
-                        <span className="inline-block h-3 w-10 bg-orange-200 rounded animate-pulse"></span>
+                        <Skeleton className="inline-block h-3 w-10" />
                       ) : (
                         `This month${emailData && emailData.emailGrowth > 0 ? ` (+${emailData.emailGrowth}%)` : ""}`
                       )}
                     </div>
                   </div>
-                  <div className="p-2 bg-orange-200 rounded-full">
-                    <Mail className="w-5 h-5 text-orange-700" />
+                  <div className="p-2 bg-muted rounded-full">
+                    <Mail className="w-5 h-5 text-muted-foreground" />
                   </div>
                 </div>
               </CardContent>
@@ -482,63 +336,71 @@ export default function DashboardPage() {
           </div>
 
           {/* Requests Status Grid */}
-          <Card className="bg-white border border-gray-200">
-            <CardContent className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Customer Requests Status
-              </h3>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Customer Requests Status</CardTitle>
+            </CardHeader>
+            <CardContent>
               <div className="grid gap-4 md:grid-cols-3">
-                <div className="flex items-center space-x-3 p-4 bg-green-50 rounded-lg border border-green-200 hover:bg-green-100 transition-colors duration-200">
-                  <CheckCircle className="w-8 h-8 text-green-600 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-green-800">
-                      Completed
-                    </p>
-                    <div className="text-2xl font-bold text-green-900">
-                      {campaignLoading ? (
-                        <div className="h-8 w-16 bg-green-200 rounded animate-pulse"></div>
-                      ) : (
-                        campaignData?.completedRequests?.toLocaleString() || "0"
-                      )}
+                <Card>
+                  <CardContent className="flex items-center space-x-3 p-4">
+                    <CheckCircle className="w-8 h-8 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Completed
+                      </p>
+                      <div className="text-2xl font-bold">
+                        {campaignLoading ? (
+                          <Skeleton className="h-8 w-16" />
+                        ) : (
+                          campaignData?.completedRequests?.toLocaleString() || "0"
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
 
-                <div className="flex items-center space-x-3 p-4 bg-yellow-50 rounded-lg border border-yellow-200 hover:bg-yellow-100 transition-colors duration-200">
-                  <Clock className="w-8 h-8 text-yellow-600 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-yellow-800">
-                      Pending
-                    </p>
-                    <div className="text-2xl font-bold text-yellow-900">
-                      {campaignLoading ? (
-                        <div className="h-8 w-16 bg-yellow-200 rounded animate-pulse"></div>
-                      ) : (
-                        campaignData?.pendingRequests?.toLocaleString() || "0"
-                      )}
+                <Card>
+                  <CardContent className="flex items-center space-x-3 p-4">
+                    <Clock className="w-8 h-8 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Pending
+                      </p>
+                      <div className="text-2xl font-bold">
+                        {campaignLoading ? (
+                          <Skeleton className="h-8 w-16" />
+                        ) : (
+                          campaignData?.pendingRequests?.toLocaleString() || "0"
+                        )}
+                      </div>
+                      {campaignData?.pendingRequests &&
+                        campaignData.pendingRequests > 0 && (
+                          <Badge variant="destructive" className="mt-1 text-xs">
+                            Action Required
+                          </Badge>
+                        )}
                     </div>
-                    {campaignData?.pendingRequests &&
-                      campaignData.pendingRequests > 0 && (
-                        <Badge variant="destructive" className="mt-1 text-xs">
-                          Action Required
-                        </Badge>
-                      )}
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
 
-                <div className="flex items-center space-x-3 p-4 bg-red-50 rounded-lg border border-red-200 hover:bg-red-100 transition-colors duration-200">
-                  <AlertCircle className="w-8 h-8 text-red-600 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-red-800">Rejected</p>
-                    <div className="text-2xl font-bold text-red-900">
-                      {campaignLoading ? (
-                        <div className="h-8 w-16 bg-red-200 rounded animate-pulse"></div>
-                      ) : (
-                        campaignData?.rejectedRequests?.toLocaleString() || "0"
-                      )}
+                <Card>
+                  <CardContent className="flex items-center space-x-3 p-4">
+                    <AlertCircle className="w-8 h-8 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Rejected
+                      </p>
+                      <div className="text-2xl font-bold">
+                        {campaignLoading ? (
+                          <Skeleton className="h-8 w-16" />
+                        ) : (
+                          campaignData?.rejectedRequests?.toLocaleString() || "0"
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
               </div>
             </CardContent>
           </Card>

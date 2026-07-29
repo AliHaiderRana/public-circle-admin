@@ -37,8 +37,8 @@ export default function UnsavedChangesDialog({
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <div className="mb-2 flex items-center gap-3">
-            <div className="rounded-full bg-amber-100 p-2">
-              <AlertTriangle className="h-5 w-5 text-amber-600" />
+            <div className="rounded-full bg-muted p-2">
+              <AlertTriangle className="h-5 w-5 text-muted-foreground" />
             </div>
             <DialogTitle>Unsaved Changes</DialogTitle>
           </div>

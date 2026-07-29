@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Plus, FolderTree, Pencil, Trash2, ArrowLeft, Star } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -362,7 +362,7 @@ export default function TemplateCategoriesPage() {
                           <div className="flex items-center gap-2">
                             <Badge variant="secondary">{category.templateCount} linked templates</Badge>
                             {category.isPopular && (
-                              <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100">
+                              <Badge variant="outline">
                                 <Star className="mr-1 h-3 w-3" />
                                 Popular
                               </Badge>
@@ -421,7 +421,7 @@ export default function TemplateCategoriesPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className={buttonVariants({ variant: "destructive" })}
               onClick={() => categoryToDelete && handleDelete(categoryToDelete)}
             >
               Delete Category

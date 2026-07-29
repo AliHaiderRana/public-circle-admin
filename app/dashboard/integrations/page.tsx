@@ -24,6 +24,7 @@ import { PartnerSocketEventsPanel } from '@/components/integrations/partner-sock
 import { SecretInput } from '@/components/integrations/secret-input';
 import {
   mergePartnerSocketEvents,
+  type AdminIntegrationEndpoint,
   type PartnerSocketEvent,
 } from '@/lib/partner-socket-events.catalog';
 
@@ -38,14 +39,18 @@ type AdminPortalSettings = {
   partnerRealtimeSocketUrl?: string;
   partnerSocketAuthValidator?: string;
   partnerRealtimeSocketKey?: string;
-  adminIntegrationEndpoints?: PartnerSocketEvent[];
+  adminIntegrationEndpoints?: AdminIntegrationEndpoint[];
 };
 
 type IntegrationSettings = {
   adminPortal: AdminPortalSettings;
 };
 
-type ToggleConfirm = { next: boolean };
+type ToggleConfirm = {
+  kind: 'main' | 'portal' | 'socket' | 'event';
+  next: boolean;
+  events?: PartnerSocketEvent[];
+};
 
 const emptySettings = (): IntegrationSettings => ({
   adminPortal: {
@@ -65,9 +70,36 @@ function randomSecretKey(): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+function socketEventsFrom(
+  endpoints?: AdminIntegrationEndpoint[] | null,
+): PartnerSocketEvent[] {
+  return mergePartnerSocketEvents(
+    endpoints?.filter(
+      (entry): entry is PartnerSocketEvent =>
+        entry.kind === 'socket-listen' || entry.kind === 'socket-emit',
+    ),
+  ).map((event) => ({
+    ...event,
+    enabled: event.adminEnabled !== false,
+  }));
+}
+
+function withAdminSocketState(
+  endpoints: AdminIntegrationEndpoint[] | undefined,
+  socketEvents: PartnerSocketEvent[],
+): AdminIntegrationEndpoint[] {
+  const enabledById = new Map(socketEvents.map((event) => [event.id, event.enabled]));
+  return (endpoints ?? []).map((entry) =>
+    entry.kind === 'socket-listen' || entry.kind === 'socket-emit'
+      ? { ...entry, adminEnabled: enabledById.get(entry.id) ?? entry.adminEnabled ?? true }
+      : entry,
+  );
+}
+
 function isPartnerPortalDirty(current: AdminPortalSettings, saved: AdminPortalSettings): boolean {
   return (
     current.enabled !== saved.enabled ||
+    current.partnerSidebarEnabled !== saved.partnerSidebarEnabled ||
     current.adminPortalUrl.trim() !== saved.adminPortalUrl.trim() ||
     current.partnerPortalSsoSecret !== saved.partnerPortalSsoSecret
   );
@@ -106,15 +138,10 @@ function SaveFooter({
       >
         {statusText}
       </p>
-      <button
-        type="button"
-        onClick={onSave}
-        disabled={!dirty || saving}
-        className="inline-flex items-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-      >
+      <Button type="button" onClick={onSave} disabled={!dirty || saving}>
         {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
         {saveLabel}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -174,7 +201,7 @@ export default function IntegrationsPage() {
   if (authLoading || !user?.isSuperAdmin) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-neutral-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -190,7 +217,7 @@ export default function IntegrationsPage() {
       };
       setSettings(loaded);
       setSavedSettings(loaded);
-      const mergedSocketEvents = mergePartnerSocketEvents(
+      const mergedSocketEvents = socketEventsFrom(
         loaded.adminPortal.adminIntegrationEndpoints,
       );
       setSocketEvents(mergedSocketEvents);
@@ -219,10 +246,10 @@ export default function IntegrationsPage() {
       const nextPartner = { ...emptySettings().adminPortal, ...(data.adminPortal ?? {}) };
       setSettings({ adminPortal: nextPartner });
       setSavedSettings({ adminPortal: nextPartner });
-      const mergedSocketEvents = mergePartnerSocketEvents(nextPartner.adminIntegrationEndpoints);
+      const mergedSocketEvents = socketEventsFrom(nextPartner.adminIntegrationEndpoints);
       setSocketEvents(mergedSocketEvents);
       setSavedSocketEvents(mergedSocketEvents);
-      setPartnerSaveMessage('Customer portal settings saved.');
+      setPartnerSaveMessage(null);
     } catch (error) {
       console.error(error);
       setPartnerSaveMessage('Failed to save customer portal settings.');
@@ -240,14 +267,17 @@ export default function IntegrationsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scope: 'adminPortal',
-          adminIntegrationEndpoints: socketEvents,
+          adminIntegrationEndpoints: withAdminSocketState(
+            settings.adminPortal.adminIntegrationEndpoints,
+            socketEvents,
+          ),
           partnerRealtimeSocketUrl: settings.adminPortal.partnerRealtimeSocketUrl,
           partnerSocketAuthValidator: settings.adminPortal.partnerSocketAuthValidator,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save realtime settings');
-      const merged = mergePartnerSocketEvents(data.adminPortal?.adminIntegrationEndpoints);
+      const merged = socketEventsFrom(data.adminPortal?.adminIntegrationEndpoints);
       setSocketEvents(merged);
       setSavedSocketEvents(merged);
       setSettings((prev) => ({
@@ -264,7 +294,7 @@ export default function IntegrationsPage() {
           adminIntegrationEndpoints: merged,
         },
       }));
-      setSocketSaveMessage('Realtime settings saved.');
+      setSocketSaveMessage(null);
     } catch (error) {
       console.error(error);
       setSocketSaveMessage('Failed to save realtime settings.');
@@ -273,18 +303,157 @@ export default function IntegrationsPage() {
     }
   }
 
-  function applyToggleConfirm() {
+  async function persistTogglePatch(
+    patch: Partial<AdminPortalSettings>,
+    message: string,
+    scope: 'portal' | 'socket' = 'portal',
+  ): Promise<boolean> {
+    if (scope === 'socket') {
+      setSavingSocketEvents(true);
+      setSocketSaveMessage(null);
+    } else {
+      setSavingPartner(true);
+      setPartnerSaveMessage(null);
+    }
+
+    try {
+      const res = await fetch('/api/integrations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope: 'adminPortal', ...patch }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update integration toggle');
+
+      const savedPartner = { ...emptySettings().adminPortal, ...(data.adminPortal ?? {}) };
+      setSettings((prev) => ({
+        adminPortal: {
+          ...prev.adminPortal,
+          ...(patch.enabled !== undefined ? { enabled: savedPartner.enabled } : {}),
+          ...(patch.partnerSidebarEnabled !== undefined
+            ? { partnerSidebarEnabled: savedPartner.partnerSidebarEnabled }
+            : {}),
+          ...(patch.adminIntegrationEndpoints !== undefined
+            ? { adminIntegrationEndpoints: savedPartner.adminIntegrationEndpoints }
+            : {}),
+        },
+      }));
+      setSavedSettings({ adminPortal: savedPartner });
+
+      if (patch.adminIntegrationEndpoints !== undefined) {
+        const merged = socketEventsFrom(savedPartner.adminIntegrationEndpoints);
+        setSocketEvents(merged);
+        setSavedSocketEvents(merged);
+      }
+
+      if (scope === 'socket') setSocketSaveMessage(message || null);
+      else setPartnerSaveMessage(message || null);
+      return true;
+    } catch (error) {
+      console.error(error);
+      if (scope === 'socket') setSocketSaveMessage('Failed to update realtime toggle.');
+      else setPartnerSaveMessage('Failed to update integration toggle.');
+      return false;
+    } finally {
+      if (scope === 'socket') setSavingSocketEvents(false);
+      else setSavingPartner(false);
+    }
+  }
+
+  async function applyToggleConfirm() {
     if (!toggleConfirm) return;
-    setSettings((prev) => ({
-      adminPortal: { ...prev.adminPortal, enabled: toggleConfirm.next },
+    if (toggleConfirm.kind === 'portal') {
+      const next = toggleConfirm.next;
+      setToggleConfirm(null);
+      await handlePortalToggle(next);
+      return;
+    }
+    if (toggleConfirm.kind === 'event') {
+      const events = toggleConfirm.events;
+      setToggleConfirm(null);
+      if (events) setSocketEvents(events);
+      return;
+    }
+    if (toggleConfirm.kind === 'socket') {
+      const events = toggleConfirm.events;
+      setToggleConfirm(null);
+      if (events) await handleSocketToggle(events);
+      return;
+    }
+    const enabled = toggleConfirm.next;
+    const previousPartner = settings.adminPortal;
+    const previousEvents = socketEvents;
+    const nextEndpoints = (settings.adminPortal.adminIntegrationEndpoints ?? []).map((entry) => ({
+      ...entry,
+      adminEnabled: enabled,
     }));
+    const nextEvents = socketEvents.map((event) => ({ ...event, enabled }));
+    setSettings((prev) => ({
+      adminPortal: {
+        ...prev.adminPortal,
+        enabled,
+        partnerSidebarEnabled: enabled,
+        adminIntegrationEndpoints: nextEndpoints,
+      },
+    }));
+    setSocketEvents(nextEvents);
     setToggleConfirm(null);
+
+    const saved = await persistTogglePatch(
+      {
+        enabled,
+        partnerSidebarEnabled: enabled,
+        adminIntegrationEndpoints: nextEndpoints,
+      },
+      '',
+    );
+    if (!saved) {
+      setSettings({ adminPortal: previousPartner });
+      setSocketEvents(previousEvents);
+    }
+  }
+
+  async function handlePortalToggle(enabled: boolean) {
+    const previous = settings.adminPortal;
+    const nextEndpoints = (settings.adminPortal.adminIntegrationEndpoints ?? []).map((entry) =>
+      entry.kind === 'http' ? { ...entry, adminEnabled: enabled } : entry,
+    );
+    setSettings((prev) => ({
+      adminPortal: {
+        ...prev.adminPortal,
+        partnerSidebarEnabled: enabled,
+        adminIntegrationEndpoints: nextEndpoints,
+      },
+    }));
+    const saved = await persistTogglePatch(
+      { partnerSidebarEnabled: enabled, adminIntegrationEndpoints: nextEndpoints },
+      '',
+    );
+    if (!saved) {
+      setSettings({ adminPortal: previous });
+    }
+  }
+
+  async function handleSocketToggle(nextEvents: PartnerSocketEvent[]) {
+    const previous = socketEvents;
+    setSocketEvents(nextEvents);
+    const nextEndpoints = withAdminSocketState(
+      settings.adminPortal.adminIntegrationEndpoints,
+      nextEvents,
+    );
+    const saved = await persistTogglePatch(
+      { adminIntegrationEndpoints: nextEndpoints },
+      '',
+      'socket',
+    );
+    if (!saved) setSocketEvents(previous);
   }
 
   const partner = settings.adminPortal;
   const handoffReady =
     partner.enabled &&
     partner.referralEnabled &&
+    partner.partnerSidebarEnabled &&
     partner.adminPortalUrl?.trim() &&
     partner.partnerPortalSsoSecret?.trim();
 
@@ -293,10 +462,10 @@ export default function IntegrationsPage() {
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
           <Plug className="h-6 w-6" />
-          Integrations
+          Customer Portal
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Customer portal settings and realtime events.
+          Configure the Support Panel handoff and realtime events.
         </p>
       </div>
 
@@ -305,13 +474,47 @@ export default function IntegrationsPage() {
       ) : (
         <>
           <Card>
-            <CardHeader>
-              <CardTitle>Customer portal integration</CardTitle>
-              <CardDescription>
-                Keep this page focused on handoff + realtime only.
-              </CardDescription>
+            <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+              <div className="space-y-1.5">
+                <CardTitle>Integrations</CardTitle>
+                <CardDescription>Main control for every integration on this page.</CardDescription>
+              </div>
+              <Switch
+                aria-label="Enable integrations"
+                checked={partner.enabled}
+                disabled={savingPartner}
+                onCheckedChange={(checked) =>
+                  setToggleConfirm({ kind: 'main', next: checked })
+                }
+              />
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Turning this off also turns off the customer portal and realtime child integrations.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="ml-4 border-l-4 sm:ml-8">
+            <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+              <div className="space-y-1.5">
+                <CardTitle>Customer portal integration</CardTitle>
+                <CardDescription>Child integration for Support Panel handoff.</CardDescription>
+              </div>
+              <Switch
+                aria-label="Enable customer portal integration"
+                checked={partner.enabled && partner.partnerSidebarEnabled}
+                disabled={!partner.enabled || savingPartner}
+                onCheckedChange={(checked) =>
+                  setToggleConfirm({ kind: 'portal', next: checked })
+                }
+              />
+            </CardHeader>
+            <CardContent
+              className={`space-y-4 ${
+                !partner.enabled || !partner.partnerSidebarEnabled ? 'opacity-60' : ''
+              }`}
+            >
               <div className="flex flex-wrap items-center gap-2 rounded-lg border p-4 text-sm">
                 <span className="text-muted-foreground">Referral app integration:</span>
                 <span
@@ -329,26 +532,13 @@ export default function IntegrationsPage() {
                 </span>
               </div>
 
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div>
-                  <Label htmlFor="partner-enabled">Enable customer portal integration (admin)</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Accept Support Panel handoff from referral app.
-                  </p>
-                </div>
-                <Switch
-                  id="partner-enabled"
-                  checked={partner.enabled}
-                  onCheckedChange={(checked) => setToggleConfirm({ next: checked })}
-                />
-              </div>
-
               <div className="space-y-2">
                 <Label htmlFor="admin-portal-url">Admin portal URL</Label>
                 <Input
                   id="admin-portal-url"
                   placeholder="https://admin.example.com"
                   value={partner.adminPortalUrl}
+                  disabled={!partner.enabled || !partner.partnerSidebarEnabled}
                   onChange={(event) =>
                     setSettings((prev) => ({
                       adminPortal: { ...prev.adminPortal, adminPortalUrl: event.target.value },
@@ -361,6 +551,7 @@ export default function IntegrationsPage() {
                 id="partner-api-key"
                 label="Secret key"
                 value={partner.partnerPortalSsoSecret}
+                disabled={!partner.enabled || !partner.partnerSidebarEnabled}
                 onChange={(value) =>
                   setSettings((prev) => ({
                     adminPortal: { ...prev.adminPortal, partnerPortalSsoSecret: value },
@@ -373,6 +564,7 @@ export default function IntegrationsPage() {
                   type="button"
                   variant="outline"
                   size="sm"
+                  disabled={!partner.enabled || !partner.partnerSidebarEnabled}
                   onClick={() =>
                     setSettings((prev) => ({
                       adminPortal: {
@@ -403,6 +595,25 @@ export default function IntegrationsPage() {
             onSave={() => void handleSaveSocketEvents()}
             adminPortalUrl={partner.adminPortalUrl}
             partnerRealtimeSocketUrl={settings.adminPortal.partnerRealtimeSocketUrl}
+            enabled={socketEvents.some((event) => event.enabled)}
+            parentEnabled={partner.enabled}
+            onEnabledChange={(enabled) =>
+              setToggleConfirm({
+                kind: 'socket',
+                next: enabled,
+                events: socketEvents.map((event) => ({ ...event, enabled })),
+              })
+            }
+            onEventsChange={(events) => {
+              const changed = events.find(
+                (event) => socketEvents.find((current) => current.id === event.id)?.enabled !== event.enabled,
+              );
+              setToggleConfirm({
+                kind: 'event',
+                next: changed?.enabled ?? false,
+                events,
+              });
+            }}
             onPartnerRealtimeSocketUrlChange={(value) =>
               setSettings((prev) => ({
                 adminPortal: { ...prev.adminPortal, partnerRealtimeSocketUrl: value },
@@ -433,14 +644,14 @@ export default function IntegrationsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {toggleConfirm?.next
-                ? 'Enable customer portal integration (admin)?'
-                : 'Disable customer portal integration (admin)?'}
+              {toggleConfirm?.next ? 'Enable this integration?' : 'Disable this integration?'}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {toggleConfirm?.next
-                ? 'Referral users can access Support Panel after save.'
-                : 'New Support Panel handoffs will be blocked after save.'}
+              {toggleConfirm?.kind === 'main'
+                ? 'This updates the main integration and every child operation.'
+                : toggleConfirm?.kind === 'event'
+                  ? 'Confirm the event change, then use Save socket connection to apply it.'
+                : 'This change will be saved to the database immediately.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

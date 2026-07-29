@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Toggle } from '@/components/ui/toggle';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,7 +23,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { SupportCountBadge } from '@/components/SupportCountBadge';
-import { cn } from '@/lib/utils';
 import { ListFilter, Search, X } from 'lucide-react';
 
 type CategoryOption = { value: string; label: string };
@@ -65,18 +66,14 @@ function FilterChip({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-[10px] font-medium leading-none transition-colors',
-        active
-          ? 'border-primary/35 bg-primary/10 text-primary'
-          : 'border-transparent bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground',
-      )}
+    <Toggle
+      size="sm"
+      pressed={active}
+      onPressedChange={onClick}
+      className="h-6 shrink-0 gap-1 rounded-full px-2 text-[10px] font-medium leading-none"
     >
       {children}
-    </button>
+    </Toggle>
   );
 }
 
@@ -134,7 +131,7 @@ export function SupportInboxFilters({
           <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search…"
-            className="h-7 border-muted bg-muted/30 pl-7 text-xs shadow-none"
+            className="h-7 pl-7 text-xs"
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
           />
@@ -151,9 +148,9 @@ export function SupportInboxFilters({
             >
               <ListFilter className="size-3.5" />
               {advancedFilterCount > 0 ? (
-                <span className="absolute -right-1 -top-1 flex size-3.5 items-center justify-center rounded-full bg-primary text-[9px] font-semibold text-primary-foreground">
+                <Badge className="absolute -right-1 -top-1 size-3.5 min-w-3.5 px-0.5 py-0 text-[9px] font-semibold leading-none">
                   {advancedFilterCount}
-                </span>
+                </Badge>
               ) : null}
             </Button>
           </DropdownMenuTrigger>
@@ -274,15 +271,17 @@ export function SupportInboxFilters({
           </FilterChip>
         ) : null}
         {hasActiveFilters ? (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={onClearFilters}
-            className="inline-flex h-6 shrink-0 items-center gap-0.5 rounded-full px-2 text-[10px] font-medium leading-none text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="h-6 shrink-0 gap-0.5 rounded-full px-2 text-[10px] font-medium leading-none text-muted-foreground"
             aria-label="Reset filters"
           >
             <X className="size-3" />
             Reset
-          </button>
+          </Button>
         ) : null}
         {currentAdminId && !isSuperAdmin && !isPartner ? (
           <FilterChip

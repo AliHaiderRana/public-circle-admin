@@ -5,8 +5,19 @@ function trimUrl(value: string | undefined): string {
   return value?.trim().replace(/\/$/, '') || '';
 }
 
-/** Public Circle server origin — Integration-Settings DB first. */
+/**
+ * Public Circle server origin — Integration-Settings DB first.
+ * In local development the .env override wins, since the Integration-Settings
+ * document lives in the shared staging DB and points at the deployed API.
+ */
 export async function getBackendApiUrl(): Promise<string> {
+  if (process.env.NODE_ENV !== 'production') {
+    const fromEnv = trimUrl(process.env.API_BASE_URL || process.env.SERVER_API_URL);
+    if (fromEnv) {
+      return fromEnv;
+    }
+  }
+
   const settings = await getIntegrationSettings();
   const fromIntegration = trimUrl(settings.publicCircleServer.serverBaseUrl);
   if (fromIntegration) {

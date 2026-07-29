@@ -26,5 +26,17 @@ export function registerAdminCrons() {
     TIMEZONE
   );
 
+  // Daily at 1 AM — alerts configured recipients once cluster storage crosses 4 GB
+  new CronJob(
+    '0 0 1 * * *',
+    () => {
+      console.log('[admin-cron-scheduler] Starting dbStorageAlert');
+      runAdminLocalCronInBackground('dbStorageAlert');
+    },
+    null,
+    true,
+    TIMEZONE
+  );
+
   console.log('[admin-cron-scheduler] Registered admin local crons');
 }

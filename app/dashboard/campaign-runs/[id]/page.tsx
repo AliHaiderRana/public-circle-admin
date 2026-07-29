@@ -16,27 +16,36 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  ArrowLeft, 
-  Mail, 
-  Send, 
-  CheckCircle2, 
-  XCircle, 
-  Eye, 
-  MousePointer, 
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
+import {
+  ArrowLeft,
+  Mail,
+  Send,
+  CheckCircle2,
+  XCircle,
+  Eye,
+  MousePointer,
   Clock,
   Calendar,
   Building2,
   Play,
   Database,
-  ChevronLeft,
-  ChevronRight,
   Filter,
   ChevronDown,
   ChevronUp,
   AlertCircle,
   RefreshCw,
-  BarChart3
+  BarChart3,
+  Info
 } from 'lucide-react';
 
 interface CampaignRunDetail {
@@ -292,15 +301,15 @@ export default function CampaignRunDetailPage() {
   const getEventBadge = (email: EmailRecord) => {
     const events = email.emailEvents || {};
     if (events.Bounce) {
-      return <Badge className="bg-neutral-900 text-white">Failed</Badge>;
+      return <Badge variant="destructive">Failed</Badge>;
     } else if (events.Click) {
-      return <Badge className="bg-neutral-900 text-white">Clicked</Badge>;
+      return <Badge variant="outline">Clicked</Badge>;
     } else if (events.Open) {
-      return <Badge className="bg-neutral-900 text-white">Opened</Badge>;
+      return <Badge variant="outline">Opened</Badge>;
     } else if (events.Delivery) {
-      return <Badge className="bg-neutral-900 text-white">Delivered</Badge>;
+      return <Badge>Delivered</Badge>;
     } else if (events.Send) {
-      return <Badge className="bg-neutral-900 text-white">Sent</Badge>;
+      return <Badge variant="outline">Sent</Badge>;
     }
     return <Badge variant="outline">Pending</Badge>;
   };
@@ -308,17 +317,17 @@ export default function CampaignRunDetailPage() {
   const getEventIcon = (eventType: string) => {
     switch (eventType) {
       case 'Send':
-        return <Send size={16} className="text-neutral-900" />;
+        return <Send size={16} className="text-muted-foreground" />;
       case 'Delivery':
-        return <CheckCircle2 size={16} className="text-neutral-900" />;
+        return <CheckCircle2 size={16} className="text-muted-foreground" />;
       case 'Bounce':
-        return <XCircle size={16} className="text-red-500" />;
+        return <XCircle size={16} className="text-muted-foreground" />;
       case 'Open':
-        return <Eye size={16} className="text-blue-500" />;
+        return <Eye size={16} className="text-muted-foreground" />;
       case 'Click':
-        return <MousePointer size={16} className="text-purple-500" />;
+        return <MousePointer size={16} className="text-muted-foreground" />;
       default:
-        return <Clock size={16} className="text-gray-500" />;
+        return <Clock size={16} className="text-muted-foreground" />;
     }
   };
 
@@ -353,8 +362,8 @@ export default function CampaignRunDetailPage() {
     return (
       <div className="p-6">
         <div className="text-center py-12">
-          <h2 className="text-2xl font-semibold text-gray-900">Campaign run not found</h2>
-          <p className="text-gray-600 mt-2">The campaign run you're looking for doesn't exist.</p>
+          <h2 className="text-2xl font-semibold text-foreground">Campaign run not found</h2>
+          <p className="text-muted-foreground mt-2">The campaign run you're looking for doesn't exist.</p>
           <Button onClick={() => router.back()} className="mt-4">
             Go Back
           </Button>
@@ -377,20 +386,22 @@ export default function CampaignRunDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
-              <Play className="h-6 w-6 text-white" />
-            </div>
+            <Avatar className="w-12 h-12">
+              <AvatarFallback>
+                <Play className="h-6 w-6" />
+              </AvatarFallback>
+            </Avatar>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+              <h1 className="text-2xl font-bold text-foreground">
                 {campaignRun.campaign?.campaignName || 'Unknown Campaign'}
               </h1>
               <div className="flex items-center gap-2 mt-1">
                 {campaignRun.isDataStoredOnWarehouse ? (
-                  <Badge className="bg-neutral-900 text-white">Archived</Badge>
+                  <Badge variant="secondary">Archived</Badge>
                 ) : (
-                  <Badge className="bg-neutral-900 text-white">Live</Badge>
+                  <Badge>Live</Badge>
                 )}
-                <span className="text-sm text-gray-500">
+                <span className="text-sm text-muted-foreground">
                   Run ID: {campaignRun._id.slice(-8)}
                 </span>
               </div>
@@ -404,12 +415,12 @@ export default function CampaignRunDetailPage() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                <Building2 className="h-5 w-5 text-blue-600" />
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                <Building2 className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Company</p>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-sm font-medium text-muted-foreground">Company</p>
+                <p className="text-lg font-semibold text-foreground">
                   {campaignRun.company?.name || 'Unknown Company'}
                 </p>
               </div>
@@ -420,12 +431,12 @@ export default function CampaignRunDetailPage() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                <Mail className="h-5 w-5 text-green-600" />
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                <Mail className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Subject</p>
-                <p className="text-sm font-semibold text-gray-900 truncate">
+                <p className="text-sm font-medium text-muted-foreground">Subject</p>
+                <p className="text-sm font-semibold text-foreground truncate">
                   {campaignRun.campaign?.emailSubject || 'No Subject'}
                 </p>
               </div>
@@ -436,12 +447,12 @@ export default function CampaignRunDetailPage() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                <Calendar className="h-5 w-5 text-purple-600" />
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                <Calendar className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Created</p>
-                <p className="text-sm font-semibold text-gray-900">
+                <p className="text-sm font-medium text-muted-foreground">Created</p>
+                <p className="text-sm font-semibold text-foreground">
                   {formatDateTime(campaignRun.createdAt)}
                 </p>
               </div>
@@ -461,29 +472,29 @@ export default function CampaignRunDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <div className="text-2xl font-bold text-blue-600">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-foreground">
                     {campaignRun.emailsSentCount || 0}
                   </div>
-                  <div className="text-sm text-blue-800">Total Emails</div>
+                  <div className="text-sm text-muted-foreground">Total Emails</div>
                 </div>
-                <div className="text-center p-4 bg-green-50 rounded-lg">
-                  <div className="text-2xl font-bold text-green-600">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-foreground">
                     {campaignRun.emailCounts?.to || 0}
                   </div>
-                  <div className="text-sm text-green-800">To</div>
+                  <div className="text-sm text-muted-foreground">To</div>
                 </div>
-                <div className="text-center p-4 bg-purple-50 rounded-lg">
-                  <div className="text-2xl font-bold text-purple-600">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-foreground">
                     {campaignRun.emailCounts?.cc || 0}
                   </div>
-                  <div className="text-sm text-purple-800">CC</div>
+                  <div className="text-sm text-muted-foreground">CC</div>
                 </div>
-                <div className="text-center p-4 bg-orange-50 rounded-lg">
-                  <div className="text-2xl font-bold text-orange-600">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-foreground">
                     {campaignRun.emailCounts?.bcc || 0}
                   </div>
-                  <div className="text-sm text-orange-800">BCC</div>
+                  <div className="text-sm text-muted-foreground">BCC</div>
                 </div>
               </div>
             </CardContent>
@@ -535,8 +546,8 @@ export default function CampaignRunDetailPage() {
 
         <div className="flex items-center gap-3">
           {isWarehouseData && (
-            <div className="flex items-center gap-2 text-sm text-neutral-600">
-              <Database size={16} className="text-neutral-500" />
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Database size={16} className="text-muted-foreground" />
               <span>Warehouse Data</span>
             </div>
           )}
@@ -570,9 +581,9 @@ export default function CampaignRunDetailPage() {
                 ))
               ) : emails.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center h-48 text-neutral-500">
+                  <TableCell colSpan={4} className="text-center h-48 text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
-                      <Mail size={40} className="text-neutral-300" />
+                      <Mail size={40} className="text-muted-foreground/50" />
                       <p>No email records found matching your filters.</p>
                       <Button variant="outline" size="sm" onClick={clearFilters}>Clear filters</Button>
                     </div>
@@ -581,111 +592,117 @@ export default function CampaignRunDetailPage() {
               ) : (
                 emails.map((email) => (
                   <React.Fragment key={email._id}>
-                    <TableRow className="cursor-pointer hover:bg-gray-50" onClick={() => toggleRowExpansion(email._id)}>
+                    <TableRow className="cursor-pointer" onClick={() => toggleRowExpansion(email._id)}>
                       <TableCell className="pl-6">
                         <div className="flex items-center gap-2 min-w-0">
-                          <Mail size={16} className="text-neutral-400" />
+                          <Mail size={16} className="text-muted-foreground" />
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 min-w-0">
                               <div className="font-medium truncate max-w-[260px] sm:max-w-[360px]">
                                 {getRecipientAddress(email) || '—'}
                               </div>
                               <div className="flex items-center gap-1 flex-wrap">
-                                {normalizeEmailList(email.cc).length > 0 && (
-                                  <span className="relative group inline-flex">
-                                    {(() => {
-                                      const list = normalizeEmailList(email.cc);
-                                      const key = `${email._id}-cc`;
-                                      const expanded = !!tooltipExpanded[key];
-                                      const visible = expanded ? list : list.slice(0, 10);
-                                      return (
-                                        <>
-                                          <Badge
-                                            variant="secondary"
-                                            className="h-5 px-2 text-[10px] font-medium"
+                                {normalizeEmailList(email.cc).length > 0 && (() => {
+                                  const list = normalizeEmailList(email.cc);
+                                  const key = `${email._id}-cc`;
+                                  const expanded = !!tooltipExpanded[key];
+                                  const visible = expanded ? list : list.slice(0, 10);
+                                  return (
+                                    <Popover>
+                                      <PopoverTrigger
+                                        asChild
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <Badge
+                                          variant="secondary"
+                                          className="h-5 px-2 text-[10px] font-medium cursor-pointer"
+                                        >
+                                          CC {list.length}
+                                        </Badge>
+                                      </PopoverTrigger>
+                                      <PopoverContent align="start" className="w-72 p-2 text-[11px]">
+                                        <div className="font-semibold mb-1">CC</div>
+                                        <div className={expanded ? 'max-h-48 overflow-y-auto pr-1 space-y-0.5' : 'space-y-0.5'}>
+                                          {visible.map((addr) => (
+                                            <div key={addr} className="truncate">{addr}</div>
+                                          ))}
+                                        </div>
+                                        {!expanded && list.length > 10 && (
+                                          <Button
+                                            variant="link"
+                                            size="sm"
+                                            className="mt-2 h-auto p-0 text-[11px]"
+                                            onClick={(e) => toggleTooltipExpanded(key, e)}
                                           >
-                                            CC {normalizeEmailList(email.cc).length}
-                                          </Badge>
-                                          <div className="pointer-events-auto absolute left-0 top-full z-50 mt-1 hidden w-72 rounded-md border bg-white p-2 text-[11px] text-neutral-900 shadow-md group-hover:block">
-                                            <div className="font-semibold mb-1">CC</div>
-                                            <div className={expanded ? 'max-h-48 overflow-y-auto pr-1 space-y-0.5' : 'space-y-0.5'}>
-                                              {visible.map((addr) => (
-                                                <div key={addr} className="truncate">{addr}</div>
-                                              ))}
-                                            </div>
-                                            {!expanded && list.length > 10 && (
-                                              <button
-                                                type="button"
-                                                className="mt-2 w-full rounded-md border px-2 py-1 text-[11px] font-medium text-neutral-900 hover:bg-neutral-50"
-                                                onClick={(e) => toggleTooltipExpanded(key, e)}
-                                              >
-                                                View all 10+
-                                              </button>
-                                            )}
-                                            {expanded && (
-                                              <button
-                                                type="button"
-                                                className="mt-2 w-full rounded-md border px-2 py-1 text-[11px] font-medium text-neutral-900 hover:bg-neutral-50"
-                                                onClick={(e) => toggleTooltipExpanded(key, e)}
-                                              >
-                                                Show less
-                                              </button>
-                                            )}
-                                          </div>
-                                        </>
-                                      );
-                                    })()}
-                                  </span>
-                                )}
-                                {normalizeEmailList(email.bcc).length > 0 && (
-                                  <span className="relative group inline-flex">
-                                    {(() => {
-                                      const list = normalizeEmailList(email.bcc);
-                                      const key = `${email._id}-bcc`;
-                                      const expanded = !!tooltipExpanded[key];
-                                      const visible = expanded ? list : list.slice(0, 10);
-                                      return (
-                                        <>
-                                          <Badge
-                                            variant="secondary"
-                                            className="h-5 px-2 text-[10px] font-medium"
+                                            View all 10+
+                                          </Button>
+                                        )}
+                                        {expanded && (
+                                          <Button
+                                            variant="link"
+                                            size="sm"
+                                            className="mt-2 h-auto p-0 text-[11px]"
+                                            onClick={(e) => toggleTooltipExpanded(key, e)}
                                           >
-                                            BCC {normalizeEmailList(email.bcc).length}
-                                          </Badge>
-                                          <div className="pointer-events-auto absolute left-0 top-full z-50 mt-1 hidden w-72 rounded-md border bg-white p-2 text-[11px] text-neutral-900 shadow-md group-hover:block">
-                                            <div className="font-semibold mb-1">BCC</div>
-                                            <div className={expanded ? 'max-h-48 overflow-y-auto pr-1 space-y-0.5' : 'space-y-0.5'}>
-                                              {visible.map((addr) => (
-                                                <div key={addr} className="truncate">{addr}</div>
-                                              ))}
-                                            </div>
-                                            {!expanded && list.length > 10 && (
-                                              <button
-                                                type="button"
-                                                className="mt-2 w-full rounded-md border px-2 py-1 text-[11px] font-medium text-neutral-900 hover:bg-neutral-50"
-                                                onClick={(e) => toggleTooltipExpanded(key, e)}
-                                              >
-                                                View all 10+
-                                              </button>
-                                            )}
-                                            {expanded && (
-                                              <button
-                                                type="button"
-                                                className="mt-2 w-full rounded-md border px-2 py-1 text-[11px] font-medium text-neutral-900 hover:bg-neutral-50"
-                                                onClick={(e) => toggleTooltipExpanded(key, e)}
-                                              >
-                                                Show less
-                                              </button>
-                                            )}
-                                          </div>
-                                        </>
-                                      );
-                                    })()}
-                                  </span>
-                                )}
+                                            Show less
+                                          </Button>
+                                        )}
+                                      </PopoverContent>
+                                    </Popover>
+                                  );
+                                })()}
+                                {normalizeEmailList(email.bcc).length > 0 && (() => {
+                                  const list = normalizeEmailList(email.bcc);
+                                  const key = `${email._id}-bcc`;
+                                  const expanded = !!tooltipExpanded[key];
+                                  const visible = expanded ? list : list.slice(0, 10);
+                                  return (
+                                    <Popover>
+                                      <PopoverTrigger
+                                        asChild
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <Badge
+                                          variant="secondary"
+                                          className="h-5 px-2 text-[10px] font-medium cursor-pointer"
+                                        >
+                                          BCC {list.length}
+                                        </Badge>
+                                      </PopoverTrigger>
+                                      <PopoverContent align="start" className="w-72 p-2 text-[11px]">
+                                        <div className="font-semibold mb-1">BCC</div>
+                                        <div className={expanded ? 'max-h-48 overflow-y-auto pr-1 space-y-0.5' : 'space-y-0.5'}>
+                                          {visible.map((addr) => (
+                                            <div key={addr} className="truncate">{addr}</div>
+                                          ))}
+                                        </div>
+                                        {!expanded && list.length > 10 && (
+                                          <Button
+                                            variant="link"
+                                            size="sm"
+                                            className="mt-2 h-auto p-0 text-[11px]"
+                                            onClick={(e) => toggleTooltipExpanded(key, e)}
+                                          >
+                                            View all 10+
+                                          </Button>
+                                        )}
+                                        {expanded && (
+                                          <Button
+                                            variant="link"
+                                            size="sm"
+                                            className="mt-2 h-auto p-0 text-[11px]"
+                                            onClick={(e) => toggleTooltipExpanded(key, e)}
+                                          >
+                                            Show less
+                                          </Button>
+                                        )}
+                                      </PopoverContent>
+                                    </Popover>
+                                  );
+                                })()}
                               </div>
                             </div>
-                            <div className="text-xs text-neutral-500">To: {getRecipientAddress(email) || '—'}</div>
+                            <div className="text-xs text-muted-foreground">To: {getRecipientAddress(email) || '—'}</div>
                           </div>
                         </div>
                       </TableCell>
@@ -706,15 +723,15 @@ export default function CampaignRunDetailPage() {
                     {expandedRows.has(email._id) && (
                       <TableRow>
                         <TableCell colSpan={4} className="p-0">
-                          <div className="bg-gray-50 p-6 border-l-4 border-blue-500">
+                          <div className="bg-muted p-6 border-l-4 border-border">
                             <div className="space-y-4">
-                              <div className="flex items-center gap-2 font-semibold text-gray-900">
-                                <Clock size={16} className="text-blue-500" />
+                              <div className="flex items-center gap-2 font-semibold text-foreground">
+                                <Clock size={16} className="text-muted-foreground" />
                                 Email Event Timeline
                               </div>
                               
                               {Object.entries(email.emailEvents).map(([eventType, event]) => (
-                                <div key={eventType} className="flex items-start gap-4 p-3 bg-white rounded-lg border">
+                                <div key={eventType} className="flex items-start gap-4 p-3 bg-background rounded-lg border">
                                   <div className="mt-1">
                                     {getEventIcon(eventType)}
                                   </div>
@@ -729,33 +746,33 @@ export default function CampaignRunDetailPage() {
                                     </div>
                                     {eventType === 'Bounce' && (
                                       <div className="space-y-1">
-                                        <div className="text-sm text-red-600">
+                                        <div className="text-sm text-destructive">
                                           Bounce Reason: {getBounceReason(event)}
                                         </div>
                                         {getBounceDiagnostic(event) && (
-                                          <div className="text-xs text-neutral-600 break-words">
+                                          <div className="text-xs text-muted-foreground break-words">
                                             {getBounceDiagnostic(event)}
                                           </div>
                                         )}
                                       </div>
                                     )}
                                     {eventType === 'Send' && (
-                                      <div className="text-sm text-gray-600">
+                                      <div className="text-sm text-muted-foreground">
                                         Email sent successfully to {getRecipientAddress(email) || '—'}
                                       </div>
                                     )}
                                     {eventType === 'Delivery' && (
-                                      <div className="text-sm text-gray-600">
+                                      <div className="text-sm text-muted-foreground">
                                         Email delivered to recipient's mail server
                                       </div>
                                     )}
                                     {eventType === 'Open' && (
-                                      <div className="text-sm text-blue-600">
+                                      <div className="text-sm text-muted-foreground">
                                         Email was opened by recipient
                                       </div>
                                     )}
                                     {eventType === 'Click' && (
-                                      <div className="text-sm text-purple-600">
+                                      <div className="text-sm text-muted-foreground">
                                         Recipient clicked on email links
                                       </div>
                                     )}
@@ -764,32 +781,36 @@ export default function CampaignRunDetailPage() {
                               ))}
                               
                               {email.cc && email.cc.length > 0 && (
-                                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                                  <div className="text-sm font-medium text-blue-800">CC Recipients:</div>
-                                  <div className="text-sm text-blue-600">
-                                    {email.cc.map((cc: any) => cc.recipientEmailAddress || cc.emailAddress || cc).join(', ')}
-                                  </div>
-                                  <div className="text-xs text-blue-500 mt-1">{email.cc.length} recipient(s)</div>
-                                </div>
+                                <Alert>
+                                  <Info className="h-4 w-4" />
+                                  <AlertTitle>CC Recipients</AlertTitle>
+                                  <AlertDescription>
+                                    <div>
+                                      {email.cc.map((cc: any) => cc.recipientEmailAddress || cc.emailAddress || cc).join(', ')}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-1">{email.cc.length} recipient(s)</div>
+                                  </AlertDescription>
+                                </Alert>
                               )}
-                              
+
                               {email.bcc && email.bcc.length > 0 && (
-                                <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
-                                  <div className="text-sm font-medium text-purple-800">BCC Recipients:</div>
-                                  <div className="text-sm text-purple-600">
-                                    {email.bcc.map((bcc: any) => bcc.recipientEmailAddress || bcc.emailAddress || bcc).join(', ')}
-                                  </div>
-                                  <div className="text-xs text-purple-500 mt-1">{email.bcc.length} recipient(s)</div>
-                                </div>
+                                <Alert>
+                                  <Info className="h-4 w-4" />
+                                  <AlertTitle>BCC Recipients</AlertTitle>
+                                  <AlertDescription>
+                                    <div>
+                                      {email.bcc.map((bcc: any) => bcc.recipientEmailAddress || bcc.emailAddress || bcc).join(', ')}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-1">{email.bcc.length} recipient(s)</div>
+                                  </AlertDescription>
+                                </Alert>
                               )}
-                              
+
                               {email.resendCount && email.resendCount > 0 && (
-                                <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
-                                  <div className="flex items-center gap-2 text-sm font-medium text-orange-800">
-                                    <RefreshCw size={16} />
-                                    Resent {email.resendCount} time(s)
-                                  </div>
-                                </div>
+                                <Alert>
+                                  <RefreshCw className="h-4 w-4" />
+                                  <AlertTitle>Resent {email.resendCount} time(s)</AlertTitle>
+                                </Alert>
                               )}
                             </div>
                           </div>
@@ -804,7 +825,7 @@ export default function CampaignRunDetailPage() {
       
       {pagination.pages > 1 && (
         <div className="flex items-center justify-between px-6 py-4 border-t">
-          <div className="text-sm text-neutral-500">
+          <div className="text-sm text-muted-foreground">
             Page {pagination.page} of {pagination.pages} ({pagination.total} total emails)
           </div>
           <div className="flex items-center gap-2">
@@ -825,24 +846,32 @@ export default function CampaignRunDetailPage() {
               </SelectContent>
             </Select>
             
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handlePageChange(pagination.page - 1)}
-              disabled={pagination.page === 1}
-            >
-              <ChevronLeft size={16} />
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handlePageChange(pagination.page + 1)}
-              disabled={pagination.page === pagination.pages}
-            >
-              Next
-              <ChevronRight size={16} />
-            </Button>
+            <Pagination className="mx-0 w-auto">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handlePageChange(pagination.page - 1);
+                    }}
+                    aria-disabled={pagination.page === 1}
+                    className={pagination.page === 1 ? 'pointer-events-none opacity-50' : ''}
+                  />
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handlePageChange(pagination.page + 1);
+                    }}
+                    aria-disabled={pagination.page === pagination.pages}
+                    className={pagination.page === pagination.pages ? 'pointer-events-none opacity-50' : ''}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
           </div>
         </div>
       )}

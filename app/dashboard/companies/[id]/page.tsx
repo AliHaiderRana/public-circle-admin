@@ -4,9 +4,12 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { 
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Progress } from '@/components/ui/progress';
+import { toast } from 'sonner';
+import {
   ArrowLeft, 
   Building2, 
   Users, 
@@ -134,7 +137,7 @@ export default function CompanyDetailPage() {
       await fetchCompanyDetails();
     } catch (error) {
       console.error('Error blocking company:', error);
-      alert(error instanceof Error ? error.message : 'Failed to block company');
+      toast.error(error instanceof Error ? error.message : 'Failed to block company');
     } finally {
       setActionLoading(false);
     }
@@ -158,7 +161,7 @@ export default function CompanyDetailPage() {
       await fetchCompanyDetails();
     } catch (error) {
       console.error('Error unblocking company:', error);
-      alert(error instanceof Error ? error.message : 'Failed to unblock company');
+      toast.error(error instanceof Error ? error.message : 'Failed to unblock company');
     } finally {
       setActionLoading(false);
     }
@@ -176,7 +179,7 @@ export default function CompanyDetailPage() {
       window.open(redirectUrl, '_blank', 'noopener,noreferrer');
     } catch (error) {
       console.error('Impersonation error:', error);
-      alert(
+      toast.error(
         error instanceof Error ? error.message : 'Failed to open Public Circle as this user'
       );
     } finally {
@@ -208,8 +211,8 @@ export default function CompanyDetailPage() {
     return (
       <div className="p-6">
         <div className="text-center py-12">
-          <h2 className="text-2xl font-semibold text-gray-900">Company not found</h2>
-          <p className="text-gray-600 mt-2">The company you're looking for doesn't exist.</p>
+          <h2 className="text-2xl font-semibold text-foreground">Company not found</h2>
+          <p className="text-muted-foreground mt-2">The company you're looking for doesn't exist.</p>
           <Button onClick={() => router.back()} className="mt-4">
             Go Back
           </Button>
@@ -237,44 +240,41 @@ export default function CompanyDetailPage() {
                 <img
                   src={companyDetails.company.logo}
                   alt={companyDetails.company.name}
-                  className="h-12 w-12 rounded-lg object-cover border border-gray-200"
+                  className="h-12 w-12 rounded-lg object-cover border border-border"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
                     target.style.display = 'none';
                     target.nextElementSibling?.classList.remove('hidden');
                   }}
                 />
-                <div className="hidden h-12 w-12 rounded-lg bg-gray-200 flex items-center justify-center border border-gray-200">
-                  <Building2 className="h-6 w-6 text-gray-500" />
+                <div className="hidden h-12 w-12 rounded-lg bg-muted flex items-center justify-center border border-border">
+                  <Building2 className="h-6 w-6 text-muted-foreground" />
                 </div>
               </div>
             ) : (
-              <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center border border-gray-200">
-                <span className="text-white font-bold text-lg">
+              <Avatar className="h-12 w-12">
+                <AvatarFallback>
                   {companyDetails.company.name ? companyDetails.company.name.charAt(0).toUpperCase() : 'C'}
-                </span>
-              </div>
+                </AvatarFallback>
+              </Avatar>
             )}
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+              <h1 className="text-2xl font-bold text-foreground">
                 {companyDetails.company.name}
               </h1>
               <div className="flex items-center gap-2 mt-1">
-                <Badge 
-                  className={
-                    companyDetails.company.status === 'ACTIVE' 
-                      ? 'bg-neutral-900 text-white' 
+                <Badge
+                  variant={
+                    companyDetails.company.status === 'ACTIVE'
+                      ? 'default'
                       : companyDetails.company.status === 'BLOCKED'
-                      ? 'bg-red-500 text-white'
-                      : companyDetails.company.status === 'SUSPENDED'
-                      ? 'bg-yellow-500 text-white'
-                      : ''
-                  } 
-                  variant={companyDetails.company.status === 'ACTIVE' ? 'default' : 'secondary'}
+                      ? 'destructive'
+                      : 'secondary'
+                  }
                 >
                   {companyDetails.company.status}
                 </Badge>
-                <span className="text-sm text-gray-500">
+                <span className="text-sm text-muted-foreground">
                   Created {new Date(companyDetails.company.createdAt).toLocaleDateString()}
                 </span>
               </div>
@@ -324,7 +324,7 @@ export default function CompanyDetailPage() {
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction 
                     onClick={handleBlockCompany}
-                    className="bg-red-500 hover:bg-red-600"
+                    className={buttonVariants({ variant: "destructive" })}
                   >
                     Block Company
                   </AlertDialogAction>
@@ -336,7 +336,7 @@ export default function CompanyDetailPage() {
               <AlertDialogTrigger asChild>
                 <Button 
                   variant="default" 
-                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+                  className="flex items-center gap-2"
                   disabled={actionLoading}
                 >
                   {actionLoading ? (
@@ -364,7 +364,6 @@ export default function CompanyDetailPage() {
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction 
                     onClick={handleUnblockCompany}
-                    className="bg-green-600 hover:bg-green-700"
                   >
                     Unblock Company
                   </AlertDialogAction>
@@ -377,145 +376,145 @@ export default function CompanyDetailPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="hover:shadow-lg transition-shadow duration-200 border-0 shadow-md">
+        <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <Users className="h-4 w-4 text-blue-500" />
+                <p className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
                   Total Users
                 </p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
+                <p className="text-3xl font-bold text-foreground mt-2">
                   {companyDetails.users.totalUsers}
                 </p>
                 <div className="flex items-center gap-3 mt-3">
                   <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    <span className="text-xs text-gray-600 font-medium">
+                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                    <span className="text-xs text-muted-foreground font-medium">
                       {companyDetails.users.primary.length} Primary
                     </span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                    <span className="text-xs text-gray-600 font-medium">
+                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                    <span className="text-xs text-muted-foreground font-medium">
                       {companyDetails.users.secondary.length} Secondary
                     </span>
                   </div>
                 </div>
               </div>
-              <div className="h-14 w-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-                <Users className="h-7 w-7 text-white" />
+              <div className="h-14 w-14 bg-muted rounded-lg flex items-center justify-center">
+                <Users className="h-7 w-7 text-muted-foreground" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow duration-200 border-0 shadow-md">
+        <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-green-500" />
+                <p className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
                   Total Contacts
                 </p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
+                <p className="text-3xl font-bold text-foreground mt-2">
                   {companyDetails.contacts.total.toLocaleString()}
                 </p>
                 <div className="flex items-center gap-3 mt-3">
                   <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span className="text-xs text-gray-600 font-medium">
+                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                    <span className="text-xs text-muted-foreground font-medium">
                       {companyDetails.contacts.active} Active
                     </span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                    <span className="text-xs text-gray-600 font-medium">
+                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                    <span className="text-xs text-muted-foreground font-medium">
                       {companyDetails.contacts.deleted} Deleted
                     </span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
-                    <span className="text-xs text-gray-600 font-medium">
+                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                    <span className="text-xs text-muted-foreground font-medium">
                       {companyDetails.contacts.inactive} Inactive
                     </span>
                   </div>
                 </div>
               </div>
-              <div className="h-14 w-14 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
-                <Mail className="h-7 w-7 text-white" />
+              <div className="h-14 w-14 bg-muted rounded-lg flex items-center justify-center">
+                <Mail className="h-7 w-7 text-muted-foreground" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow duration-200 border-0 shadow-md">
+        <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <Send className="h-4 w-4 text-purple-500" />
+                <p className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                  <Send className="h-4 w-4 text-muted-foreground" />
                   Total Campaigns
                 </p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">
+                <p className="text-3xl font-bold text-foreground mt-2">
                   {companyDetails.campaigns.total}
                 </p>
                 <div className="flex items-center gap-3 mt-3">
                   <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span className="text-xs text-gray-600 font-medium">
+                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                    <span className="text-xs text-muted-foreground font-medium">
                       {companyDetails.campaigns.active} Active
                     </span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    <span className="text-xs text-gray-600 font-medium">
+                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                    <span className="text-xs text-muted-foreground font-medium">
                       {companyDetails.campaigns.draft} Draft
                     </span>
                   </div>
                 </div>
               </div>
-              <div className="h-14 w-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                <Send className="h-7 w-7 text-white" />
+              <div className="h-14 w-14 bg-muted rounded-lg flex items-center justify-center">
+                <Send className="h-7 w-7 text-muted-foreground" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow duration-200 border-0 shadow-md">
+        <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-orange-500" />
+                <p className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-muted-foreground" />
                   Campaign Status
                 </p>
                 <div className="space-y-2 mt-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                      <span className="text-xs text-gray-600">Active</span>
+                      <div className="w-2 h-2 bg-primary rounded-full"></div>
+                      <span className="text-xs text-muted-foreground">Active</span>
                     </div>
-                    <span className="text-xs font-semibold text-gray-900">{companyDetails.campaigns.active}</span>
+                    <span className="text-xs font-semibold text-foreground">{companyDetails.campaigns.active}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                      <span className="text-xs text-gray-600">Paused</span>
+                      <div className="w-2 h-2 bg-primary rounded-full"></div>
+                      <span className="text-xs text-muted-foreground">Paused</span>
                     </div>
-                    <span className="text-xs font-semibold text-gray-900">{companyDetails.campaigns.paused}</span>
+                    <span className="text-xs font-semibold text-foreground">{companyDetails.campaigns.paused}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
-                      <span className="text-xs text-gray-600">Archived</span>
+                      <div className="w-2 h-2 bg-primary rounded-full"></div>
+                      <span className="text-xs text-muted-foreground">Archived</span>
                     </div>
-                    <span className="text-xs font-semibold text-gray-900">{companyDetails.campaigns.archived}</span>
+                    <span className="text-xs font-semibold text-foreground">{companyDetails.campaigns.archived}</span>
                   </div>
                 </div>
               </div>
-              <div className="h-14 w-14 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">
-                <Activity className="h-7 w-7 text-white" />
+              <div className="h-14 w-14 bg-muted rounded-lg flex items-center justify-center">
+                <Activity className="h-7 w-7 text-muted-foreground" />
               </div>
             </div>
           </CardContent>
@@ -535,14 +534,14 @@ export default function CompanyDetailPage() {
           <CardContent className="space-y-6">
             {/* Primary Users */}
             <div>
-              <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+              <h4 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                <div className="w-2 h-2 bg-primary rounded-full"></div>
                 Primary Users
               </h4>
               {companyDetails.users.primary.length > 0 ? (
                 <div className="space-y-3">
                   {companyDetails.users.primary.map((user) => (
-                    <div key={user.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100 hover:shadow-md transition-shadow">
+                    <div key={user.id} className="flex items-center justify-between p-4 bg-muted rounded-xl">
                       <div className="flex items-center gap-3">
                         {user.profilePicture ? (
                           <img
@@ -556,40 +555,32 @@ export default function CompanyDetailPage() {
                             }}
                           />
                         ) : (
-                          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center border-2 border-white shadow-sm">
-                            <span className="text-white font-semibold text-sm">
+                          <Avatar className="h-10 w-10">
+                            <AvatarFallback>
                               {user.firstName ? user.firstName.charAt(0).toUpperCase() : ''}{user.lastName ? user.lastName.charAt(0).toUpperCase() : ''}
-                            </span>
-                          </div>
+                            </AvatarFallback>
+                          </Avatar>
                         )}
-                        <div className="hidden h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center border-2 border-white shadow-sm">
-                          <UserPlus className="h-5 w-5 text-gray-600" />
+                        <div className="hidden h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                          <UserPlus className="h-5 w-5 text-muted-foreground" />
                         </div>
                         <div>
-                          <p className="font-semibold text-gray-900">
+                          <p className="font-semibold text-foreground">
                             {user.firstName || ''} {user.lastName || ''}
                           </p>
-                          <p className="text-sm text-gray-600">{user.emailAddress || ''}</p>
+                          <p className="text-sm text-muted-foreground">{user.emailAddress || ''}</p>
                           {user.phoneNumber && (
-                            <p className="text-xs text-gray-500 mt-1">{user.phoneNumber}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{user.phoneNumber}</p>
                           )}
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center justify-end gap-2">
                         {user.status !== 'ACTIVE' && (
-                          <Badge 
-                            className={
-                              user.status === 'BLOCKED' 
-                                ? 'bg-red-500 text-white border-red-500' 
-                                : user.status === 'SUSPENDED'
-                                ? 'bg-yellow-500 text-white border-yellow-500'
-                                : 'bg-gray-500 text-white border-gray-500'
-                            }
-                          >
+                          <Badge variant={user.status === 'BLOCKED' ? 'destructive' : 'secondary'}>
                             {user.status}
                           </Badge>
                         )}
-                        <Badge className="bg-blue-500 text-white border-blue-500">Primary</Badge>
+                        <Badge>Primary</Badge>
                         {companyDetails.company.status === 'ACTIVE' &&
                           user.status === 'ACTIVE' && (
                             <Button
@@ -613,23 +604,23 @@ export default function CompanyDetailPage() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-8 bg-gray-50 rounded-xl">
-                  <UserPlus className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-500 text-sm">No primary users found</p>
+                <div className="text-center py-8 bg-muted rounded-xl">
+                  <UserPlus className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-muted-foreground text-sm">No primary users found</p>
                 </div>
               )}
             </div>
 
             {/* Secondary Users */}
             <div>
-              <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+              <h4 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                <div className="w-2 h-2 bg-primary rounded-full"></div>
                 Secondary Users
               </h4>
               {companyDetails.users.secondary.length > 0 ? (
                 <div className="space-y-3">
                   {companyDetails.users.secondary.map((user) => (
-                    <div key={user.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-100 hover:shadow-md transition-shadow">
+                    <div key={user.id} className="flex items-center justify-between p-4 bg-muted rounded-xl">
                       <div className="flex items-center gap-3">
                         {user.profilePicture ? (
                           <img
@@ -643,40 +634,32 @@ export default function CompanyDetailPage() {
                             }}
                           />
                         ) : (
-                          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center border-2 border-white shadow-sm">
-                            <span className="text-white font-semibold text-sm">
+                          <Avatar className="h-10 w-10">
+                            <AvatarFallback>
                               {user.firstName ? user.firstName.charAt(0).toUpperCase() : ''}{user.lastName ? user.lastName.charAt(0).toUpperCase() : ''}
-                            </span>
-                          </div>
+                            </AvatarFallback>
+                          </Avatar>
                         )}
-                        <div className="hidden h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center border-2 border-white shadow-sm">
-                          <UserPlus className="h-5 w-5 text-gray-600" />
+                        <div className="hidden h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                          <UserPlus className="h-5 w-5 text-muted-foreground" />
                         </div>
                         <div>
-                          <p className="font-semibold text-gray-900">
+                          <p className="font-semibold text-foreground">
                             {user.firstName || ''} {user.lastName || ''}
                           </p>
-                          <p className="text-sm text-gray-600">{user.emailAddress || ''}</p>
+                          <p className="text-sm text-muted-foreground">{user.emailAddress || ''}</p>
                           {user.phoneNumber && (
-                            <p className="text-xs text-gray-500 mt-1">{user.phoneNumber}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{user.phoneNumber}</p>
                           )}
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center justify-end gap-2">
                         {user.status !== 'ACTIVE' && (
-                          <Badge 
-                            className={
-                              user.status === 'BLOCKED' 
-                                ? 'bg-red-500 text-white border-red-500' 
-                                : user.status === 'SUSPENDED'
-                                ? 'bg-yellow-500 text-white border-yellow-500'
-                                : 'bg-gray-500 text-white border-gray-500'
-                            }
-                          >
+                          <Badge variant={user.status === 'BLOCKED' ? 'destructive' : 'secondary'}>
                             {user.status}
                           </Badge>
                         )}
-                        <Badge variant="secondary" className="bg-purple-100 text-purple-800 border-purple-200">Secondary</Badge>
+                        <Badge variant="secondary">Secondary</Badge>
                         {companyDetails.company.status === 'ACTIVE' &&
                           user.status === 'ACTIVE' && (
                             <Button
@@ -700,9 +683,9 @@ export default function CompanyDetailPage() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-8 bg-gray-50 rounded-xl">
-                  <UserPlus className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-500 text-sm">No secondary users found</p>
+                <div className="text-center py-8 bg-muted rounded-xl">
+                  <UserPlus className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-muted-foreground text-sm">No secondary users found</p>
                 </div>
               )}
             </div>
@@ -729,49 +712,44 @@ export default function CompanyDetailPage() {
           <CardContent>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="text-center p-4 bg-green-50 rounded-lg">
-                  <div className="text-2xl font-bold text-green-600">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-foreground">
                     {companyDetails.campaigns.active}
                   </div>
-                  <div className="text-sm text-green-800">Active Campaigns</div>
+                  <div className="text-sm text-muted-foreground">Active Campaigns</div>
                 </div>
-                <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <div className="text-2xl font-bold text-blue-600">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-foreground">
                     {companyDetails.campaigns.draft}
                   </div>
-                  <div className="text-sm text-blue-800">Draft Campaigns</div>
+                  <div className="text-sm text-muted-foreground">Draft Campaigns</div>
                 </div>
-                <div className="text-center p-4 bg-yellow-50 rounded-lg">
-                  <div className="text-2xl font-bold text-yellow-600">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-foreground">
                     {companyDetails.campaigns.paused}
                   </div>
-                  <div className="text-sm text-yellow-800">Paused Campaigns</div>
+                  <div className="text-sm text-muted-foreground">Paused Campaigns</div>
                 </div>
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <div className="text-2xl font-bold text-gray-600">
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-foreground">
                     {companyDetails.campaigns.archived}
                   </div>
-                  <div className="text-sm text-gray-800">Archived Campaigns</div>
+                  <div className="text-sm text-muted-foreground">Archived Campaigns</div>
                 </div>
               </div>
               
               <div className="pt-4 border-t">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Total Campaigns</span>
-                  <span className="text-lg font-semibold text-gray-900">
+                  <span className="text-sm text-muted-foreground">Total Campaigns</span>
+                  <span className="text-lg font-semibold text-foreground">
                     {companyDetails.campaigns.total}
                   </span>
                 </div>
                 <div className="mt-2">
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-green-500 h-2 rounded-full" 
-                      style={{ 
-                        width: `${companyDetails.campaigns.total > 0 ? (companyDetails.campaigns.active / companyDetails.campaigns.total) * 100 : 0}%` 
-                      }}
-                    ></div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <Progress
+                    value={companyDetails.campaigns.total > 0 ? (companyDetails.campaigns.active / companyDetails.campaigns.total) * 100 : 0}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
                     {companyDetails.campaigns.total > 0 ? Math.round((companyDetails.campaigns.active / companyDetails.campaigns.total) * 100) : 0}% of campaigns are active
                   </p>
                 </div>

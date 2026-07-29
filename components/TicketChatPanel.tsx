@@ -1,10 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { SupportChatSendButton } from '@/components/SupportChatSendButton';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { Toggle } from '@/components/ui/toggle';
 import {
   Loader2,
   RefreshCw,
@@ -18,6 +25,7 @@ import {
   UserRound,
   Trash2,
   ChevronDown,
+  StickyNote,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -136,7 +144,7 @@ type TicketChatPanelProps = {
   refreshKey?: number;
 };
 
-const READ_ONLY_STATUSES = new Set([
+const READ_ONLY_STATUSES = new Set<string>([
   SUPPORT_REQUEST_STATUS.RESOLVED,
   SUPPORT_REQUEST_STATUS.CLOSED,
 ]);
@@ -160,18 +168,19 @@ function formatMessageTime(value: string) {
   });
 }
 
-function getStatusBadgeClass(status: string) {
+function getStatusBadgeVariant(
+  status: string,
+): 'default' | 'secondary' | 'destructive' | 'outline' {
   switch (status) {
     case SUPPORT_REQUEST_STATUS.OPEN:
-      return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900';
+      return 'destructive';
     case SUPPORT_REQUEST_STATUS.IN_PROGRESS:
-      return 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900';
     case SUPPORT_REQUEST_STATUS.PENDING_RESOLUTION:
-      return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900';
+      return 'outline';
     case SUPPORT_REQUEST_STATUS.RESOLVED:
-      return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900';
+      return 'default';
     default:
-      return 'bg-muted text-muted-foreground';
+      return 'secondary';
   }
 }
 
@@ -946,8 +955,8 @@ export function TicketChatPanel({
               ) : null}
               {statusLabel && ticketStatus && (
                 <Badge
-                  variant="outline"
-                  className={cn('text-[11px] font-normal shrink-0', getStatusBadgeClass(ticketStatus))}
+                  variant={getStatusBadgeVariant(ticketStatus)}
+                  className="text-[11px] font-normal shrink-0"
                 >
                   {statusLabel}
                 </Badge>
@@ -960,50 +969,41 @@ export function TicketChatPanel({
               )}
               {userOnline !== null && (
                 <Badge
-                  variant="outline"
-                  className={cn(
-                    'text-[10px] font-normal gap-1 shrink-0 h-5 px-1.5',
-                    userOnline
-                      ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300'
-                      : 'border-muted-foreground/30 bg-muted/50 text-muted-foreground',
-                  )}
+                  variant={userOnline ? 'default' : 'secondary'}
+                  className="text-[10px] font-normal gap-1 shrink-0 h-5 px-1.5"
                 >
-                  <span
-                    className={cn(
-                      'size-1.5 rounded-full',
-                      userOnline ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/60',
-                    )}
-                  />
+                  <span className="size-1.5 rounded-full bg-current" />
                   {userOnline ? 'Online' : 'Offline'}
                 </Badge>
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => setDetailsExpanded((prev) => !prev)}
-              className="flex w-full items-start gap-2 rounded-md text-left transition-colors hover:bg-muted/40 -mx-1 px-1 py-0.5"
-              aria-expanded={detailsExpanded}
-              aria-label={detailsExpanded ? 'Hide ticket details' : 'Show ticket details'}
+            <Collapsible
+              open={detailsExpanded}
+              onOpenChange={setDetailsExpanded}
+              className="space-y-2"
             >
-              <ChevronDown
-                className={cn(
-                  'mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200',
-                  detailsExpanded && 'rotate-180',
-                )}
-              />
-              <div className="min-w-0 flex-1 space-y-1">
-                <h3 className="text-base font-semibold leading-snug">{displayHeadline}</h3>
-                {!detailsExpanded && displayPreview && displayPreview !== 'No messages yet' ? (
-                  <p className="text-sm text-muted-foreground line-clamp-1" title={displayPreview}>
-                    {displayPreview}
-                  </p>
-                ) : null}
-              </div>
-            </button>
+              <CollapsibleTrigger
+                className="flex w-full items-start gap-2 rounded-md text-left transition-colors hover:bg-muted/40 -mx-1 px-1 py-0.5"
+                aria-label={detailsExpanded ? 'Hide ticket details' : 'Show ticket details'}
+              >
+                <ChevronDown
+                  className={cn(
+                    'mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200',
+                    detailsExpanded && 'rotate-180',
+                  )}
+                />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <h3 className="text-base font-semibold leading-snug">{displayHeadline}</h3>
+                  {!detailsExpanded && displayPreview && displayPreview !== 'No messages yet' ? (
+                    <p className="text-sm text-muted-foreground line-clamp-1" title={displayPreview}>
+                      {displayPreview}
+                    </p>
+                  ) : null}
+                </div>
+              </CollapsibleTrigger>
 
-            {detailsExpanded ? (
-              <div className="space-y-2 pl-6">
+              <CollapsibleContent className="space-y-2 pl-6">
                 {displayPreview && displayPreview !== 'No messages yet' ? (
                   <p className="text-sm text-muted-foreground line-clamp-2" title={displayPreview}>
                     {displayPreview}
@@ -1063,8 +1063,8 @@ export function TicketChatPanel({
                     Replies will also be emailed while the customer is away.
                   </p>
                 )}
-              </div>
-            ) : null}
+              </CollapsibleContent>
+            </Collapsible>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
             {onCloseTicket &&
@@ -1191,17 +1191,20 @@ export function TicketChatPanel({
               </div>
             ) : null}
             {!isPartner && displayAdminNotes ? (
-              <div className="rounded-lg border border-amber-200/80 bg-amber-50/80 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-amber-800 dark:text-amber-300">
+              <Alert>
+                <StickyNote className="size-4" />
+                <AlertTitle className="text-[11px] uppercase tracking-wide">
                   Private team notes
-                </p>
-                <p className="mt-1 text-[11px] text-amber-700/80 dark:text-amber-400/80">
-                  Internal only — not visible to the customer.
-                </p>
-                <p className="mt-2 text-sm whitespace-pre-wrap leading-relaxed">
-                  {displayAdminNotes}
-                </p>
-              </div>
+                </AlertTitle>
+                <AlertDescription>
+                  <p className="text-[11px] text-muted-foreground">
+                    Internal only — not visible to the customer.
+                  </p>
+                  <p className="mt-2 text-sm whitespace-pre-wrap leading-relaxed">
+                    {displayAdminNotes}
+                  </p>
+                </AlertDescription>
+              </Alert>
             ) : null}
           </div>
         )}
@@ -1218,11 +1221,14 @@ export function TicketChatPanel({
             if (system) {
               return (
                 <div key={messageKey} className="flex justify-center py-1">
-                  <div className="max-w-[90%] rounded-full border border-dashed bg-background px-3 py-1.5 text-center text-[11px] text-muted-foreground">
+                  <Badge
+                    variant="outline"
+                    className="max-w-[90%] whitespace-normal border-dashed px-3 py-1.5 text-center text-[11px] font-normal"
+                  >
                     {msg.message.replace(/^\[Ticket reopened\]\s*/i, 'Ticket reopened: ')}
                     <span className="mx-1.5 opacity-40">·</span>
                     {formatMessageTime(msg.createdAt)}
-                  </div>
+                  </Badge>
                 </div>
               );
             }
@@ -1284,7 +1290,7 @@ export function TicketChatPanel({
                     >
                       {label}
                       {isInternal ? (
-                        <span className="ml-1.5 font-normal text-amber-700 dark:text-amber-300">
+                        <span className="ml-1.5 font-normal text-muted-foreground">
                           · Internal
                         </span>
                       ) : null}
@@ -1319,7 +1325,7 @@ export function TicketChatPanel({
                             isAdmin
                               ? isInternal
                                 ? cn(
-                                    'bg-amber-50/90 text-foreground border border-amber-200/80 border-dashed dark:bg-amber-950/25 dark:border-amber-900/50',
+                                    'bg-muted/60 text-foreground border border-dashed',
                                     isConsecutivePrev && isConsecutiveNext
                                       ? 'rounded-r-md'
                                       : isConsecutivePrev
@@ -1398,27 +1404,16 @@ export function TicketChatPanel({
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               {!isPartner ? (
-                <Button
-                  type="button"
-                  variant="ghost"
+                <Toggle
                   size="sm"
+                  pressed={replyInternal}
+                  onPressedChange={setReplyInternal}
                   disabled={sending}
-                  onClick={() => setReplyInternal((prev) => !prev)}
-                  className={cn(
-                    'h-7 gap-1.5 px-2.5 text-xs font-normal',
-                    replyInternal
-                      ? 'bg-amber-100 text-amber-900 hover:bg-amber-100/90 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/50'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
+                  className="h-7 gap-1.5 px-2.5 text-xs font-normal text-muted-foreground"
                 >
                   <Lock className="size-3 shrink-0" />
                   Internal note
-                  {replyInternal ? (
-                    <span className="rounded-full bg-amber-200/80 px-1.5 py-px text-[10px] font-medium text-amber-900 dark:bg-amber-800/60 dark:text-amber-100">
-                      On
-                    </span>
-                  ) : null}
-                </Button>
+                </Toggle>
               ) : (
                 <span />
               )}
@@ -1447,14 +1442,7 @@ export function TicketChatPanel({
                 </Button>
               </div>
             ) : null}
-            <div
-              className={cn(
-                'flex items-end gap-2 rounded-2xl border bg-background px-2 py-1.5 shadow-sm transition-colors',
-                replyInternal
-                  ? 'border-amber-200/90 bg-amber-50/40 dark:border-amber-900/50 dark:bg-amber-950/15'
-                  : 'border-border/80',
-              )}
-            >
+            <div className="flex items-end gap-2">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1500,7 +1488,7 @@ export function TicketChatPanel({
                 onChange={(e) => setReply(e.target.value)}
                 rows={1}
                 disabled={sending}
-                className="max-h-32 min-h-[40px] flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                className="max-h-32 min-h-[40px] flex-1 resize-none"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -1513,12 +1501,8 @@ export function TicketChatPanel({
                 disabled={sending || (!reply.trim() && !imageFile)}
                 loading={sending}
                 title={replyInternal ? 'Save internal note' : 'Send reply'}
-                className={cn(
-                  'mb-0.5 size-9',
-                  replyInternal
-                    ? 'bg-amber-600 text-white hover:bg-amber-700'
-                    : 'bg-primary text-primary-foreground hover:bg-primary/90',
-                )}
+                variant={replyInternal ? 'secondary' : 'default'}
+                className="mb-0.5 size-9"
               />
             </div>
           </div>
@@ -1551,7 +1535,7 @@ export function TicketChatPanel({
             <AlertDialogCancel disabled={deletingChat}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               disabled={deletingChat}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className={buttonVariants({ variant: 'destructive' })}
               onClick={(event) => {
                 event.preventDefault();
                 void handleDeleteTicket();

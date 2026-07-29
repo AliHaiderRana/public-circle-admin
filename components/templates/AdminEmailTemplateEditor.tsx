@@ -2,6 +2,8 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { XCircle } from 'lucide-react';
 
 const EmailBuilder = dynamic(
   () =>
@@ -112,13 +114,16 @@ export default function AdminEmailTemplateEditor({
 
   if (!embedToken) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
-        Email builder embed token is missing. Set
-        {' '}
-        <strong>NEXT_PUBLIC_EMAIL_BUILDER_EMBED_TOKEN</strong>
-        {' '}
-        to enable template editing.
-      </div>
+      <Alert variant="destructive">
+        <XCircle className="h-4 w-4" />
+        <AlertDescription>
+          Email builder embed token is missing. Set
+          {' '}
+          <strong>NEXT_PUBLIC_EMAIL_BUILDER_EMBED_TOKEN</strong>
+          {' '}
+          to enable template editing.
+        </AlertDescription>
+      </Alert>
     );
   }
 
@@ -173,8 +178,11 @@ export default function AdminEmailTemplateEditor({
       )}
 
       {error && (
-        <div className="absolute left-4 right-4 top-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
+        <div className="absolute left-4 right-4 top-4">
+          <Alert variant="destructive">
+            <XCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         </div>
       )}
     </div>
