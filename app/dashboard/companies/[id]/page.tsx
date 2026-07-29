@@ -323,13 +323,26 @@ export default function CompanyDetailPage() {
             )
           ) : (
             <>
-          <Button
-            onClick={() => router.push(`/dashboard/campaign-runs?company=${companyDetails.company.id}`)}
-            className="flex items-center gap-2"
-          >
-            <Play className="h-4 w-4" />
-            View Campaign Runs
-          </Button>
+          {isSuperAdmin && (
+            <Button
+              variant="outline"
+              className="flex items-center gap-2"
+              onClick={() => setRemoveMode('archive')}
+            >
+              <Archive className="h-4 w-4" />
+              Archive Company
+            </Button>
+          )}
+          {isSuperAdmin && (
+            <Button
+              variant="destructive"
+              className="flex items-center gap-2"
+              onClick={() => setRemoveMode('delete')}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete Company
+            </Button>
+          )}
           {!isPartnerView && companyDetails.company.status === 'ACTIVE' ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -410,26 +423,6 @@ export default function CompanyDetailPage() {
               </AlertDialogContent>
             </AlertDialog>
           ) : null}
-          {isSuperAdmin && (
-            <Button
-              variant="outline"
-              className="flex items-center gap-2"
-              onClick={() => setRemoveMode('archive')}
-            >
-              <Archive className="h-4 w-4" />
-              Archive Company
-            </Button>
-          )}
-          {isSuperAdmin && (
-            <Button
-              variant="destructive"
-              className="flex items-center gap-2"
-              onClick={() => setRemoveMode('delete')}
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete Company
-            </Button>
-          )}
             </>
           )}
         </div>
@@ -761,13 +754,24 @@ export default function CompanyDetailPage() {
                 <Send className="h-5 w-5" />
                 Campaigns Overview
               </CardTitle>
-              <Button 
-                onClick={() => router.push(`/dashboard/campaigns?company=${companyDetails.company.id}`)}
-                className="flex items-center gap-2"
-              >
-                <Send className="h-4 w-4" />
-                View Campaigns
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => router.push(`/dashboard/campaign-runs?company=${companyDetails.company.id}`)}
+                  className="flex items-center gap-2"
+                >
+                  <Play className="h-4 w-4" />
+                  View Campaign Runs
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push(`/dashboard/campaigns?company=${companyDetails.company.id}`)}
+                  className="flex items-center gap-2"
+                >
+                  <Send className="h-4 w-4" />
+                  View Campaigns
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>

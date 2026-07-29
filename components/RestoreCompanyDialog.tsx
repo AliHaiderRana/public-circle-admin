@@ -150,6 +150,16 @@ export function RestoreCompanyDialog({
             />
           </div>
 
+          {restoring && (
+            <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+              <span>
+                Re-inserting documents, copying files back, and recreating Stripe
+                subscription(s). This may take a moment — please don't close this window.
+              </span>
+            </div>
+          )}
+
           {restoreError && <p className="text-sm text-destructive">{restoreError}</p>}
         </div>
 

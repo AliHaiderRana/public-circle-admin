@@ -269,6 +269,19 @@ export function RemoveCompanyDialog({
               />
             </div>
 
+            {submitting && (
+              <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                <span>
+                  {mode === 'archive'
+                    ? 'Backing up to AWS, cancelling Stripe, and removing live data — '
+                    : 'Cancelling Stripe and removing live data — '}
+                  this scans AWS storage first, which can take a minute or more the first
+                  time (it's fast once warmed up). Please don't close this window.
+                </span>
+              </div>
+            )}
+
             {submitError && <p className="text-sm text-destructive">{submitError}</p>}
           </div>
         ) : null}
