@@ -22,7 +22,6 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { toast } from 'sonner';
 import { ArrowLeft, Archive, ArchiveRestore, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { RestoreCompanyDialog, type ArchivedCompanyRow } from '@/components/RestoreCompanyDialog';
@@ -189,10 +188,8 @@ export default function ArchivedCompaniesPage() {
           open={Boolean(restoreTarget)}
           onOpenChange={(next) => !next && setRestoreTarget(null)}
           archived={restoreTarget}
-          onRestored={() => {
-            toast.success(`"${restoreTarget.companyName}" restored`);
+          onQueued={() => {
             setRestoreTarget(null);
-            void fetchArchived();
           }}
         />
       )}

@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import mongoose from 'mongoose';
+import type { Collection } from 'mongodb';
 import { EJSON } from 'bson';
 import {
   CopyObjectCommand,
@@ -27,6 +28,7 @@ import {
   listCancelableSubscriptions,
   cancelCompanySubscriptions,
 } from '@/lib/company-deletion.server';
+import { setProgress, clearProgress } from '@/lib/archive-progress.server';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
@@ -80,6 +82,53 @@ async function deleteAllUnderPrefix(client: S3Client, bucket: string, prefix: st
       })
     );
   }
+}
+
+const RESTORE_INSERT_BATCH_SIZE = 2000;
+
+type MongoWriteError = { code?: number; errmsg?: string };
+type MongoBulkWriteErrorLike = {
+  message?: string;
+  writeErrors?: MongoWriteError[];
+  result?: { insertedCount?: number };
+};
+
+/**
+ * Inserts documents in batches, tolerating duplicate-key failures (code
+ * 11000) as "already restored by a previous attempt" rather than a real
+ * error — this is what makes retrying a partially-restored collection safe.
+ * Any non-duplicate error is recorded but doesn't stop the remaining
+ * batches, so one bad batch can't sink an otherwise-successful restore.
+ */
+async function insertManyTolerant(
+  coll: Collection,
+  docs: Record<string, unknown>[]
+): Promise<{ inserted: number; errors: string[] }> {
+  let inserted = 0;
+  const errors: string[] = [];
+
+  for (let i = 0; i < docs.length; i += RESTORE_INSERT_BATCH_SIZE) {
+    const batch = docs.slice(i, i + RESTORE_INSERT_BATCH_SIZE);
+    try {
+      const result = await coll.insertMany(batch, { ordered: false });
+      inserted += result.insertedCount;
+    } catch (err) {
+      const bulkErr = err as MongoBulkWriteErrorLike;
+      inserted += bulkErr.result?.insertedCount ?? 0;
+      const nonDuplicateErrors = (bulkErr.writeErrors ?? []).filter((we) => we.code !== 11000);
+      if (nonDuplicateErrors.length > 0) {
+        errors.push(
+          `batch ${Math.floor(i / RESTORE_INSERT_BATCH_SIZE) + 1}: ${nonDuplicateErrors.length} document(s) failed (${
+            nonDuplicateErrors[0]?.errmsg ?? bulkErr.message ?? 'unknown error'
+          })`
+        );
+      }
+      // Pure duplicate-key errors mean this batch was already inserted by a
+      // previous attempt — not a real failure, nothing more to do.
+    }
+  }
+
+  return { inserted, errors };
 }
 
 type DbBackupRow = { collectionName: string; field: string; count: number };
@@ -139,17 +188,31 @@ export async function performCompanyArchive(
   const prefix = `companies/${companyId}/`;
   const objectId = new mongoose.Types.ObjectId(companyId);
 
+  try {
   // --- Step 1: back up MongoDB documents ---
+  setProgress(companyId, 'archive', 'Scanning', 'Finding which collections reference this company…');
   const referencing = await detectCompanyReferencingCollections();
   const collectionsToBackUp = [{ name: 'companies', field: '_id' }, ...referencing];
 
   let companyDocForStub: Record<string, unknown> | null = null;
+  let backedUpCount = 0;
+
+  setProgress(
+    companyId,
+    'archive',
+    'Backing up database',
+    `0 of ${collectionsToBackUp.length} collection(s) backed up…`,
+    { current: 0, total: collectionsToBackUp.length }
+  );
 
   const dbBackupRows = (
     await Promise.all(
       collectionsToBackUp.map(async ({ name, field }): Promise<DbBackupRow | null> => {
         const docs = await db.collection(name).find({ [field]: objectId }).toArray();
-        if (docs.length === 0) return null;
+        if (docs.length === 0) {
+          backedUpCount += 1;
+          return null;
+        }
         const body = EJSON.stringify(docs, { relaxed: false });
         await client.send(
           new PutObjectCommand({
@@ -162,16 +225,26 @@ export async function performCompanyArchive(
         if (name === 'companies') {
           companyDocForStub = docs[0] as Record<string, unknown>;
         }
+        backedUpCount += 1;
+        setProgress(
+          companyId,
+          'archive',
+          'Backing up database',
+          `${backedUpCount} of ${collectionsToBackUp.length} collection(s) backed up (${name}: ${docs.length} docs)`,
+          { current: backedUpCount, total: collectionsToBackUp.length }
+        );
         return { collectionName: name, field, count: docs.length };
       })
     )
   ).filter((r): r is DbBackupRow => r !== null);
 
   // --- Step 2: back up S3 objects (copy only — originals untouched so far) ---
+  setProgress(companyId, 'archive', 'Scanning AWS storage', 'Finding this company\'s S3 files…');
   const objectLocations = await listCompanyObjectLocations(db, companyId);
   const awsBackupErrors: string[] = [];
   let backedUpObjects = 0;
   let backedUpBytes = 0;
+  let awsBackedUpCount = 0;
 
   await Promise.all(
     objectLocations.map(async ({ bucket, key, size }) => {
@@ -187,6 +260,17 @@ export async function performCompanyArchive(
         backedUpBytes += size;
       } catch (err) {
         awsBackupErrors.push(`${bucket}/${key}: ${err instanceof Error ? err.message : 'Failed to back up'}`);
+      } finally {
+        awsBackedUpCount += 1;
+        if (objectLocations.length > 0) {
+          setProgress(
+            companyId,
+            'archive',
+            'Backing up AWS storage',
+            `${awsBackedUpCount} of ${objectLocations.length} file(s)`,
+            { current: awsBackedUpCount, total: objectLocations.length }
+          );
+        }
       }
     })
   );
@@ -198,6 +282,7 @@ export async function performCompanyArchive(
   }
 
   // --- Step 3: capture the Stripe manifest, then cancel ---
+  setProgress(companyId, 'archive', 'Stripe', 'Cancelling subscriptions…');
   const stripeSubscriptions = company.stripeCustomerId
     ? await listCancelableSubscriptions(company.stripeCustomerId)
     : [];
@@ -206,6 +291,7 @@ export async function performCompanyArchive(
     : { cancelled: 0, errors: [] };
 
   // --- Step 4: remove originals now that backups are confirmed ---
+  setProgress(companyId, 'archive', 'Removing live AWS files', 'Deleting original S3 objects…');
   const awsDeleteResult = await deleteCompanyObjects(db, companyId).catch((err) => ({
     deletedObjects: 0,
     deletedBytes: 0,
@@ -219,7 +305,15 @@ export async function performCompanyArchive(
   // transaction-supporting deployment rolls back the delete if the stub
   // insert fails, rather than leaving the company vanished entirely.
   const dbDeleteResult = await runWithOptionalTransaction(async (session) => {
-    const result = await deleteCompanyDbFootprint(companyId, session);
+    const result = await deleteCompanyDbFootprint(companyId, session, (name, i, total) => {
+      setProgress(
+        companyId,
+        'archive',
+        'Removing live database records',
+        `Deleting ${name} (${i + 1} of ${total})…`,
+        { current: i + 1, total }
+      );
+    });
     if (companyDocForStub) {
       await db.collection('companies').insertOne(
         { ...companyDocForStub, status: USER_STATUS.ARCHIVED },
@@ -230,6 +324,7 @@ export async function performCompanyArchive(
   });
 
   // --- Step 5: manifest + ArchivedCompany record ---
+  setProgress(companyId, 'archive', 'Finalizing', 'Writing manifest and archive record…');
   const stripeManifest = stripeSubscriptions.map((s) => ({
     originalSubscriptionId: s.id,
     status: s.status,
@@ -306,6 +401,9 @@ export async function performCompanyArchive(
     },
     stripe: stripeResult,
   };
+  } finally {
+    clearProgress(companyId);
+  }
 }
 
 export async function getArchivedCompanies() {
@@ -313,10 +411,10 @@ export async function getArchivedCompanies() {
   return ArchivedCompany.find({}).sort({ archivedAt: -1 }).lean();
 }
 
-/** The active (not-yet-restored) archive record for a company, if any — used to power the Restore action from the company detail page. */
+/** The active (not-yet-restored) archive record for a company, if any — used to power the Restore action from the company detail page. Includes restore_failed so a failed attempt can be retried. */
 export async function getActiveArchiveRecord(companyId: string) {
   await dbConnect();
-  return ArchivedCompany.findOne({ companyId, status: 'archived' })
+  return ArchivedCompany.findOne({ companyId, status: { $in: ['archived', 'restore_failed'] } })
     .sort({ archivedAt: -1 })
     .lean();
 }
@@ -344,8 +442,8 @@ export async function performCompanyRestore(
 
   const record = await ArchivedCompany.findById(archivedCompanyId);
   if (!record) throw new Error('Archived company record not found');
-  if (record.status !== 'archived') {
-    throw new Error(`This company is not in an archived state (status: ${record.status})`);
+  if (record.status !== 'archived' && record.status !== 'restore_failed') {
+    throw new Error(`This company is not in a restorable state (status: ${record.status})`);
   }
 
   const setup = createClient();
@@ -356,8 +454,15 @@ export async function performCompanyRestore(
   if (!db) throw new Error('Database connection unavailable');
 
   const restoreErrors: string[] = [];
+  const companyId = record.companyId;
 
+  try {
   // --- Step 1: restore MongoDB documents (company doc first) ---
+  // No shared transaction: MongoDB Atlas hard-aborts transactions after 60s,
+  // which large companies' data volume can exceed. Each collection is
+  // restored independently instead — a failure in one doesn't stop the
+  // others, and insertManyTolerant makes re-running this safe (already
+  // restored batches are silently skipped via their duplicate-key errors).
   let restoredDocuments = 0;
   const restoredCollections: string[] = [];
   const orderedCollections = [
@@ -365,51 +470,61 @@ export async function performCompanyRestore(
     ...record.dbCollections.filter((c: { collectionName: string }) => c.collectionName !== 'companies'),
   ];
 
-  try {
-    await runWithOptionalTransaction(async (session) => {
-      for (const { collectionName } of orderedCollections) {
-        if (collectionName === 'companies') {
-          // The company document was kept alive as an ARCHIVED stub during
-          // archive — restore just needs its original status back, not a
-          // fresh insert (which would collide on _id).
-          const result = await db.collection('companies').updateOne(
-            { _id: new mongoose.Types.ObjectId(record.companyId) },
-            { $set: { status: record.companyStatus || USER_STATUS.ACTIVE } },
-            session ? { session } : undefined
-          );
-          if (result.matchedCount > 0) {
-            restoredDocuments += 1;
-            restoredCollections.push('companies');
-          }
-          continue;
-        }
-
-        const obj = await client.send(
-          new GetObjectCommand({
-            Bucket: record.backupBucket,
-            Key: `${record.backupPrefix}db/${collectionName}.json`,
-          })
-        );
-        const body = await obj.Body?.transformToString();
-        if (!body) continue;
-        const docs = EJSON.parse(body, { relaxed: false }) as Record<string, unknown>[];
-        if (docs.length === 0) continue;
-        await db.collection(collectionName).insertMany(docs, session ? { session } : undefined);
-        restoredDocuments += docs.length;
-        restoredCollections.push(collectionName);
-      }
-    });
-  } catch (err) {
-    restoreErrors.push(
-      `MongoDB restore failed: ${err instanceof Error ? err.message : 'Unknown error'}`
+  for (let i = 0; i < orderedCollections.length; i++) {
+    const { collectionName } = orderedCollections[i];
+    setProgress(
+      companyId,
+      'restore',
+      'Restoring database records',
+      `Restoring ${collectionName} (${i + 1} of ${orderedCollections.length})…`,
+      { current: i + 1, total: orderedCollections.length }
     );
+
+    try {
+      if (collectionName === 'companies') {
+        // The company document was kept alive as an ARCHIVED stub during
+        // archive — restore just needs its original status back, not a
+        // fresh insert (which would collide on _id).
+        const result = await db.collection('companies').updateOne(
+          { _id: new mongoose.Types.ObjectId(record.companyId) },
+          { $set: { status: record.companyStatus || USER_STATUS.ACTIVE } }
+        );
+        if (result.matchedCount > 0) {
+          restoredDocuments += 1;
+          restoredCollections.push('companies');
+        }
+        continue;
+      }
+
+      const obj = await client.send(
+        new GetObjectCommand({
+          Bucket: record.backupBucket,
+          Key: `${record.backupPrefix}db/${collectionName}.json`,
+        })
+      );
+      const body = await obj.Body?.transformToString();
+      if (!body) continue;
+      const docs = EJSON.parse(body, { relaxed: false }) as Record<string, unknown>[];
+      if (docs.length === 0) continue;
+
+      const { inserted, errors } = await insertManyTolerant(db.collection(collectionName), docs);
+      restoredDocuments += inserted;
+      if (inserted > 0) restoredCollections.push(collectionName);
+      restoreErrors.push(...errors.map((e) => `${collectionName}: ${e}`));
+    } catch (err) {
+      restoreErrors.push(
+        `${collectionName}: ${err instanceof Error ? err.message : 'Failed to restore'}`
+      );
+    }
   }
 
   // --- Step 2: restore S3 objects ---
+  setProgress(companyId, 'restore', 'Restoring AWS files', 'Finding backed-up files…');
   let restoredObjects = 0;
   const awsErrors: string[] = [];
   const awsPrefix = `${record.backupPrefix}aws/`;
   const backedUpKeys = await listAllKeysUnderPrefix(client, record.backupBucket, awsPrefix);
+  let awsRestoredCount = 0;
 
   await Promise.all(
     backedUpKeys.map(async (backupKey) => {
@@ -431,18 +546,52 @@ export async function performCompanyRestore(
         awsErrors.push(
           `${originalBucket}/${originalKey}: ${err instanceof Error ? err.message : 'Failed to restore'}`
         );
+      } finally {
+        awsRestoredCount += 1;
+        if (backedUpKeys.length > 0) {
+          setProgress(
+            companyId,
+            'restore',
+            'Restoring AWS files',
+            `${awsRestoredCount} of ${backedUpKeys.length} file(s)`,
+            { current: awsRestoredCount, total: backedUpKeys.length }
+          );
+        }
       }
     })
   );
   restoreErrors.push(...awsErrors);
 
   // --- Step 3: recreate Stripe subscriptions ---
+  setProgress(companyId, 'restore', 'Stripe', 'Recreating subscriptions…');
   let createdSubscriptions = 0;
   const stripeErrors: string[] = [];
   if (record.stripeCustomerId) {
+    // Retry-safe: if a previous attempt already recreated a subscription for
+    // one of these price ids (e.g. it succeeded here but a later step
+    // failed), skip it rather than billing the customer twice.
+    const existingPriceIds = new Set<string>();
+    try {
+      const existing = await stripe.subscriptions.list({
+        customer: record.stripeCustomerId,
+        status: 'all',
+        limit: 100,
+      });
+      for (const s of existing.data) {
+        if (s.status === 'canceled' || s.status === 'incomplete_expired') continue;
+        for (const item of s.items.data) {
+          if (item.price?.id) existingPriceIds.add(item.price.id);
+        }
+      }
+    } catch {
+      // If this lookup fails, fall through and attempt creation anyway —
+      // worst case Stripe itself is asked to create a duplicate, which is
+      // still visible/fixable, versus silently skipping a real restore.
+    }
+
     for (const sub of record.stripeSubscriptions) {
       const items = sub.items
-        .filter((i: { priceId?: string | null }) => i.priceId)
+        .filter((i: { priceId?: string | null }) => i.priceId && !existingPriceIds.has(i.priceId))
         .map((i: { priceId?: string | null; quantity?: number }) => ({
           price: i.priceId as string,
           quantity: i.quantity || 1,
@@ -461,6 +610,7 @@ export async function performCompanyRestore(
   restoreErrors.push(...stripeErrors);
 
   // --- Step 4: finalize ---
+  setProgress(companyId, 'restore', 'Finalizing', 'Cleaning up backup files…');
   if (restoreErrors.length === 0) {
     await deleteAllUnderPrefix(client, record.backupBucket, record.backupPrefix);
     record.status = 'restored';
@@ -479,4 +629,7 @@ export async function performCompanyRestore(
     aws: { restoredObjects, errors: awsErrors },
     stripe: { createdSubscriptions, errors: stripeErrors },
   };
+  } finally {
+    clearProgress(companyId);
+  }
 }

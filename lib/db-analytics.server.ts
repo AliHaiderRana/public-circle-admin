@@ -385,7 +385,8 @@ export async function getCompanyDbFootprint(companyId: string): Promise<CompanyD
  */
 export async function deleteCompanyDbFootprint(
   companyId: string,
-  session?: import('mongoose').ClientSession
+  session?: import('mongoose').ClientSession,
+  onProgress?: (collectionName: string, index: number, total: number) => void
 ): Promise<{ deletedDocuments: number; deletedCollections: string[] }> {
   const db = mongoose.connection.db;
   if (!db) throw new Error('Database connection unavailable');
@@ -393,16 +394,20 @@ export async function deleteCompanyDbFootprint(
   const options = session ? { session } : undefined;
 
   const referencing = await detectCompanyReferencingCollections();
+  const total = referencing.length + 1; // + the companies collection itself
 
   let deletedDocuments = 0;
   const deletedCollections: string[] = [];
 
-  for (const { name, field } of referencing) {
+  for (let i = 0; i < referencing.length; i++) {
+    const { name, field } = referencing[i];
+    onProgress?.(name, i, total);
     const result = await db.collection(name).deleteMany({ [field]: objectId }, options);
     deletedDocuments += result.deletedCount ?? 0;
     if (result.deletedCount) deletedCollections.push(name);
   }
 
+  onProgress?.('companies', referencing.length, total);
   const companyResult = await db
     .collection('companies')
     .deleteOne({ _id: objectId }, options);

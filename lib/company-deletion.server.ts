@@ -13,6 +13,7 @@ import {
   peekCompanyAwsUsage,
   type CompanyUsageRow,
 } from '@/lib/aws-analytics.server';
+import { setProgress, clearProgress } from '@/lib/archive-progress.server';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
@@ -162,26 +163,40 @@ export async function performCompanyDeletion(companyId: string): Promise<Company
   }>();
   if (!company) throw new Error('Company not found');
 
-  const stripeResult = company.stripeCustomerId
-    ? await cancelCompanySubscriptions(company.stripeCustomerId)
-    : { cancelled: 0, errors: [] };
+  try {
+    setProgress(companyId, 'delete', 'Stripe', 'Cancelling subscriptions…');
+    const stripeResult = company.stripeCustomerId
+      ? await cancelCompanySubscriptions(company.stripeCustomerId)
+      : { cancelled: 0, errors: [] };
 
-  const db = mongoose.connection.db;
-  if (!db) throw new Error('Database connection unavailable');
-  const awsResult = await deleteCompanyObjects(db, companyId).catch((err) => ({
-    deletedObjects: 0,
-    deletedBytes: 0,
-    errors: [err instanceof Error ? err.message : 'Failed to delete S3 objects'],
-  }));
+    const db = mongoose.connection.db;
+    if (!db) throw new Error('Database connection unavailable');
+    setProgress(companyId, 'delete', 'Removing AWS files', 'Deleting S3 objects…');
+    const awsResult = await deleteCompanyObjects(db, companyId).catch((err) => ({
+      deletedObjects: 0,
+      deletedBytes: 0,
+      errors: [err instanceof Error ? err.message : 'Failed to delete S3 objects'],
+    }));
 
-  const dbResult = await runWithOptionalTransaction((session) =>
-    deleteCompanyDbFootprint(companyId, session)
-  );
+    const dbResult = await runWithOptionalTransaction((session) =>
+      deleteCompanyDbFootprint(companyId, session, (name, i, total) => {
+        setProgress(
+          companyId,
+          'delete',
+          'Removing database records',
+          `Deleting ${name} (${i + 1} of ${total})…`,
+          { current: i + 1, total }
+        );
+      })
+    );
 
-  return {
-    companyName: company.name,
-    stripe: stripeResult,
-    aws: awsResult,
-    db: dbResult,
-  };
+    return {
+      companyName: company.name,
+      stripe: stripeResult,
+      aws: awsResult,
+      db: dbResult,
+    };
+  } finally {
+    clearProgress(companyId);
+  }
 }

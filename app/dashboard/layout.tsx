@@ -70,6 +70,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { BackgroundTasksProvider } from "@/context/BackgroundTasksContext";
+import { BackgroundTasksWidget } from "@/components/BackgroundTasksWidget";
 
 type SidebarChildItem = {
   name: string;
@@ -404,6 +406,7 @@ export default function DashboardLayout({
     <ProtectedRoute>
       <AdminNotificationSoundProvider>
         <TooltipProvider delayDuration={300}>
+        <BackgroundTasksProvider>
           <div className="flex h-screen bg-background text-foreground">
             <aside className="hidden w-64 min-h-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:flex lg:h-full lg:shrink-0">
               {sidebarContent}
@@ -475,6 +478,8 @@ export default function DashboardLayout({
               </main>
             </div>
           </div>
+          <BackgroundTasksWidget />
+        </BackgroundTasksProvider>
         </TooltipProvider>
       </AdminNotificationSoundProvider>
     </ProtectedRoute>

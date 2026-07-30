@@ -832,12 +832,7 @@ export default function CompanyDetailPage() {
           mode={removeMode}
           companyId={companyDetails.company.id}
           companyName={companyDetails.company.name}
-          onRemoved={() => {
-            toast.success(
-              removeMode === 'archive'
-                ? `"${companyDetails.company.name}" archived`
-                : `"${companyDetails.company.name}" permanently deleted`
-            );
+          onQueued={() => {
             router.push('/dashboard/companies');
           }}
         />
@@ -848,10 +843,7 @@ export default function CompanyDetailPage() {
           open={restoreDialogOpen}
           onOpenChange={setRestoreDialogOpen}
           archived={archivedRecord}
-          onRestored={() => {
-            toast.success(`"${companyDetails.company.name}" restored`);
-            void fetchCompanyDetails();
-          }}
+          onQueued={() => {}}
         />
       )}
     </div>

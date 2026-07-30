@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Loader2, AlertTriangle, Database, HardDrive, CreditCard } from 'lucide-react';
 import { formatBytes, formatCount } from '@/app/dashboard/db-analytics/format';
+import { useBackgroundTasks } from '@/context/BackgroundTasksContext';
 
 type StripeSubscriptionItemRow = {
   productName: string | null;
@@ -59,28 +60,27 @@ export function RemoveCompanyDialog({
   mode,
   companyId,
   companyName,
-  onRemoved,
+  onQueued,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode: RemoveCompanyMode;
   companyId: string;
   companyName: string;
-  onRemoved: () => void;
+  /** Called once the operation is handed off to the background — the dialog closes immediately, it doesn't wait for completion. */
+  onQueued: () => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<DeletionPreview | null>(null);
   const [password, setPassword] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const { startArchive, startDelete } = useBackgroundTasks();
 
   useEffect(() => {
     if (!open) return;
     setPreview(null);
     setError(null);
     setPassword('');
-    setSubmitError(null);
     setLoading(true);
 
     (async () => {
@@ -97,33 +97,21 @@ export function RemoveCompanyDialog({
     })();
   }, [open, companyId]);
 
-  const handleSubmit = async () => {
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
-      const endpoint = mode === 'archive' ? 'archive' : 'delete';
-      const res = await fetch(`/api/companies/${companyId}/${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error || `Failed to ${mode} company`);
-      }
-      onOpenChange(false);
-      onRemoved();
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : `Failed to ${mode} company`);
-    } finally {
-      setSubmitting(false);
+  const handleSubmit = () => {
+    const params = { companyId, companyName, password };
+    if (mode === 'archive') {
+      startArchive(params);
+    } else {
+      startDelete(params);
     }
+    onOpenChange(false);
+    onQueued();
   };
 
   const canSubmit = password.length > 0 && !loading && !error;
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !submitting && onOpenChange(next)}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
@@ -265,47 +253,20 @@ export function RemoveCompanyDialog({
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password"
                 autoComplete="current-password"
-                disabled={submitting}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && canSubmit) handleSubmit();
+                }}
               />
             </div>
-
-            {submitting && (
-              <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-                <span>
-                  {mode === 'archive'
-                    ? 'Backing up to AWS, cancelling Stripe, and removing live data — '
-                    : 'Cancelling Stripe and removing live data — '}
-                  this scans AWS storage first, which can take a minute or more the first
-                  time (it's fast once warmed up). Please don't close this window.
-                </span>
-              </div>
-            )}
-
-            {submitError && <p className="text-sm text-destructive">{submitError}</p>}
           </div>
         ) : null}
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={handleSubmit}
-            disabled={!canSubmit || submitting}
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {mode === 'archive' ? 'Archiving…' : 'Deleting…'}
-              </>
-            ) : mode === 'archive' ? (
-              'Archive Company'
-            ) : (
-              'Permanently delete'
-            )}
+          <Button type="button" variant="destructive" onClick={handleSubmit} disabled={!canSubmit}>
+            {mode === 'archive' ? 'Archive Company' : 'Permanently delete'}
           </Button>
         </DialogFooter>
       </DialogContent>

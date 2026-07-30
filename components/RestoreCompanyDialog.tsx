@@ -13,8 +13,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, ArchiveRestore, Database, HardDrive, CreditCard } from 'lucide-react';
+import { ArchiveRestore, Database, HardDrive, CreditCard } from 'lucide-react';
 import { formatBytes, formatCount } from '@/app/dashboard/db-analytics/format';
+import { useBackgroundTasks } from '@/context/BackgroundTasksContext';
 
 export type ArchivedCompanyRow = {
   _id: string;
@@ -35,49 +36,39 @@ export function RestoreCompanyDialog({
   open,
   onOpenChange,
   archived,
-  onRestored,
+  onQueued,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   archived: ArchivedCompanyRow;
-  onRestored: () => void;
+  /** Called once the restore is handed off to the background — the dialog closes immediately, it doesn't wait for completion. */
+  onQueued: () => void;
 }) {
   const [password, setPassword] = useState('');
-  const [restoring, setRestoring] = useState(false);
-  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const { startRestore } = useBackgroundTasks();
 
   useEffect(() => {
     if (!open) return;
     setPassword('');
-    setRestoreError(null);
   }, [open]);
 
   const totalDocuments = archived.dbCollections.reduce((s, c) => s + c.count, 0);
 
-  const handleRestore = async () => {
-    setRestoring(true);
-    setRestoreError(null);
-    try {
-      const res = await fetch(`/api/companies/archived/${archived._id}/restore`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Failed to restore company');
-      onOpenChange(false);
-      onRestored();
-    } catch (err) {
-      setRestoreError(err instanceof Error ? err.message : 'Failed to restore company');
-    } finally {
-      setRestoring(false);
-    }
+  const handleRestore = () => {
+    startRestore({
+      companyId: archived.companyId,
+      companyName: archived.companyName,
+      password,
+      archivedRecordId: archived._id,
+    });
+    onOpenChange(false);
+    onQueued();
   };
 
   const canRestore = password.length > 0;
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !restoring && onOpenChange(next)}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -146,36 +137,19 @@ export function RestoreCompanyDialog({
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
               autoComplete="current-password"
-              disabled={restoring}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && canRestore) handleRestore();
+              }}
             />
           </div>
-
-          {restoring && (
-            <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-              <span>
-                Re-inserting documents, copying files back, and recreating Stripe
-                subscription(s). This may take a moment — please don't close this window.
-              </span>
-            </div>
-          )}
-
-          {restoreError && <p className="text-sm text-destructive">{restoreError}</p>}
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={restoring}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleRestore} disabled={!canRestore || restoring}>
-            {restoring ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Restoring…
-              </>
-            ) : (
-              'Restore Company'
-            )}
+          <Button type="button" onClick={handleRestore} disabled={!canRestore}>
+            Restore Company
           </Button>
         </DialogFooter>
       </DialogContent>
