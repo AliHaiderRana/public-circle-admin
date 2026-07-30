@@ -11,7 +11,7 @@
 // survive across separate serverless function instances in production.
 
 export type ArchiveProgressState = {
-  op: 'archive' | 'delete' | 'restore';
+  op: 'archive' | 'delete' | 'restore' | 'purge';
   step: string;
   detail: string;
   /** Sub-progress within this step (e.g. collection 3 of 14), when known — used to compute a percentage on the client. */
@@ -29,7 +29,7 @@ const progressStore: ProgressStore =
 
 export function setProgress(
   companyId: string,
-  op: 'archive' | 'delete' | 'restore',
+  op: 'archive' | 'delete' | 'restore' | 'purge',
   step: string,
   detail: string,
   sub?: { current: number; total: number }

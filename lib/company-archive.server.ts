@@ -406,6 +406,72 @@ export async function performCompanyArchive(
   }
 }
 
+export type ArchivedCompanyDeletionResult = {
+  companyName: string;
+  awsBackupObjectsDeleted: number;
+  companyDocDeleted: boolean;
+};
+
+/**
+ * Permanently deletes an archived company: removes its backup files from
+ * AWS_BACKUP_BUCKET (if any still exist), deletes the ARCHIVED company stub
+ * document, and deletes the ArchivedCompany record itself. Unlike
+ * performCompanyRestore, this is a one-way operation — there's no data left
+ * to recover afterward. Only valid while the company is still archived
+ * (status 'archived' or 'restore_failed'); a fully restored company has no
+ * backup left to clean up and should be deleted via the normal company
+ * delete flow instead.
+ */
+export async function performArchivedCompanyDeletion(
+  archivedCompanyId: string
+): Promise<ArchivedCompanyDeletionResult> {
+  await dbConnect();
+
+  const record = await ArchivedCompany.findById(archivedCompanyId);
+  if (!record) throw new Error('Archived company record not found');
+  if (record.status === 'restored') {
+    throw new Error('This company has already been restored — nothing left to delete here.');
+  }
+
+  const companyId = record.companyId;
+
+  try {
+    const setup = createClient();
+    if (!setup) throw new Error('AWS credentials are not configured');
+    const { client } = setup;
+
+    setProgress(companyId, 'purge', 'Deleting backup files', 'Finding backed-up files…');
+    const backedUpKeys = await listAllKeysUnderPrefix(client, record.backupBucket, record.backupPrefix);
+    if (backedUpKeys.length > 0) {
+      setProgress(
+        companyId,
+        'purge',
+        'Deleting backup files',
+        `Deleting ${backedUpKeys.length} file(s)…`,
+        { current: 0, total: backedUpKeys.length }
+      );
+      await deleteAllUnderPrefix(client, record.backupBucket, record.backupPrefix);
+    }
+
+    setProgress(companyId, 'purge', 'Deleting company record', 'Removing company document…');
+    const db = mongoose.connection.db;
+    if (!db) throw new Error('Database connection unavailable');
+    const deleteResult = await db
+      .collection('companies')
+      .deleteOne({ _id: new mongoose.Types.ObjectId(companyId) });
+
+    await ArchivedCompany.deleteOne({ _id: record._id });
+
+    return {
+      companyName: record.companyName,
+      awsBackupObjectsDeleted: backedUpKeys.length,
+      companyDocDeleted: deleteResult.deletedCount > 0,
+    };
+  } finally {
+    clearProgress(companyId);
+  }
+}
+
 export async function getArchivedCompanies() {
   await dbConnect();
   return ArchivedCompany.find({}).sort({ archivedAt: -1 }).lean();

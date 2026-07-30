@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -30,9 +30,11 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useBackgroundTasks } from '@/context/BackgroundTasksContext';
 import { startImpersonation } from '@/lib/impersonate-client';
 import { RemoveCompanyDialog, type RemoveCompanyMode } from '@/components/RemoveCompanyDialog';
 import { RestoreCompanyDialog, type ArchivedCompanyRow } from '@/components/RestoreCompanyDialog';
+import { DeleteArchivedCompanyDialog } from '@/components/DeleteArchivedCompanyDialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -105,12 +107,30 @@ export default function CompanyDetailPage() {
   const [removeMode, setRemoveMode] = useState<RemoveCompanyMode | null>(null);
   const [archivedRecord, setArchivedRecord] = useState<ArchivedCompanyRow | null>(null);
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
+  const [deleteArchivedDialogOpen, setDeleteArchivedDialogOpen] = useState(false);
+  const { tasks } = useBackgroundTasks();
+  const handledTaskIds = useRef(new Set<string>());
 
   useEffect(() => {
     if (params.id) {
       fetchCompanyDetails();
     }
   }, [params.id]);
+
+  // Once a background archive/restore/delete task for this company finishes,
+  // refetch so the page doesn't keep showing the pre-operation status.
+  useEffect(() => {
+    const companyId = companyDetails?.company.id;
+    if (!companyId) return;
+    const justFinished = tasks.some(
+      (t) => t.companyId === companyId && t.status !== 'running' && !handledTaskIds.current.has(t.id)
+    );
+    if (!justFinished) return;
+    tasks
+      .filter((t) => t.companyId === companyId && t.status !== 'running')
+      .forEach((t) => handledTaskIds.current.add(t.id));
+    fetchCompanyDetails();
+  }, [tasks, companyDetails?.company.id]);
 
   useEffect(() => {
     if (companyDetails?.company.status !== 'ARCHIVED' || !isSuperAdmin) {
@@ -312,14 +332,25 @@ export default function CompanyDetailPage() {
         <div className="flex items-center gap-2">
           {companyDetails.company.status === 'ARCHIVED' ? (
             isSuperAdmin && (
-              <Button
-                className="flex items-center gap-2"
-                onClick={() => setRestoreDialogOpen(true)}
-                disabled={!archivedRecord}
-              >
-                <ArchiveRestore className="h-4 w-4" />
-                Restore Company
-              </Button>
+              <>
+                <Button
+                  className="flex items-center gap-2"
+                  onClick={() => setRestoreDialogOpen(true)}
+                  disabled={!archivedRecord}
+                >
+                  <ArchiveRestore className="h-4 w-4" />
+                  Restore Company
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="flex items-center gap-2"
+                  onClick={() => setDeleteArchivedDialogOpen(true)}
+                  disabled={!archivedRecord}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Company
+                </Button>
+              </>
             )
           ) : (
             <>
@@ -844,6 +875,17 @@ export default function CompanyDetailPage() {
           onOpenChange={setRestoreDialogOpen}
           archived={archivedRecord}
           onQueued={() => {}}
+        />
+      )}
+
+      {isSuperAdmin && archivedRecord && (
+        <DeleteArchivedCompanyDialog
+          open={deleteArchivedDialogOpen}
+          onOpenChange={setDeleteArchivedDialogOpen}
+          archived={archivedRecord}
+          onQueued={() => {
+            router.push('/dashboard/companies');
+          }}
         />
       )}
     </div>

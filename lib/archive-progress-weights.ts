@@ -7,7 +7,7 @@
 
 type WeightRange = [number, number];
 
-const WEIGHTS: Record<'archive' | 'delete' | 'restore', Record<string, WeightRange>> = {
+const WEIGHTS: Record<'archive' | 'delete' | 'restore' | 'purge', Record<string, WeightRange>> = {
   archive: {
     Scanning: [0, 5],
     'Backing up database': [5, 40],
@@ -29,10 +29,14 @@ const WEIGHTS: Record<'archive' | 'delete' | 'restore', Record<string, WeightRan
     Stripe: [80, 90],
     Finalizing: [90, 100],
   },
+  purge: {
+    'Deleting backup files': [0, 70],
+    'Deleting company record': [70, 100],
+  },
 };
 
 export function estimateProgressPercent(
-  op: 'archive' | 'delete' | 'restore',
+  op: 'archive' | 'delete' | 'restore' | 'purge',
   step: string,
   current?: number,
   total?: number

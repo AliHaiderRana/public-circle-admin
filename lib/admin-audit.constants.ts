@@ -29,6 +29,7 @@ export const ADMIN_AUDIT_ACTION = {
   COMPANY_DELETE: 'company.delete',
   COMPANY_ARCHIVE: 'company.archive',
   COMPANY_RESTORE: 'company.restore',
+  ARCHIVED_COMPANY_DELETE: 'company.archived_delete',
   PLAN_QUOTA_UPDATE: 'plan.quota_update',
   CRON_TRIGGER: 'cron.trigger',
   CRON_SEED: 'cron.seed',

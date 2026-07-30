@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-type TaskOp = 'archive' | 'delete' | 'restore';
+type TaskOp = 'archive' | 'delete' | 'restore' | 'purge';
 
 type ProgressInfo = { step: string; detail: string; current?: number; total?: number } | null;
 
@@ -27,12 +27,14 @@ const OP_VERB: Record<TaskOp, string> = {
   archive: 'archive',
   delete: 'delete',
   restore: 'restore',
+  purge: 'permanently delete',
 };
 
 const OP_PAST: Record<TaskOp, string> = {
   archive: 'archived',
   delete: 'permanently deleted',
   restore: 'restored',
+  purge: 'permanently deleted',
 };
 
 type BackgroundTasksContextValue = {
@@ -40,6 +42,7 @@ type BackgroundTasksContextValue = {
   startArchive: (params: StartParams) => void;
   startDelete: (params: StartParams) => void;
   startRestore: (params: StartParams & { archivedRecordId: string }) => void;
+  startDeleteArchived: (params: StartParams & { archivedRecordId: string }) => void;
   dismissTask: (id: string) => void;
 };
 
@@ -161,6 +164,22 @@ export function BackgroundTasksProvider({ children }: { children: React.ReactNod
     [runTask]
   );
 
+  const startDeleteArchived = useCallback(
+    ({ companyId, companyName, password, archivedRecordId }: StartParams & { archivedRecordId: string }) => {
+      runTask('purge', companyId, companyName, async () => {
+        const res = await fetch(`/api/companies/archived/${archivedRecordId}/delete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || 'Failed to delete company');
+        return data;
+      });
+    },
+    [runTask]
+  );
+
   const dismissTask = useCallback(
     (id: string) => {
       stopPolling(id);
@@ -171,7 +190,7 @@ export function BackgroundTasksProvider({ children }: { children: React.ReactNod
 
   return (
     <BackgroundTasksContext.Provider
-      value={{ tasks, startArchive, startDelete, startRestore, dismissTask }}
+      value={{ tasks, startArchive, startDelete, startRestore, startDeleteArchived, dismissTask }}
     >
       {children}
     </BackgroundTasksContext.Provider>

@@ -321,6 +321,12 @@ export function buildAuditSummary(
         parts.length ? ` (restored ${parts.join(', ')})` : ''
       }`;
     }
+    case ADMIN_AUDIT_ACTION.ARCHIVED_COMPANY_DELETE: {
+      const objCount = typeof d.awsBackupObjectsDeleted === 'number' ? d.awsBackupObjectsDeleted : null;
+      return `Permanently deleted archived company${d.companyName ? ` “${d.companyName}”` : ''}${
+        objCount != null ? ` (removed ${objCount} backed-up S3 object(s))` : ''
+      }`;
+    }
     case ADMIN_AUDIT_ACTION.PLAN_QUOTA_UPDATE:
       return `Updated plan quota${d.planName ? ` for “${d.planName}”` : ''}${formatQuotaChangeSuffix(d)}`;
     case ADMIN_AUDIT_ACTION.CRON_TRIGGER:

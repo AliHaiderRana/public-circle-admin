@@ -10,6 +10,7 @@ const OP_LABEL: Record<string, string> = {
   archive: 'Archiving',
   delete: 'Deleting',
   restore: 'Restoring',
+  purge: 'Permanently deleting',
 };
 
 /**

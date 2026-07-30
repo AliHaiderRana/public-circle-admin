@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -22,9 +22,11 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, Archive, ArchiveRestore, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Archive, ArchiveRestore, RefreshCw, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { RestoreCompanyDialog, type ArchivedCompanyRow } from '@/components/RestoreCompanyDialog';
+import { DeleteArchivedCompanyDialog } from '@/components/DeleteArchivedCompanyDialog';
+import { useBackgroundTasks } from '@/context/BackgroundTasksContext';
 
 function statusBadgeVariant(status: ArchivedCompanyRow['status']) {
   if (status === 'restored') return 'secondary' as const;
@@ -39,6 +41,9 @@ export default function ArchivedCompaniesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<ArchivedCompanyRow | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ArchivedCompanyRow | null>(null);
+  const { tasks } = useBackgroundTasks();
+  const handledTaskIds = useRef(new Set<string>());
 
   useEffect(() => {
     if (!authLoading && user && !user.isSuperAdmin) {
@@ -66,6 +71,21 @@ export default function ArchivedCompaniesPage() {
       void fetchArchived();
     }
   }, [authLoading, user, fetchArchived]);
+
+  // Once a background restore/delete task for a company on this list finishes,
+  // refetch so rows don't keep showing their pre-operation status.
+  useEffect(() => {
+    const rowCompanyIds = new Set(rows.map((r) => r.companyId));
+    const justFinished = tasks.some(
+      (t) =>
+        rowCompanyIds.has(t.companyId) && t.status !== 'running' && !handledTaskIds.current.has(t.id)
+    );
+    if (!justFinished) return;
+    tasks
+      .filter((t) => rowCompanyIds.has(t.companyId) && t.status !== 'running')
+      .forEach((t) => handledTaskIds.current.add(t.id));
+    void fetchArchived();
+  }, [tasks, rows, fetchArchived]);
 
   if (authLoading || !user?.isSuperAdmin) {
     return (
@@ -163,17 +183,30 @@ export default function ArchivedCompaniesPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="py-2.5 pr-4 text-right">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 h-7"
-                        disabled={row.status === 'restored'}
-                        onClick={() => setRestoreTarget(row)}
-                      >
-                        <ArchiveRestore className="h-3.5 w-3.5" />
-                        Restore
-                      </Button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 h-7"
+                          disabled={row.status === 'restored'}
+                          onClick={() => setRestoreTarget(row)}
+                        >
+                          <ArchiveRestore className="h-3.5 w-3.5" />
+                          Restore
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 h-7 text-destructive hover:text-destructive"
+                          disabled={row.status === 'restored'}
+                          onClick={() => setDeleteTarget(row)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -190,6 +223,17 @@ export default function ArchivedCompaniesPage() {
           archived={restoreTarget}
           onQueued={() => {
             setRestoreTarget(null);
+          }}
+        />
+      )}
+
+      {deleteTarget && (
+        <DeleteArchivedCompanyDialog
+          open={Boolean(deleteTarget)}
+          onOpenChange={(next) => !next && setDeleteTarget(null)}
+          archived={deleteTarget}
+          onQueued={() => {
+            setDeleteTarget(null);
           }}
         />
       )}
