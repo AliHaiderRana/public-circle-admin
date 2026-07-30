@@ -32,7 +32,7 @@ const dbCollectionSchema = new mongoose.Schema(
 
 const schema = new mongoose.Schema(
   {
-    companyId: { type: String, required: true, index: true },
+    companyId: { type: String, required: true },
     companyName: { type: String, required: true },
     companyStatus: { type: String, default: null },
     archivedAt: { type: Date, required: true },
@@ -54,6 +54,18 @@ const schema = new mongoose.Schema(
     restoreErrors: { type: [String], default: [] },
   },
   { timestamps: true }
+);
+
+// Guards at the DB level against a race between two concurrent archive
+// requests for the same company both succeeding — only one record per
+// company can be in the 'archived' state at a time.
+schema.index(
+  { companyId: 1 },
+  {
+    name: 'companyId_1_active_archive_unique',
+    unique: true,
+    partialFilterExpression: { status: 'archived' },
+  }
 );
 
 const ArchivedCompany =

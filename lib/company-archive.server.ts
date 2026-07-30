@@ -129,6 +129,9 @@ export async function performCompanyArchive(
     stripeCustomerId?: string;
   }>();
   if (!company) throw new Error('Company not found');
+  if (company.status === USER_STATUS.ARCHIVED) {
+    throw new Error('Company is already archived');
+  }
 
   const db = mongoose.connection.db;
   if (!db) throw new Error('Database connection unavailable');
@@ -256,21 +259,33 @@ export async function performCompanyArchive(
     })
   );
 
-  const archived = await ArchivedCompany.create({
-    companyId,
-    companyName: company.name,
-    companyStatus: company.status,
-    archivedAt: new Date(),
-    archivedBy: adminEmail,
-    backupBucket,
-    backupPrefix: prefix,
-    dbCollections: dbBackupRows,
-    awsObjectCount: backedUpObjects,
-    awsBytes: backedUpBytes,
-    stripeCustomerId: company.stripeCustomerId ?? null,
-    stripeSubscriptions: stripeManifest,
-    status: 'archived',
-  });
+  let archived;
+  try {
+    archived = await ArchivedCompany.create({
+      companyId,
+      companyName: company.name,
+      companyStatus: company.status,
+      archivedAt: new Date(),
+      archivedBy: adminEmail,
+      backupBucket,
+      backupPrefix: prefix,
+      dbCollections: dbBackupRows,
+      awsObjectCount: backedUpObjects,
+      awsBytes: backedUpBytes,
+      stripeCustomerId: company.stripeCustomerId ?? null,
+      stripeSubscriptions: stripeManifest,
+      status: 'archived',
+    });
+  } catch (err) {
+    // Unique index on {companyId, status: 'archived'} — a concurrent archive
+    // request for the same company won the race and already has this covered.
+    if ((err as { code?: number }).code === 11000) {
+      throw new Error(
+        'This company is already being archived by another request — refresh and check the Archived Companies list.'
+      );
+    }
+    throw err;
+  }
 
   return {
     companyName: company.name,
