@@ -22,6 +22,9 @@ export type BucketFolderUsage = {
   folder: string;
   objects: number;
   bytes: number;
+  /** Earliest/latest object LastModified within this folder — S3 has no real folder metadata, so these are derived from its contents. */
+  createdAt: string | null;
+  updatedAt: string | null;
 };
 
 export type BrowseFile = {
@@ -117,6 +120,24 @@ function extractTopFolder(key: string): string | null {
   return slash === -1 ? null : key.slice(0, slash);
 }
 
+type FolderAgg = { objects: number; bytes: number; minModified: number | null; maxModified: number | null };
+
+/** Folds one object's size/LastModified into a folder's running aggregate. */
+function touchFolderAgg(agg: FolderAgg, size: number, lastModified: Date | undefined): FolderAgg {
+  agg.objects += 1;
+  agg.bytes += size;
+  if (lastModified) {
+    const t = lastModified.getTime();
+    if (agg.minModified === null || t < agg.minModified) agg.minModified = t;
+    if (agg.maxModified === null || t > agg.maxModified) agg.maxModified = t;
+  }
+  return agg;
+}
+
+function emptyFolderAgg(): FolderAgg {
+  return { objects: 0, bytes: 0, minModified: null, maxModified: null };
+}
+
 type CandidateAgg = {
   objects: number;
   bytes: number;
@@ -138,7 +159,7 @@ async function scanBucket(
     folders: [],
     rootFiles: [],
   };
-  const folderAgg = new Map<string, { objects: number; bytes: number }>();
+  const folderAgg = new Map<string, FolderAgg>();
 
   try {
     let token: string | undefined;
@@ -163,9 +184,8 @@ async function scanBucket(
               lastModified: obj.LastModified ? obj.LastModified.toISOString() : null,
             });
           } else {
-            const fAgg = folderAgg.get(folder) ?? { objects: 0, bytes: 0 };
-            fAgg.objects += 1;
-            fAgg.bytes += size;
+            const fAgg = folderAgg.get(folder) ?? emptyFolderAgg();
+            touchFolderAgg(fAgg, size, obj.LastModified);
             folderAgg.set(folder, fAgg);
           }
         }
@@ -199,7 +219,13 @@ async function scanBucket(
   }
 
   stats.folders = [...folderAgg.entries()]
-    .map(([folder, usage]) => ({ folder, ...usage }))
+    .map(([folder, { objects, bytes, minModified, maxModified }]) => ({
+      folder,
+      objects,
+      bytes,
+      createdAt: minModified !== null ? new Date(minModified).toISOString() : null,
+      updatedAt: maxModified !== null ? new Date(maxModified).toISOString() : null,
+    }))
     .sort((a, b) => b.bytes - a.bytes);
   stats.rootFiles.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -211,6 +237,8 @@ export type BrowseFolder = {
   prefix: string;
   objects: number;
   bytes: number;
+  createdAt: string | null;
+  updatedAt: string | null;
 };
 
 export type BrowseResult = {
@@ -259,7 +287,7 @@ export async function browseBucketPrefix(
   }
   const { client } = setup;
 
-  const folderAgg = new Map<string, { objects: number; bytes: number }>();
+  const folderAgg = new Map<string, FolderAgg>();
   const files: BrowseFile[] = [];
   let truncated = false;
 
@@ -290,9 +318,8 @@ export async function browseBucketPrefix(
         });
       } else {
         const folder = rest.slice(0, slash);
-        const agg = folderAgg.get(folder) ?? { objects: 0, bytes: 0 };
-        agg.objects += 1;
-        agg.bytes += size;
+        const agg = folderAgg.get(folder) ?? emptyFolderAgg();
+        touchFolderAgg(agg, size, obj.LastModified);
         folderAgg.set(folder, agg);
       }
     }
@@ -307,10 +334,13 @@ export async function browseBucketPrefix(
     bucket: bucketName,
     prefix: normalizedPrefix,
     folders: [...folderAgg.entries()]
-      .map(([folder, usage]) => ({
+      .map(([folder, { objects, bytes, minModified, maxModified }]) => ({
         name: folder,
         prefix: `${normalizedPrefix}${folder}/`,
-        ...usage,
+        objects,
+        bytes,
+        createdAt: minModified !== null ? new Date(minModified).toISOString() : null,
+        updatedAt: maxModified !== null ? new Date(maxModified).toISOString() : null,
       }))
       .sort((a, b) => b.bytes - a.bytes),
     files: files.sort((a, b) => a.name.localeCompare(b.name)),

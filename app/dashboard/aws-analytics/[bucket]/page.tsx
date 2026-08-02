@@ -22,6 +22,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { ViewToggle } from '@/components/aws-analytics/ViewToggle';
+import { FilePreviewDialog } from '@/components/aws-analytics/FilePreviewDialog';
 import { useAwsViewMode } from '@/hooks/use-aws-view-mode';
 import {
   ArrowLeft,
@@ -29,7 +30,6 @@ import {
   Database,
   Download,
   Eye,
-  ExternalLink,
   File,
   FileJson,
   Folder,
@@ -60,6 +60,10 @@ function isImageFile(name: string): boolean {
   return IMAGE_EXTENSIONS.has(fileExtension(name));
 }
 
+function formatDate(iso: string | null): string {
+  return iso ? new Date(iso).toLocaleString() : '—';
+}
+
 function FileTypeIcon({ name, className }: { name: string; className?: string }) {
   if (fileExtension(name) === 'json') {
     return <FileJson className={className} />;
@@ -72,6 +76,8 @@ type BrowseFolder = {
   prefix: string;
   objects: number;
   bytes: number;
+  createdAt: string | null;
+  updatedAt: string | null;
 };
 
 type BrowseFile = {
@@ -109,6 +115,11 @@ function BucketBrowserContent() {
   const [viewMode, setViewMode] = useAwsViewMode();
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
   const [thumbErrors, setThumbErrors] = useState<Set<string>>(new Set());
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<BrowseFile | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && user && !user.isSuperAdmin) {
@@ -204,16 +215,22 @@ function BucketBrowserContent() {
     async (file: BrowseFile) => {
       setOpeningKey(file.key);
       setOpenError(null);
+      setPreviewFile(file);
+      setPreviewUrl(null);
+      setPreviewError(null);
+      setPreviewLoading(true);
+      setPreviewOpen(true);
       try {
         const qs = new URLSearchParams({ bucket: bucketName, key: file.key });
         const res = await fetch(`/api/aws-analytics/file-url?${qs}`);
         const json = await res.json();
         if (!res.ok) throw new Error(json?.error || 'Failed to open file');
-        window.open(json.url, '_blank', 'noopener,noreferrer');
+        setPreviewUrl(json.url);
       } catch (err) {
-        setOpenError(err instanceof Error ? err.message : 'Failed to open file');
+        setPreviewError(err instanceof Error ? err.message : 'Failed to open file');
       } finally {
         setOpeningKey(null);
+        setPreviewLoading(false);
       }
     },
     [bucketName]
@@ -476,7 +493,9 @@ function BucketBrowserContent() {
               <TableRow className="hover:bg-transparent">
                 <TableHead className="pl-4">Name</TableHead>
                 <TableHead className="text-right">Items</TableHead>
-                <TableHead className="text-right">Size</TableHead>
+                <TableHead className="pr-6 text-right">Size</TableHead>
+                <TableHead className="pl-4">Created At</TableHead>
+                <TableHead className="pl-4">Updated At</TableHead>
                 <TableHead className="w-[90px] pr-4 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -484,14 +503,14 @@ function BucketBrowserContent() {
               {loading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={4} className="py-3">
+                    <TableCell colSpan={6} className="py-3">
                       <Skeleton className="h-8 w-full" />
                     </TableCell>
                   </TableRow>
                 ))
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-10">
+                  <TableCell colSpan={6} className="py-10">
                     <div className="flex flex-col items-center justify-center gap-3 text-center">
                       <p className="text-sm font-medium text-destructive">{error}</p>
                       <Button type="button" size="sm" onClick={() => void fetchBrowse()}>
@@ -503,7 +522,7 @@ function BucketBrowserContent() {
               ) : isEmpty ? (
                 <TableRow>
                   <TableCell
-                    colSpan={4}
+                    colSpan={6}
                     className="py-12 text-center text-sm text-muted-foreground"
                   >
                     {companyFilter
@@ -514,7 +533,11 @@ function BucketBrowserContent() {
               ) : (
                 <>
                   {(data?.folders ?? []).map((folder) => (
-                    <TableRow key={folder.prefix}>
+                    <TableRow
+                      key={folder.prefix}
+                      className="cursor-pointer"
+                      onClick={() => openFolder(folder.prefix)}
+                    >
                       <TableCell className="pl-4 py-2.5">
                         <div className="flex items-center gap-2">
                           <Folder className="size-4 shrink-0 text-muted-foreground" />
@@ -524,8 +547,14 @@ function BucketBrowserContent() {
                       <TableCell className="py-2.5 text-right tabular-nums text-sm text-muted-foreground">
                         {formatCompactCount(folder.objects)}
                       </TableCell>
-                      <TableCell className="py-2.5 text-right tabular-nums text-sm">
+                      <TableCell className="py-2.5 pr-6 text-right tabular-nums text-sm">
                         {formatBytes(folder.bytes)}
+                      </TableCell>
+                      <TableCell className="py-2.5 pl-4 text-sm text-muted-foreground whitespace-nowrap">
+                        {formatDate(folder.createdAt)}
+                      </TableCell>
+                      <TableCell className="py-2.5 pl-4 text-sm text-muted-foreground whitespace-nowrap">
+                        {formatDate(folder.updatedAt)}
                       </TableCell>
                       <TableCell className="py-2.5 pr-4 text-right">
                         <Tooltip>
@@ -535,7 +564,10 @@ function BucketBrowserContent() {
                               variant="outline"
                               size="icon-sm"
                               className="h-7 w-7"
-                              onClick={() => openFolder(folder.prefix)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openFolder(folder.prefix);
+                              }}
                               aria-label={`Open folder ${folder.name}`}
                             >
                               <Eye className="h-3.5 w-3.5" />
@@ -549,9 +581,13 @@ function BucketBrowserContent() {
                     </TableRow>
                   ))}
                   {(data?.files ?? []).map((file) => (
-                    <TableRow key={file.key}>
+                    <TableRow
+                      key={file.key}
+                      className="cursor-pointer"
+                      onClick={() => void openFile(file)}
+                    >
                       <TableCell className="pl-4 py-2.5">
-                        <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex min-w-0 items-center gap-2">
                           <File className="size-4 shrink-0 text-muted-foreground" />
                           <span className="truncate text-sm">{file.name}</span>
                         </div>
@@ -559,8 +595,14 @@ function BucketBrowserContent() {
                       <TableCell className="py-2.5 text-right text-sm text-muted-foreground">
                         —
                       </TableCell>
-                      <TableCell className="py-2.5 text-right tabular-nums text-sm">
+                      <TableCell className="py-2.5 pr-6 text-right tabular-nums text-sm">
                         {formatBytes(file.bytes)}
+                      </TableCell>
+                      <TableCell className="py-2.5 pl-4 text-sm text-muted-foreground whitespace-nowrap">
+                        {formatDate(file.lastModified)}
+                      </TableCell>
+                      <TableCell className="py-2.5 pl-4 text-sm text-muted-foreground whitespace-nowrap">
+                        {formatDate(file.lastModified)}
                       </TableCell>
                       <TableCell className="py-2.5 pr-4">
                         <div className="flex items-center justify-end gap-1.5">
@@ -571,15 +613,18 @@ function BucketBrowserContent() {
                                 variant="outline"
                                 size="icon-sm"
                                 className="h-7 w-7"
-                                onClick={() => void openFile(file)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void openFile(file);
+                                }}
                                 disabled={openingKey === file.key}
-                                aria-label={`Open ${file.name}`}
+                                aria-label={`Preview ${file.name}`}
                               >
-                                <ExternalLink className="h-3.5 w-3.5" />
+                                <Eye className="h-3.5 w-3.5" />
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent side="top" className="text-xs">
-                              {openingKey === file.key ? 'Opening…' : 'Open'}
+                              {openingKey === file.key ? 'Opening…' : 'Preview'}
                             </TooltipContent>
                           </Tooltip>
                           <Tooltip>
@@ -589,7 +634,10 @@ function BucketBrowserContent() {
                                 variant="outline"
                                 size="icon-sm"
                                 className="h-7 w-7"
-                                onClick={() => void downloadFile(file)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void downloadFile(file);
+                                }}
                                 disabled={downloadingKey === file.key}
                                 aria-label={`Download ${file.name}`}
                               >
@@ -625,6 +673,24 @@ function BucketBrowserContent() {
           )}
         </CardContent>
       </Card>
+
+      <FilePreviewDialog
+        open={previewOpen}
+        onOpenChange={(next) => {
+          setPreviewOpen(next);
+          if (!next) {
+            setPreviewFile(null);
+            setPreviewUrl(null);
+            setPreviewError(null);
+          }
+        }}
+        file={previewFile}
+        url={previewUrl}
+        loading={previewLoading}
+        error={previewError}
+        onDownload={() => previewFile && void downloadFile(previewFile)}
+        downloading={Boolean(previewFile) && downloadingKey === previewFile?.key}
+      />
     </div>
   );
 }
