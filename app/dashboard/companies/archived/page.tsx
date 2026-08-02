@@ -129,8 +129,9 @@ export default function ArchivedCompaniesPage() {
         <CardHeader>
           <CardTitle className="text-base">Companies</CardTitle>
           <CardDescription>
-            Backed up to AWS and removed from live data. Restore recreates the database
-            documents, S3 files, and Stripe subscription(s).
+            Backed up to AWS and removed from live data, with Stripe subscriptions paused.
+            Restore re-inserts the database documents and S3 files, and resumes the Stripe
+            subscription(s) — no new charge.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">

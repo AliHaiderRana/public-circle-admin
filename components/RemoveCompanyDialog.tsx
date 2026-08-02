@@ -203,7 +203,9 @@ export function RemoveCompanyDialog({
             <div className="rounded-lg border p-3">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <CreditCard className="h-4 w-4 text-muted-foreground" />
-                Stripe subscriptions — will be cancelled immediately
+                {mode === 'archive'
+                  ? 'Stripe subscriptions — will be paused (no charge; resumes on restore)'
+                  : 'Stripe subscriptions — will be cancelled immediately'}
               </div>
               {preview.stripe.subscriptions.length > 0 ? (
                 <ul className="mt-2 space-y-3 text-xs">
@@ -234,7 +236,9 @@ export function RemoveCompanyDialog({
               ) : (
                 <p className="mt-1 text-sm text-muted-foreground">
                   {preview.stripe.customerId
-                    ? 'No active subscriptions to cancel.'
+                    ? mode === 'archive'
+                      ? 'No active subscriptions to pause.'
+                      : 'No active subscriptions to cancel.'
                     : 'No Stripe customer on this company.'}
                 </p>
               )}

@@ -298,11 +298,11 @@ export function buildAuditSummary(
     case ADMIN_AUDIT_ACTION.COMPANY_ARCHIVE: {
       const dbCount = typeof d.dbBackedUpDocuments === 'number' ? d.dbBackedUpDocuments : null;
       const objCount = typeof d.awsBackedUpObjects === 'number' ? d.awsBackedUpObjects : null;
-      const subsCount = typeof d.stripeSubscriptionsCancelled === 'number' ? d.stripeSubscriptionsCancelled : null;
+      const subsCount = typeof d.stripeSubscriptionsPaused === 'number' ? d.stripeSubscriptionsPaused : null;
       const parts = [
         dbCount != null ? `${dbCount} document(s)` : null,
         objCount != null ? `${objCount} S3 object(s)` : null,
-        subsCount != null ? `${subsCount} Stripe subscription(s)` : null,
+        subsCount != null ? `${subsCount} Stripe subscription(s) paused` : null,
       ].filter(Boolean);
       return `Archived company${d.companyName ? ` “${d.companyName}”` : ''}${
         parts.length ? ` (backed up ${parts.join(', ')})` : ''
@@ -311,11 +311,11 @@ export function buildAuditSummary(
     case ADMIN_AUDIT_ACTION.COMPANY_RESTORE: {
       const dbCount = typeof d.dbRestoredDocuments === 'number' ? d.dbRestoredDocuments : null;
       const objCount = typeof d.awsRestoredObjects === 'number' ? d.awsRestoredObjects : null;
-      const subsCount = typeof d.stripeSubscriptionsCreated === 'number' ? d.stripeSubscriptionsCreated : null;
+      const subsCount = typeof d.stripeSubscriptionsResumed === 'number' ? d.stripeSubscriptionsResumed : null;
       const parts = [
         dbCount != null ? `${dbCount} document(s)` : null,
         objCount != null ? `${objCount} S3 object(s)` : null,
-        subsCount != null ? `${subsCount} Stripe subscription(s)` : null,
+        subsCount != null ? `${subsCount} Stripe subscription(s) resumed` : null,
       ].filter(Boolean);
       return `Restored archived company${d.companyName ? ` “${d.companyName}”` : ''}${
         parts.length ? ` (restored ${parts.join(', ')})` : ''

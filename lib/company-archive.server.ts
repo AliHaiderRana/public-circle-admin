@@ -1,4 +1,3 @@
-import Stripe from 'stripe';
 import mongoose from 'mongoose';
 import type { Collection } from 'mongodb';
 import { EJSON } from 'bson';
@@ -26,11 +25,10 @@ import {
 } from '@/lib/aws-analytics.server';
 import {
   listCancelableSubscriptions,
-  cancelCompanySubscriptions,
+  pauseCompanySubscriptions,
+  resumeCompanySubscriptions,
 } from '@/lib/company-deletion.server';
 import { setProgress, clearProgress } from '@/lib/archive-progress.server';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
 /**
  * AWS_BACKUP_BUCKET is set per deployment (public-circle-admin-staging vs
@@ -150,15 +148,16 @@ export type CompanyArchiveResult = {
     deletedBytes: number;
     errors: string[];
   };
-  stripe: { cancelled: number; errors: string[] };
+  stripe: { paused: number; errors: string[] };
 };
 
 /**
  * Archives a company: backs up its MongoDB documents and S3 files to
  * AWS_BACKUP_BUCKET (backup-first — nothing live is touched until every
- * backup write succeeds), then cancels its Stripe subscriptions and removes
- * the live DB/S3 data, same as performCompanyDeletion. Recoverable via
- * performCompanyRestore using the ArchivedCompany record this creates.
+ * backup write succeeds), then pauses its Stripe subscriptions (not
+ * cancels — restore resumes the same subscription with no new charge) and
+ * removes the live DB/S3 data, same as performCompanyDeletion. Recoverable
+ * via performCompanyRestore using the ArchivedCompany record this creates.
  */
 export async function performCompanyArchive(
   companyId: string,
@@ -281,14 +280,14 @@ export async function performCompanyArchive(
     );
   }
 
-  // --- Step 3: capture the Stripe manifest, then cancel ---
-  setProgress(companyId, 'archive', 'Stripe', 'Cancelling subscriptions…');
+  // --- Step 3: capture the Stripe manifest, then pause ---
+  setProgress(companyId, 'archive', 'Stripe', 'Pausing subscriptions…');
   const stripeSubscriptions = company.stripeCustomerId
     ? await listCancelableSubscriptions(company.stripeCustomerId)
     : [];
   const stripeResult = company.stripeCustomerId
-    ? await cancelCompanySubscriptions(company.stripeCustomerId)
-    : { cancelled: 0, errors: [] };
+    ? await pauseCompanySubscriptions(company.stripeCustomerId)
+    : { paused: 0, errors: [] };
 
   // --- Step 4: remove originals now that backups are confirmed ---
   setProgress(companyId, 'archive', 'Removing live AWS files', 'Deleting original S3 objects…');
@@ -489,14 +488,14 @@ export type CompanyRestoreResult = {
   companyName: string;
   db: { restoredDocuments: number; restoredCollections: string[] };
   aws: { restoredObjects: number; errors: string[] };
-  stripe: { createdSubscriptions: number; errors: string[] };
+  stripe: { resumedSubscriptions: number; errors: string[] };
 };
 
 /**
  * Restores an archived company: re-inserts its MongoDB documents, copies its
- * S3 files back to their original locations, and recreates its Stripe
- * subscription(s) on the same customer (new subscription ids — Stripe has no
- * "un-cancel"; billed immediately). Deletes the backup files only once every
+ * S3 files back to their original locations, and resumes its paused Stripe
+ * subscription(s) — same subscription ids, no new charge (billing just
+ * picks back up on the next cycle). Deletes the backup files only once every
  * step succeeds; on partial failure the backups are kept and the record is
  * marked restore_failed with per-step errors so nothing is silently lost.
  */
@@ -628,51 +627,14 @@ export async function performCompanyRestore(
   );
   restoreErrors.push(...awsErrors);
 
-  // --- Step 3: recreate Stripe subscriptions ---
-  setProgress(companyId, 'restore', 'Stripe', 'Recreating subscriptions…');
-  let createdSubscriptions = 0;
-  const stripeErrors: string[] = [];
-  if (record.stripeCustomerId) {
-    // Retry-safe: if a previous attempt already recreated a subscription for
-    // one of these price ids (e.g. it succeeded here but a later step
-    // failed), skip it rather than billing the customer twice.
-    const existingPriceIds = new Set<string>();
-    try {
-      const existing = await stripe.subscriptions.list({
-        customer: record.stripeCustomerId,
-        status: 'all',
-        limit: 100,
-      });
-      for (const s of existing.data) {
-        if (s.status === 'canceled' || s.status === 'incomplete_expired') continue;
-        for (const item of s.items.data) {
-          if (item.price?.id) existingPriceIds.add(item.price.id);
-        }
-      }
-    } catch {
-      // If this lookup fails, fall through and attempt creation anyway —
-      // worst case Stripe itself is asked to create a duplicate, which is
-      // still visible/fixable, versus silently skipping a real restore.
-    }
-
-    for (const sub of record.stripeSubscriptions) {
-      const items = sub.items
-        .filter((i: { priceId?: string | null }) => i.priceId && !existingPriceIds.has(i.priceId))
-        .map((i: { priceId?: string | null; quantity?: number }) => ({
-          price: i.priceId as string,
-          quantity: i.quantity || 1,
-        }));
-      if (items.length === 0) continue;
-      try {
-        await stripe.subscriptions.create({ customer: record.stripeCustomerId, items });
-        createdSubscriptions += 1;
-      } catch (err) {
-        stripeErrors.push(
-          `${sub.originalSubscriptionId}: ${err instanceof Error ? err.message : 'Failed to recreate'}`
-        );
-      }
-    }
-  }
+  // --- Step 3: resume Stripe subscriptions ---
+  setProgress(companyId, 'restore', 'Stripe', 'Resuming subscriptions…');
+  const subscriptionIds = record.stripeSubscriptions
+    .map((sub: { originalSubscriptionId: string }) => sub.originalSubscriptionId)
+    .filter(Boolean);
+  const { resumed: resumedSubscriptions, errors: stripeErrors } = subscriptionIds.length
+    ? await resumeCompanySubscriptions(subscriptionIds)
+    : { resumed: 0, errors: [] };
   restoreErrors.push(...stripeErrors);
 
   // --- Step 4: finalize ---
@@ -693,7 +655,7 @@ export async function performCompanyRestore(
     companyName: record.companyName,
     db: { restoredDocuments, restoredCollections },
     aws: { restoredObjects, errors: awsErrors },
-    stripe: { createdSubscriptions, errors: stripeErrors },
+    stripe: { resumedSubscriptions, errors: stripeErrors },
   };
   } finally {
     clearProgress(companyId);

@@ -18,7 +18,6 @@ import { setProgress, clearProgress } from '@/lib/archive-progress.server';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
 export type CompanyStripeSubscriptionItemRow = {
-  /** Stripe Price id — needed to recreate this item on restore. */
   priceId: string | null;
   productName: string | null;
   amount: number | null;
@@ -108,6 +107,58 @@ export async function cancelCompanySubscriptions(
   }
 
   return { cancelled, errors };
+}
+
+/**
+ * Pauses (rather than cancels) a customer's active subscriptions — used by
+ * archive instead of cancelCompanySubscriptions so restore can resume the
+ * exact same subscription(s) without billing the customer again. Stripe
+ * keeps the subscription's status, price, and discounts untouched; only
+ * invoicing stops. `behavior: 'void'` voids any invoice that would have been
+ * generated during the pause instead of leaving it open or uncollectible.
+ */
+export async function pauseCompanySubscriptions(
+  customerId: string
+): Promise<{ paused: number; errors: string[] }> {
+  const subs = await listCancelableSubscriptions(customerId);
+  let paused = 0;
+  const errors: string[] = [];
+
+  for (const sub of subs) {
+    try {
+      await stripe.subscriptions.update(sub.id, { pause_collection: { behavior: 'void' } });
+      paused += 1;
+    } catch (err) {
+      errors.push(`${sub.id}: ${err instanceof Error ? err.message : 'Failed to pause'}`);
+    }
+  }
+
+  return { paused, errors };
+}
+
+/**
+ * Resumes previously-paused subscriptions by id (restore's counterpart to
+ * pauseCompanySubscriptions) — normal billing picks back up on the next
+ * cycle, with no immediate charge. Tolerant of individual failures (e.g. a
+ * subscription canceled externally while archived) so one bad id doesn't
+ * block the rest.
+ */
+export async function resumeCompanySubscriptions(
+  subscriptionIds: string[]
+): Promise<{ resumed: number; errors: string[] }> {
+  let resumed = 0;
+  const errors: string[] = [];
+
+  for (const id of subscriptionIds) {
+    try {
+      await stripe.subscriptions.update(id, { pause_collection: null });
+      resumed += 1;
+    } catch (err) {
+      errors.push(`${id}: ${err instanceof Error ? err.message : 'Failed to resume'}`);
+    }
+  }
+
+  return { resumed, errors };
 }
 
 export async function getCompanyDeletionPreview(companyId: string): Promise<CompanyDeletionPreview> {

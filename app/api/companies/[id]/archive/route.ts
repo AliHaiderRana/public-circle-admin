@@ -11,7 +11,7 @@ import { performCompanyArchive } from '@/lib/company-archive.server';
 /**
  * POST /api/companies/[id]/archive
  * Super-admin only. Backs up the company's MongoDB documents and S3 files to
- * AWS_BACKUP_BUCKET, then cancels its Stripe subscriptions and removes the
+ * AWS_BACKUP_BUCKET, then pauses its Stripe subscriptions and removes the
  * live DB/S3 data — recoverable later via /api/companies/archived/[id]/restore.
  * Requires the caller to re-enter their own admin password, same as delete.
  */
@@ -63,7 +63,7 @@ export async function POST(
           awsBackedUpBytes: result.aws.backedUpBytes,
           awsDeletedObjects: result.aws.deletedObjects,
           awsErrors: result.aws.errors,
-          stripeSubscriptionsCancelled: result.stripe.cancelled,
+          stripeSubscriptionsPaused: result.stripe.paused,
           stripeErrors: result.stripe.errors,
         },
       });

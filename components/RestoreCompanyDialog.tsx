@@ -76,9 +76,8 @@ export function RestoreCompanyDialog({
             Restore {archived.companyName}
           </DialogTitle>
           <DialogDescription>
-            Re-inserts its database documents, copies its S3 files back, and recreates its Stripe
-            subscription(s) — as new subscriptions billed immediately (Stripe has no way to
-            un-cancel one).
+            Re-inserts its database documents, copies its S3 files back, and resumes its paused
+            Stripe subscription(s) — same subscription(s), no new charge.
           </DialogDescription>
         </DialogHeader>
 
@@ -107,7 +106,7 @@ export function RestoreCompanyDialog({
           <div className="rounded-lg border p-3">
             <div className="flex items-center gap-2 text-sm font-medium">
               <CreditCard className="h-4 w-4 text-muted-foreground" />
-              Stripe subscriptions — will be recreated and billed immediately
+              Stripe subscriptions — will resume (no new charge)
             </div>
             {archived.stripeSubscriptions.length > 0 ? (
               <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
@@ -119,7 +118,7 @@ export function RestoreCompanyDialog({
               </ul>
             ) : (
               <p className="mt-1 text-sm text-muted-foreground">
-                {archived.stripeCustomerId ? 'No subscriptions to recreate.' : 'No Stripe customer on this company.'}
+                {archived.stripeCustomerId ? 'No paused subscriptions to resume.' : 'No Stripe customer on this company.'}
               </p>
             )}
           </div>

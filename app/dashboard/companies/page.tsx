@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -44,6 +44,7 @@ import {
   Mail,
   Archive,
 } from "lucide-react";
+import { useBackgroundTasks } from "@/context/BackgroundTasksContext";
 
 export default function CompaniesPage() {
   const router = useRouter();
@@ -68,6 +69,8 @@ export default function CompaniesPage() {
     sizes: [] as string[],
     cities: [] as string[],
   });
+  const { tasks } = useBackgroundTasks();
+  const handledTaskIds = useRef(new Set<string>());
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
@@ -121,6 +124,20 @@ export default function CompaniesPage() {
   useEffect(() => {
     fetchCompanies();
   }, [fetchCompanies]);
+
+  // Once a background archive/restore/delete task for a company on this page
+  // finishes, refetch so its row doesn't keep showing the pre-operation status.
+  useEffect(() => {
+    const listedIds = new Set(companies.map((c) => c._id));
+    const justFinished = tasks.some(
+      (t) => listedIds.has(t.companyId) && t.status !== 'running' && !handledTaskIds.current.has(t.id)
+    );
+    if (!justFinished) return;
+    tasks
+      .filter((t) => listedIds.has(t.companyId) && t.status !== 'running')
+      .forEach((t) => handledTaskIds.current.add(t.id));
+    fetchCompanies();
+  }, [tasks, companies, fetchCompanies]);
 
   const handlePageChange = (newPage: number) => {
     setPagination((prev) => ({ ...prev, page: newPage }));

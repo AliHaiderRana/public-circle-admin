@@ -11,8 +11,8 @@ import { performCompanyRestore } from '@/lib/company-archive.server';
 /**
  * POST /api/companies/archived/[id]/restore
  * Super-admin only. Restores an archived company: re-inserts its MongoDB
- * documents, copies its S3 files back, and recreates its Stripe
- * subscription(s) (new subscription ids, billed immediately). Requires the
+ * documents, copies its S3 files back, and resumes its paused Stripe
+ * subscription(s) (same subscription ids, no new charge). Requires the
  * caller to re-enter their own admin password, same as archive/delete.
  */
 export async function POST(
@@ -59,7 +59,7 @@ export async function POST(
           dbRestoredCollections: result.db.restoredCollections,
           awsRestoredObjects: result.aws.restoredObjects,
           awsErrors: result.aws.errors,
-          stripeSubscriptionsCreated: result.stripe.createdSubscriptions,
+          stripeSubscriptionsResumed: result.stripe.resumedSubscriptions,
           stripeErrors: result.stripe.errors,
         },
       });
