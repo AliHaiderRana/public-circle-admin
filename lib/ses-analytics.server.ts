@@ -1,4 +1,8 @@
 import {
+  CloudWatchClient,
+  GetMetricDataCommand,
+} from '@aws-sdk/client-cloudwatch';
+import {
   GetAccountSendingEnabledCommand,
   GetSendQuotaCommand,
   GetSendStatisticsCommand,
@@ -7,6 +11,7 @@ import {
 } from '@aws-sdk/client-ses';
 
 const CACHE_TTL_MS = 2 * 60 * 1000;
+const REPUTATION_WINDOW_DAYS = 15;
 
 export type SesDailyStat = {
   date: string;
@@ -14,6 +19,30 @@ export type SesDailyStat = {
   bounces: number;
   complaints: number;
   rejects: number;
+};
+
+export type SesReputationPoint = {
+  date: string;
+  bounceRate: number | null;
+  complaintRate: number | null;
+};
+
+/**
+ * AWS's own account reputation metrics (CloudWatch `AWS/SES`), as shown on the
+ * SES console's Reputation metrics page. These are not the same as the bounce
+ * ratio derived from `GetSendStatistics`: AWS computes them over a rolling
+ * "representative volume" of mail and counts only permanent bounces.
+ */
+export type SesReputation = {
+  /** Latest reported account bounce rate, in percent (0–100). */
+  bounceRate: number | null;
+  /** Latest reported account complaint rate, in percent (0–100). */
+  complaintRate: number | null;
+  /** Timestamp of the most recent datapoint. */
+  asOf: string | null;
+  daily: SesReputationPoint[];
+  /** Set when CloudWatch could not be queried (e.g. missing IAM permission). */
+  unavailableReason: string | null;
 };
 
 export type SesAnalytics = {
@@ -34,13 +63,18 @@ export type SesAnalytics = {
     complaints: number;
     rejects: number;
   };
+  reputation: SesReputation;
   generatedAt: string;
 };
 
 let cache: { data: SesAnalytics; cachedAt: number } | null = null;
 let refreshInFlight: Promise<SesAnalytics> | null = null;
 
-function createClient(): { client: SESClient; region: string } | null {
+function createClient(): {
+  client: SESClient;
+  cloudWatch: CloudWatchClient;
+  region: string;
+} | null {
   const region = (
     process.env.AWS_SES_REGION ||
     process.env.AWS_REGION ||
@@ -49,8 +83,10 @@ function createClient(): { client: SESClient; region: string } | null {
   const accessKeyId = (process.env.AWS_ACCESS_KEY_ID || '').trim();
   const secretAccessKey = (process.env.AWS_SECRET_ACCESS_KEY || '').trim();
   if (!accessKeyId || !secretAccessKey) return null;
+  const credentials = { accessKeyId, secretAccessKey };
   return {
-    client: new SESClient({ region, credentials: { accessKeyId, secretAccessKey } }),
+    client: new SESClient({ region, credentials }),
+    cloudWatch: new CloudWatchClient({ region, credentials }),
     region,
   };
 }
@@ -82,18 +118,108 @@ function aggregateDaily(points: SendDataPoint[]): SesDailyStat[] {
   return Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/**
+ * Reads the account-level reputation metrics SES publishes to CloudWatch. The
+ * values are fractions (0–1) and are converted to percentages here. AWS
+ * recommends the Maximum statistic for these metrics.
+ */
+async function fetchReputation(cloudWatch: CloudWatchClient): Promise<SesReputation> {
+  const empty: SesReputation = {
+    bounceRate: null,
+    complaintRate: null,
+    asOf: null,
+    daily: [],
+    unavailableReason: null,
+  };
+
+  const endTime = new Date();
+  const startTime = new Date(endTime.getTime() - REPUTATION_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
+  const metricQuery = (id: string, metricName: string) => ({
+    Id: id,
+    MetricStat: {
+      Metric: { Namespace: 'AWS/SES', MetricName: metricName },
+      Period: 3600,
+      Stat: 'Maximum',
+    },
+  });
+
+  let res;
+  try {
+    res = await cloudWatch.send(
+      new GetMetricDataCommand({
+        StartTime: startTime,
+        EndTime: endTime,
+        ScanBy: 'TimestampAscending',
+        MetricDataQueries: [
+          metricQuery('bounce', 'Reputation.BounceRate'),
+          metricQuery('complaint', 'Reputation.ComplaintRate'),
+        ],
+      })
+    );
+  } catch (err) {
+    return {
+      ...empty,
+      unavailableReason:
+        err instanceof Error ? err.message : 'Unable to read CloudWatch reputation metrics',
+    };
+  }
+
+  const byDay = new Map<string, { bounceRate: number | null; complaintRate: number | null }>();
+  let latestAt: Date | null = null;
+  const latest: { bounceRate: number | null; complaintRate: number | null } = {
+    bounceRate: null,
+    complaintRate: null,
+  };
+
+  for (const result of res.MetricDataResults ?? []) {
+    const field = result.Id === 'complaint' ? 'complaintRate' : 'bounceRate';
+    const timestamps = result.Timestamps ?? [];
+    const values = result.Values ?? [];
+
+    for (let i = 0; i < timestamps.length; i += 1) {
+      const ts = timestamps[i];
+      const percent = (values[i] ?? 0) * 100;
+      const key = dayKey(ts);
+      const day = byDay.get(key) ?? { bounceRate: null, complaintRate: null };
+      day[field] = Math.max(day[field] ?? 0, percent);
+      byDay.set(key, day);
+
+      if (!latestAt || ts > latestAt) latestAt = ts;
+    }
+
+    const lastIndex = timestamps.length - 1;
+    if (lastIndex >= 0) latest[field] = (values[lastIndex] ?? 0) * 100;
+  }
+
+  if (byDay.size === 0) return empty;
+
+  const daily = Array.from(byDay.entries())
+    .map(([date, rates]) => ({ date, ...rates }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return {
+    bounceRate: latest.bounceRate,
+    complaintRate: latest.complaintRate,
+    asOf: latestAt ? latestAt.toISOString() : null,
+    daily,
+    unavailableReason: null,
+  };
+}
+
 async function fetchSesAnalytics(): Promise<SesAnalytics> {
   const cfg = createClient();
   if (!cfg) {
     throw new Error('AWS credentials are not configured (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY)');
   }
 
-  const { client, region } = cfg;
+  const { client, cloudWatch, region } = cfg;
 
-  const [quotaRes, statsRes, enabledRes] = await Promise.all([
+  const [quotaRes, statsRes, enabledRes, reputation] = await Promise.all([
     client.send(new GetSendQuotaCommand({})),
     client.send(new GetSendStatisticsCommand({})),
     client.send(new GetAccountSendingEnabledCommand({})),
+    fetchReputation(cloudWatch),
   ]);
 
   const max24HourSend = quotaRes.Max24HourSend ?? 0;
@@ -133,6 +259,7 @@ async function fetchSesAnalytics(): Promise<SesAnalytics> {
     unlimited,
     dailyStats,
     totalsLast14Days,
+    reputation,
     generatedAt: new Date().toISOString(),
   };
 }

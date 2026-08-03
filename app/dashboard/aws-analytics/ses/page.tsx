@@ -72,6 +72,14 @@ type SesDailyStat = {
   rejects: number;
 };
 
+type SesReputation = {
+  bounceRate: number | null;
+  complaintRate: number | null;
+  asOf: string | null;
+  daily: { date: string; bounceRate: number | null; complaintRate: number | null }[];
+  unavailableReason: string | null;
+};
+
 type SesAnalytics = {
   region: string;
   sendingEnabled: boolean;
@@ -88,6 +96,7 @@ type SesAnalytics = {
     complaints: number;
     rejects: number;
   };
+  reputation?: SesReputation;
   generatedAt: string;
 };
 
@@ -119,11 +128,11 @@ const volumeChartConfig = {
   },
   bounces: {
     label: 'Bounces',
-    color: 'var(--chart-4)',
+    color: 'var(--chart-bounce)',
   },
   complaints: {
     label: 'Complaints',
-    color: 'var(--chart-5)',
+    color: 'var(--chart-complaint)',
   },
   rejects: {
     label: 'Rejects',
@@ -134,11 +143,11 @@ const volumeChartConfig = {
 const reputationChartConfig = {
   bounceRate: {
     label: 'Bounce rate',
-    color: 'var(--chart-4)',
+    color: 'var(--chart-bounce)',
   },
   complaintRate: {
     label: 'Complaint rate',
-    color: 'var(--chart-5)',
+    color: 'var(--chart-complaint)',
   },
 } satisfies ChartConfig;
 
@@ -253,7 +262,27 @@ export default function SesAnalyticsPage() {
     return (complaints / attempts) * 100;
   }, [data]);
 
-  const reputation = rateStatus(bounceRate14d, complaintRate14d);
+  // AWS's published reputation metrics when available, otherwise the ratio we
+  // derive from send statistics (which AWS computes differently, so the two
+  // rarely match exactly).
+  const awsReputation = data?.reputation;
+  const usingAwsReputation = awsReputation?.bounceRate != null;
+  const displayBounceRate = usingAwsReputation ? awsReputation!.bounceRate : bounceRate14d;
+  const displayComplaintRate = usingAwsReputation
+    ? awsReputation!.complaintRate
+    : complaintRate14d;
+
+  const reputation = rateStatus(displayBounceRate, displayComplaintRate);
+
+  const reputationChartData = useMemo(() => {
+    const series = awsReputation?.daily ?? [];
+    if (series.length === 0) return null;
+    return series.map((d) => ({
+      label: formatDayLabel(d.date),
+      bounceRate: Number((d.bounceRate ?? 0).toFixed(3)),
+      complaintRate: Number((d.complaintRate ?? 0).toFixed(4)),
+    }));
+  }, [awsReputation]);
 
   const metricPeak = useMemo(() => {
     if (!chartData.length) return 0;
@@ -440,7 +469,7 @@ export default function SesAnalyticsPage() {
                 <div className="flex items-center justify-between gap-2">
                   <CardDescription className="flex items-center gap-1.5 text-xs">
                     <MailWarning className="size-3.5" />
-                    Reputation (14d)
+                    {usingAwsReputation ? 'Reputation (AWS)' : 'Bounce rate (14d)'}
                   </CardDescription>
                   {!loading && (
                     <Badge
@@ -462,17 +491,17 @@ export default function SesAnalyticsPage() {
                 <CardTitle className="text-2xl font-semibold tabular-nums tracking-tight">
                   {loading ? (
                     <Skeleton className="h-7 w-20" />
-                  ) : bounceRate14d != null ? (
-                    `${bounceRate14d.toFixed(2)}%`
+                  ) : displayBounceRate != null ? (
+                    `${displayBounceRate.toFixed(2)}%`
                   ) : (
                     '—'
                   )}
                 </CardTitle>
               </CardHeader>
               <CardFooter className="px-4 py-2.5 text-xs text-muted-foreground">
-                Bounce rate
-                {complaintRate14d != null
-                  ? ` · complaint ${complaintRate14d.toFixed(3)}%`
+                {usingAwsReputation ? 'Historic bounce rate' : 'Bounce rate'}
+                {displayComplaintRate != null
+                  ? ` · complaint ${displayComplaintRate.toFixed(3)}%`
                   : ''}
               </CardFooter>
             </Card>
@@ -692,14 +721,15 @@ export default function SesAnalyticsPage() {
               <CardHeader className="border-b py-4 px-4 sm:px-6 [.border-b]:pb-4">
                 <CardTitle className="text-base">Reputation rates</CardTitle>
                 <CardDescription>
-                  Bounce & complaint % of delivery attempts (SES thresholds: bounce 5%/10%,
-                  complaint 0.1%/0.5%).
+                  {reputationChartData
+                    ? 'Account bounce & complaint rates reported by AWS, matching the SES console (thresholds: bounce 5%/10%, complaint 0.1%/0.5%).'
+                    : 'Bounce & complaint % of delivery attempts (SES thresholds: bounce 5%/10%, complaint 0.1%/0.5%).'}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6">
                 {loading ? (
                   <Skeleton className="aspect-[4/3] w-full rounded-lg" />
-                ) : chartData.length === 0 ? (
+                ) : (reputationChartData ?? chartData).length === 0 ? (
                   <Empty className="min-h-[240px] border-0">
                     <EmptyHeader>
                       <EmptyTitle>No rate data</EmptyTitle>
@@ -712,7 +742,7 @@ export default function SesAnalyticsPage() {
                   >
                     <BarChart
                       accessibilityLayer
-                      data={chartData}
+                      data={reputationChartData ?? chartData}
                       margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
                     >
                       <CartesianGrid vertical={false} strokeDasharray="3 3" />
@@ -727,8 +757,8 @@ export default function SesAnalyticsPage() {
                         tickLine={false}
                         axisLine={false}
                         tickMargin={8}
-                        width={40}
-                        tickFormatter={(v) => `${v}%`}
+                        width={64}
+                        tickFormatter={(v) => `${Number(v).toFixed(3)}%`}
                       />
                       <ChartTooltip
                         content={
@@ -771,10 +801,16 @@ export default function SesAnalyticsPage() {
               {!loading && data && (
                 <CardFooter className="flex flex-wrap gap-4 border-t px-4 py-3 text-xs text-muted-foreground sm:px-6">
                   <span>
-                    {formatCount(data.totalsLast14Days.bounces)} bounces ·{' '}
+                    Last 14 days: {formatCount(data.totalsLast14Days.bounces)} bounces ·{' '}
                     {formatCount(data.totalsLast14Days.complaints)} complaints ·{' '}
                     {formatCount(data.totalsLast14Days.rejects)} rejects
                   </span>
+                  {awsReputation?.unavailableReason && (
+                    <span className="text-amber-600 dark:text-amber-500">
+                      AWS reputation metrics unavailable — showing rates derived from send
+                      statistics.
+                    </span>
+                  )}
                 </CardFooter>
               )}
             </Card>
