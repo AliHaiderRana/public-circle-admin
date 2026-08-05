@@ -132,8 +132,12 @@ export async function getClusterWideStats(
   return {
     databases: databases.length,
     ...totals,
-    // Same "billed usage" definition used everywhere else: data + index, not
-    // the compressed on-disk storage size.
+    // Atlas defines cluster "Data Size" as dataSize + indexSize (see
+    // https://www.mongodb.com/docs/atlas/reference/faq/storage/) — not
+    // dbStats.totalSize, which is storageSize + indexSize instead. Note
+    // Atlas's own UI labels this figure "GB" but renders it in GiB (1024-based),
+    // so its displayed number will still read ~7% lower than this decimal-GB
+    // value — that gap is Atlas's unit mislabeling, not a data discrepancy.
     totalSize: totals.dataSize + totals.indexSize,
     failedDatabases,
     perDatabase: perDatabase.sort((a, b) => b.totalSize - a.totalSize),

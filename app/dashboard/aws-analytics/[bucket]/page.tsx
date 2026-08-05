@@ -37,6 +37,7 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatTimeAgo, formatTimeAgoShort } from '@/lib/format-time-ago';
 import { formatBytes, formatCompactCount, formatCount } from '../../db-analytics/format';
 
 const IMAGE_EXTENSIONS = new Set([
@@ -62,6 +63,36 @@ function isImageFile(name: string): boolean {
 
 function formatDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : '—';
+}
+
+/** Relative time ("2 hours ago"), with the exact date revealed on hover. */
+function DateCell({ iso }: { iso: string | null }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help">{formatTimeAgo(iso)}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {formatDate(iso)}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Compact relative time for tight spaces (grid tiles), with the exact date on hover. */
+function RelativeTimeLabel({ label, iso }: { label: string; iso: string | null }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help truncate">
+          {label} {formatTimeAgoShort(iso)}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {formatDate(iso)}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 function FileTypeIcon({ name, className }: { name: string; className?: string }) {
@@ -421,6 +452,12 @@ function BucketBrowserContent() {
                       <span className="truncate text-[10px] text-muted-foreground">
                         {formatCompactCount(folder.objects)} items · {formatBytes(folder.bytes)}
                       </span>
+                      <span className="flex w-full justify-center text-[10px] text-muted-foreground">
+                        <RelativeTimeLabel label="Created" iso={folder.createdAt} />
+                      </span>
+                      <span className="flex w-full justify-center text-[10px] text-muted-foreground">
+                        <RelativeTimeLabel label="Updated" iso={folder.updatedAt} />
+                      </span>
                     </button>
                   ))}
                   {(data?.files ?? []).map((file) => {
@@ -551,10 +588,10 @@ function BucketBrowserContent() {
                         {formatBytes(folder.bytes)}
                       </TableCell>
                       <TableCell className="py-2.5 pl-4 text-sm text-muted-foreground whitespace-nowrap">
-                        {formatDate(folder.createdAt)}
+                        <DateCell iso={folder.createdAt} />
                       </TableCell>
                       <TableCell className="py-2.5 pl-4 text-sm text-muted-foreground whitespace-nowrap">
-                        {formatDate(folder.updatedAt)}
+                        <DateCell iso={folder.updatedAt} />
                       </TableCell>
                       <TableCell className="py-2.5 pr-4 text-right">
                         <Tooltip>
@@ -599,10 +636,10 @@ function BucketBrowserContent() {
                         {formatBytes(file.bytes)}
                       </TableCell>
                       <TableCell className="py-2.5 pl-4 text-sm text-muted-foreground whitespace-nowrap">
-                        {formatDate(file.lastModified)}
+                        <DateCell iso={file.lastModified} />
                       </TableCell>
                       <TableCell className="py-2.5 pl-4 text-sm text-muted-foreground whitespace-nowrap">
-                        {formatDate(file.lastModified)}
+                        <DateCell iso={file.lastModified} />
                       </TableCell>
                       <TableCell className="py-2.5 pr-4">
                         <div className="flex items-center justify-end gap-1.5">
