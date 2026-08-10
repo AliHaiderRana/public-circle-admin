@@ -23,6 +23,12 @@ import {
 } from '@/components/ui/tooltip';
 import { ViewToggle } from '@/components/aws-analytics/ViewToggle';
 import { FilePreviewDialog } from '@/components/aws-analytics/FilePreviewDialog';
+import {
+  compareValues,
+  SortableHeader,
+  toggleSort,
+  type SortState,
+} from '@/components/aws-analytics/SortableHeader';
 import { useAwsViewMode } from '@/hooks/use-aws-view-mode';
 import {
   ArrowLeft,
@@ -59,6 +65,12 @@ function fileExtension(name: string): string {
 
 function isImageFile(name: string): boolean {
   return IMAGE_EXTENSIONS.has(fileExtension(name));
+}
+
+type BrowseSortKey = 'name' | 'items' | 'bytes' | 'createdAt' | 'updatedAt';
+
+function timestamp(iso: string | null): number {
+  return iso ? new Date(iso).getTime() : 0;
 }
 
 function formatDate(iso: string | null): string {
@@ -144,6 +156,7 @@ function BucketBrowserContent() {
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useAwsViewMode();
+  const [browseSort, setBrowseSort] = useState<SortState<BrowseSortKey>>(null);
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
   const [thumbErrors, setThumbErrors] = useState<Set<string>>(new Set());
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -309,6 +322,67 @@ function BucketBrowserContent() {
     if (breadcrumbs.length <= 1) return '';
     return breadcrumbs[breadcrumbs.length - 2].prefix;
   }, [breadcrumbs]);
+
+  const sortedFolders = useMemo(() => {
+    const rows = data?.folders ?? [];
+    if (!browseSort) return rows;
+    return [...rows].sort((a, b) => {
+      let av: string | number;
+      let bv: string | number;
+      switch (browseSort.key) {
+        case 'name':
+          av = a.name;
+          bv = b.name;
+          break;
+        case 'items':
+          av = a.objects;
+          bv = b.objects;
+          break;
+        case 'bytes':
+          av = a.bytes;
+          bv = b.bytes;
+          break;
+        case 'createdAt':
+          av = timestamp(a.createdAt);
+          bv = timestamp(b.createdAt);
+          break;
+        case 'updatedAt':
+          av = timestamp(a.updatedAt);
+          bv = timestamp(b.updatedAt);
+          break;
+      }
+      return compareValues(av, bv, browseSort.dir);
+    });
+  }, [data, browseSort]);
+
+  const sortedFiles = useMemo(() => {
+    const rows = data?.files ?? [];
+    if (!browseSort) return rows;
+    return [...rows].sort((a, b) => {
+      let av: string | number;
+      let bv: string | number;
+      switch (browseSort.key) {
+        case 'name':
+          av = a.name;
+          bv = b.name;
+          break;
+        case 'items':
+          av = 0;
+          bv = 0;
+          break;
+        case 'bytes':
+          av = a.bytes;
+          bv = b.bytes;
+          break;
+        case 'createdAt':
+        case 'updatedAt':
+          av = timestamp(a.lastModified);
+          bv = timestamp(b.lastModified);
+          break;
+      }
+      return compareValues(av, bv, browseSort.dir);
+    });
+  }, [data, browseSort]);
 
   if (authLoading || !user?.isSuperAdmin) {
     return (
@@ -528,11 +602,47 @@ function BucketBrowserContent() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="pl-4">Name</TableHead>
-                <TableHead className="text-right">Items</TableHead>
-                <TableHead className="pr-6 text-right">Size</TableHead>
-                <TableHead className="pl-4">Created At</TableHead>
-                <TableHead className="pl-4">Updated At</TableHead>
+                <SortableHeader
+                  label="Name"
+                  sortKey="name"
+                  activeKey={browseSort?.key ?? null}
+                  direction={browseSort?.dir ?? 'asc'}
+                  onSort={(key) => setBrowseSort((prev) => toggleSort(prev, key))}
+                  className="pl-4"
+                />
+                <SortableHeader
+                  label="Items"
+                  sortKey="items"
+                  activeKey={browseSort?.key ?? null}
+                  direction={browseSort?.dir ?? 'asc'}
+                  onSort={(key) => setBrowseSort((prev) => toggleSort(prev, key))}
+                  align="right"
+                />
+                <SortableHeader
+                  label="Size"
+                  sortKey="bytes"
+                  activeKey={browseSort?.key ?? null}
+                  direction={browseSort?.dir ?? 'asc'}
+                  onSort={(key) => setBrowseSort((prev) => toggleSort(prev, key))}
+                  className="pr-6"
+                  align="right"
+                />
+                <SortableHeader
+                  label="Created At"
+                  sortKey="createdAt"
+                  activeKey={browseSort?.key ?? null}
+                  direction={browseSort?.dir ?? 'asc'}
+                  onSort={(key) => setBrowseSort((prev) => toggleSort(prev, key))}
+                  className="pl-4"
+                />
+                <SortableHeader
+                  label="Updated At"
+                  sortKey="updatedAt"
+                  activeKey={browseSort?.key ?? null}
+                  direction={browseSort?.dir ?? 'asc'}
+                  onSort={(key) => setBrowseSort((prev) => toggleSort(prev, key))}
+                  className="pl-4"
+                />
                 <TableHead className="w-[90px] pr-4 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -569,7 +679,7 @@ function BucketBrowserContent() {
                 </TableRow>
               ) : (
                 <>
-                  {(data?.folders ?? []).map((folder) => (
+                  {sortedFolders.map((folder) => (
                     <TableRow
                       key={folder.prefix}
                       className="cursor-pointer"
@@ -617,7 +727,7 @@ function BucketBrowserContent() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {(data?.files ?? []).map((file) => (
+                  {sortedFiles.map((file) => (
                     <TableRow
                       key={file.key}
                       className="cursor-pointer"
