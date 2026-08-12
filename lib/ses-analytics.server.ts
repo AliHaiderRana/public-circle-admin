@@ -64,6 +64,10 @@ export type SesAnalytics = {
     rejects: number;
   };
   reputation: SesReputation;
+  /** Account-wide AWS SES stats, or per-company EmailsSent aggregation. */
+  scope: 'account' | 'company';
+  companyId: string | null;
+  companyName: string | null;
   generatedAt: string;
 };
 
@@ -260,7 +264,112 @@ async function fetchSesAnalytics(): Promise<SesAnalytics> {
     dailyStats,
     totalsLast14Days,
     reputation,
+    scope: 'account',
+    companyId: null,
+    companyName: null,
     generatedAt: new Date().toISOString(),
+  };
+}
+
+const COMPANY_WINDOW_DAYS = 14;
+
+/**
+ * Per-company daily send / bounce / complaint totals from EmailsSent (last 14 days).
+ * Excludes TEST emails, matching SES health-monitor counting rules.
+ */
+export async function getCompanyDailySendStats(
+  companyId: string
+): Promise<{
+  dailyStats: SesDailyStat[];
+  totalsLast14Days: SesAnalytics['totalsLast14Days'];
+  companyName: string | null;
+}> {
+  const mongoose = (await import('mongoose')).default;
+  const dbConnect = (await import('@/lib/db')).default;
+  const EmailsSent = (await import('@/lib/models/EmailsSent')).default;
+  const Company = (await import('@/lib/models/Company')).default;
+
+  if (!mongoose.Types.ObjectId.isValid(companyId)) {
+    throw new Error('Invalid company id');
+  }
+
+  await dbConnect();
+
+  const objectId = new mongoose.Types.ObjectId(companyId);
+  const company = await Company.findById(objectId).select('name').lean<{ name?: string } | null>();
+  if (!company) {
+    throw new Error('Company not found');
+  }
+
+  const start = new Date();
+  start.setUTCHours(0, 0, 0, 0);
+  start.setUTCDate(start.getUTCDate() - (COMPANY_WINDOW_DAYS - 1));
+
+  const rows = await EmailsSent.aggregate<{
+    _id: string;
+    deliveryAttempts: number;
+    bounces: number;
+    complaints: number;
+    rejects: number;
+  }>([
+    {
+      $match: {
+        company: objectId,
+        kind: { $ne: 'TEST' },
+        createdAt: { $gte: start },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'UTC' },
+        },
+        deliveryAttempts: { $sum: 1 },
+        bounces: {
+          $sum: { $cond: [{ $ifNull: ['$emailEvents.Bounce', false] }, 1, 0] },
+        },
+        complaints: {
+          $sum: { $cond: [{ $ifNull: ['$emailEvents.Complaint', false] }, 1, 0] },
+        },
+        rejects: {
+          $sum: { $cond: [{ $ifNull: ['$emailEvents.Reject', false] }, 1, 0] },
+        },
+      },
+    },
+    { $sort: { _id: 1 } },
+  ]);
+
+  const byDay = new Map(rows.map((r) => [r._id, r]));
+  const dailyStats: SesDailyStat[] = [];
+  for (let i = 0; i < COMPANY_WINDOW_DAYS; i++) {
+    const d = new Date(start);
+    d.setUTCDate(start.getUTCDate() + i);
+    const key = dayKey(d);
+    const row = byDay.get(key);
+    dailyStats.push({
+      date: key,
+      deliveryAttempts: row?.deliveryAttempts ?? 0,
+      bounces: row?.bounces ?? 0,
+      complaints: row?.complaints ?? 0,
+      rejects: row?.rejects ?? 0,
+    });
+  }
+
+  const totalsLast14Days = dailyStats.reduce(
+    (acc, d) => {
+      acc.deliveryAttempts += d.deliveryAttempts;
+      acc.bounces += d.bounces;
+      acc.complaints += d.complaints;
+      acc.rejects += d.rejects;
+      return acc;
+    },
+    { deliveryAttempts: 0, bounces: 0, complaints: 0, rejects: 0 }
+  );
+
+  return {
+    dailyStats,
+    totalsLast14Days,
+    companyName: company.name ?? null,
   };
 }
 

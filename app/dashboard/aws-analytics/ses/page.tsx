@@ -42,11 +42,10 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
   ChartConfig,
   ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
 } from '@/components/ui/chart';
+import { CompanyCombobox } from '@/components/CompanyCombobox';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -61,7 +60,7 @@ import {
   XCircle,
   Zap,
 } from 'lucide-react';
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { cn } from '@/lib/utils';
 import { formatCompactCount, formatCount } from '../../db-analytics/format';
 
@@ -98,6 +97,9 @@ type SesAnalytics = {
     rejects: number;
   };
   reputation?: SesReputation;
+  scope?: 'account' | 'company';
+  companyId?: string | null;
+  companyName?: string | null;
   generatedAt: string;
 };
 
@@ -138,17 +140,6 @@ const volumeChartConfig = {
   rejects: {
     label: 'Rejects',
     color: 'var(--chart-3)',
-  },
-} satisfies ChartConfig;
-
-const reputationChartConfig = {
-  bounceRate: {
-    label: 'Bounce rate (%)',
-    color: 'var(--chart-bounce)',
-  },
-  complaintRate: {
-    label: 'Complaint rate (%)',
-    color: 'var(--chart-complaint)',
   },
 } satisfies ChartConfig;
 
@@ -233,6 +224,10 @@ export default function SesAnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [metric, setMetric] = useState<ChartMetric>('deliveryAttempts');
+  const [companyFilter, setCompanyFilter] = useState('');
+  const [selectedCompanyLabel, setSelectedCompanyLabel] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     if (!authLoading && user && !user.isSuperAdmin) {
@@ -240,27 +235,37 @@ export default function SesAnalyticsPage() {
     }
   }, [authLoading, user, router]);
 
-  const fetchAnalytics = useCallback(async (forceRefresh = false) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/aws-analytics/ses${forceRefresh ? '?refresh=1' : ''}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || 'Failed to load SES analytics');
-      setData(json);
-    } catch (err) {
-      setData(null);
-      setError(err instanceof Error ? err.message : 'Failed to load SES analytics');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchAnalytics = useCallback(
+    async (forceRefresh = false, companyId = companyFilter) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const qs = new URLSearchParams();
+        if (forceRefresh) qs.set('refresh', '1');
+        if (companyId) qs.set('company', companyId);
+        const suffix = qs.toString() ? `?${qs.toString()}` : '';
+        const res = await fetch(`/api/aws-analytics/ses${suffix}`);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error || 'Failed to load SES analytics');
+        setData(json);
+        if (json?.companyName) {
+          setSelectedCompanyLabel(json.companyName);
+        }
+      } catch (err) {
+        setData(null);
+        setError(err instanceof Error ? err.message : 'Failed to load SES analytics');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [companyFilter]
+  );
 
   useEffect(() => {
     if (!authLoading && user?.isSuperAdmin) {
-      void fetchAnalytics();
+      void fetchAnalytics(false, companyFilter);
     }
-  }, [authLoading, user, fetchAnalytics]);
+  }, [authLoading, user, companyFilter, fetchAnalytics]);
 
   const tone = usageTone(data?.usagePercent ?? null);
 
@@ -282,9 +287,6 @@ export default function SesAnalyticsPage() {
   );
 
   const awsReputation = data?.reputation;
-  const hasCloudWatchReputation = awsReputation?.bounceRate != null;
-
-  // AWS metrics direct from CloudWatch, with zero fallback confusion
   const awsBounceRate = awsReputation?.bounceRate ?? 0;
   const awsComplaintRate = awsReputation?.complaintRate ?? 0;
 
@@ -293,16 +295,6 @@ export default function SesAnalyticsPage() {
     awsComplaintRate,
     data?.sendingEnabled ?? true
   );
-
-  const reputationChartData = useMemo(() => {
-    const series = awsReputation?.daily ?? [];
-    if (series.length === 0) return null;
-    return series.map((d) => ({
-      label: formatDayLabel(d.date),
-      bounceRate: Number((d.bounceRate ?? 0).toFixed(3)),
-      complaintRate: Number((d.complaintRate ?? 0).toFixed(4)),
-    }));
-  }, [awsReputation]);
 
   const metricPeak = useMemo(() => {
     if (!chartData.length) return 0;
@@ -319,6 +311,16 @@ export default function SesAnalyticsPage() {
     } as const;
     return map[metric];
   }, [data, metric]);
+
+  const selectedCompanyName = useMemo(() => {
+    if (!companyFilter) return null;
+    return selectedCompanyLabel || data?.companyName || 'Selected company';
+  }, [companyFilter, selectedCompanyLabel, data?.companyName]);
+
+  const activitySourceLabel =
+    data?.scope === 'company'
+      ? `Daily totals for ${selectedCompanyName ?? 'selected company'} from platform sends (EmailsSent).`
+      : 'Daily totals aggregated from SES GetSendStatistics (all companies / account-wide).';
 
   if (authLoading || !user?.isSuperAdmin) {
     return (
@@ -752,16 +754,30 @@ export default function SesAnalyticsPage() {
             </CardContent>
           </Card>
 
-          {/* Charts Row */}
-          <div className="grid gap-4 xl:grid-cols-5">
-            {/* Sending Volume Chart */}
-            <Card className="gap-0 py-0 shadow-sm xl:col-span-3">
-              <CardHeader className="border-b py-4 px-4 sm:px-6 [.border-b]:pb-4">
-                <CardTitle className="text-base font-semibold">Sending Activity (14 Days)</CardTitle>
-                <CardDescription>
-                  Daily totals aggregated from SES GetSendStatistics.
-                </CardDescription>
-                <CardAction>
+          {/* Sending Activity Chart */}
+          <Card className="gap-0 py-0 shadow-sm">
+            <CardHeader className="border-b py-4 px-4 sm:px-6 [.border-b]:pb-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <CardTitle className="text-base font-semibold">
+                    Sending Activity (14 Days)
+                    {data?.scope === 'company' && selectedCompanyName && (
+                      <Badge variant="secondary" className="ml-2 align-middle text-xs font-normal">
+                        {selectedCompanyName}
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription>{activitySourceLabel}</CardDescription>
+                </div>
+                <CardAction className="static flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
+                  <CompanyCombobox
+                    value={companyFilter}
+                    selectedLabel={selectedCompanyName}
+                    onChange={(companyId, companyName) => {
+                      setCompanyFilter(companyId);
+                      setSelectedCompanyLabel(companyName);
+                    }}
+                  />
                   <ToggleGroup
                     type="single"
                     value={metric}
@@ -784,198 +800,98 @@ export default function SesAnalyticsPage() {
                     ))}
                   </ToggleGroup>
                 </CardAction>
-              </CardHeader>
-              <CardContent className="p-4 sm:p-6">
-                {loading ? (
-                  <Skeleton className="aspect-[2/1] w-full rounded-lg" />
-                ) : chartData.length === 0 ? (
-                  <Empty className="min-h-[240px] border-0">
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <Send />
-                      </EmptyMedia>
-                      <EmptyTitle>No send statistics yet</EmptyTitle>
-                      <EmptyDescription>
-                        SES will populate this once the account starts sending mail.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          {METRIC_OPTIONS.find((m) => m.value === metric)?.label} · 14-day total
-                        </p>
-                        <p className="text-2xl font-bold tabular-nums tracking-tight">
-                          {formatCount(metricTotal)}
-                        </p>
-                      </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6">
+              {loading ? (
+                <Skeleton className="aspect-[3/1] w-full rounded-lg" />
+              ) : chartData.length === 0 ? (
+                <Empty className="min-h-[240px] border-0">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <Send />
+                    </EmptyMedia>
+                    <EmptyTitle>No send statistics yet</EmptyTitle>
+                    <EmptyDescription>
+                      {companyFilter
+                        ? 'This company has no recorded sends in the last 14 days.'
+                        : 'SES will populate this once the account starts sending mail.'}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <div>
                       <p className="text-xs text-muted-foreground">
-                        Peak day {formatCompactCount(metricPeak)}
+                        {METRIC_OPTIONS.find((m) => m.value === metric)?.label} · 14-day total
+                      </p>
+                      <p className="text-2xl font-bold tabular-nums tracking-tight">
+                        {formatCount(metricTotal)}
                       </p>
                     </div>
-                    <ChartContainer
-                      config={volumeChartConfig}
-                      className="aspect-auto h-[280px] w-full"
-                    >
-                      <AreaChart
-                        accessibilityLayer
-                        data={chartData}
-                        margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-                      >
-                        <defs>
-                          <linearGradient id="sesMetricFill" x1="0" y1="0" x2="0" y2="1">
-                            <stop
-                              offset="5%"
-                              stopColor={`var(--color-${metric})`}
-                              stopOpacity={0.35}
-                            />
-                            <stop
-                              offset="95%"
-                              stopColor={`var(--color-${metric})`}
-                              stopOpacity={0.02}
-                            />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                        <XAxis
-                          dataKey="label"
-                          tickLine={false}
-                          axisLine={false}
-                          tickMargin={8}
-                          minTickGap={24}
-                        />
-                        <YAxis
-                          tickLine={false}
-                          axisLine={false}
-                          tickMargin={8}
-                          width={44}
-                          allowDecimals={false}
-                          tickFormatter={(v) => formatCompactCount(Number(v))}
-                        />
-                        <ChartTooltip
-                          cursor={{ stroke: 'var(--border)', strokeWidth: 1 }}
-                          content={<ChartTooltipContent indicator="line" />}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey={metric}
-                          stroke={`var(--color-${metric})`}
-                          fill="url(#sesMetricFill)"
-                          strokeWidth={2}
-                          dot={false}
-                          activeDot={{ r: 4, strokeWidth: 2 }}
-                        />
-                      </AreaChart>
-                    </ChartContainer>
+                    <p className="text-xs text-muted-foreground">
+                      Peak day {formatCompactCount(metricPeak)}
+                    </p>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* AWS CloudWatch Reputation Rates Chart */}
-            <Card className="gap-0 py-0 shadow-sm xl:col-span-2">
-              <CardHeader className="border-b py-4 px-4 sm:px-6 [.border-b]:pb-4">
-                <div className="flex items-center justify-between gap-2">
-                  <CardTitle className="text-base font-semibold">Reputation Rates (AWS)</CardTitle>
-                  <Badge variant="outline" className="text-[10px] font-mono font-normal">
-                    CloudWatch AWS/SES
-                  </Badge>
-                </div>
-                <CardDescription>
-                  Daily bounce & complaint rates reported directly by AWS CloudWatch metrics.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-4 sm:p-6">
-                {loading ? (
-                  <Skeleton className="aspect-[4/3] w-full rounded-lg" />
-                ) : awsReputation?.unavailableReason ? (
-                  <Alert variant="warning" className="border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
-                    <AlertTriangle className="size-4 text-amber-600" />
-                    <AlertTitle>CloudWatch Reputation Metrics Unavailable</AlertTitle>
-                    <AlertDescription className="text-xs">
-                      {awsReputation.unavailableReason}. Please ensure your IAM policies include `cloudwatch:GetMetricData`.
-                    </AlertDescription>
-                  </Alert>
-                ) : (reputationChartData ?? []).length === 0 ? (
-                  <Empty className="min-h-[240px] border-0">
-                    <EmptyHeader>
-                      <EmptyTitle>No CloudWatch rate data</EmptyTitle>
-                    </EmptyHeader>
-                  </Empty>
-                ) : (
                   <ChartContainer
-                    config={reputationChartConfig}
-                    className="aspect-auto h-[280px] w-full"
+                    config={volumeChartConfig}
+                    className="aspect-auto h-[320px] w-full"
                   >
-                    <BarChart
+                    <AreaChart
                       accessibilityLayer
-                      data={reputationChartData!}
+                      data={chartData}
                       margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
                     >
+                      <defs>
+                        <linearGradient id="sesMetricFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop
+                            offset="5%"
+                            stopColor={`var(--color-${metric})`}
+                            stopOpacity={0.35}
+                          />
+                          <stop
+                            offset="95%"
+                            stopColor={`var(--color-${metric})`}
+                            stopOpacity={0.02}
+                          />
+                        </linearGradient>
+                      </defs>
                       <CartesianGrid vertical={false} strokeDasharray="3 3" />
                       <XAxis
                         dataKey="label"
                         tickLine={false}
                         axisLine={false}
                         tickMargin={8}
-                        minTickGap={28}
+                        minTickGap={24}
                       />
                       <YAxis
                         tickLine={false}
                         axisLine={false}
                         tickMargin={8}
-                        width={64}
-                        tickFormatter={(v) => `${Number(v).toFixed(3)}%`}
+                        width={44}
+                        allowDecimals={false}
+                        tickFormatter={(v) => formatCompactCount(Number(v))}
                       />
                       <ChartTooltip
-                        content={
-                          <ChartTooltipContent
-                            formatter={(value, name) => {
-                              const isComplaint =
-                                name === 'complaintRate' ||
-                                String(name).toLowerCase().includes('complaint');
-                              return (
-                                <div className="flex flex-1 items-center justify-between gap-4 leading-none">
-                                  <span className="text-muted-foreground">
-                                    {isComplaint ? 'Complaint rate' : 'Bounce rate'}
-                                  </span>
-                                  <span className="font-mono font-medium tabular-nums text-foreground">
-                                    {Number(value ?? 0).toFixed(isComplaint ? 4 : 3)}%
-                                  </span>
-                                </div>
-                              );
-                            }}
-                          />
-                        }
+                        cursor={{ stroke: 'var(--border)', strokeWidth: 1 }}
+                        content={<ChartTooltipContent indicator="line" />}
                       />
-                      <ChartLegend content={<ChartLegendContent />} />
-                      <Bar
-                        dataKey="bounceRate"
-                        fill="var(--color-bounceRate)"
-                        radius={[3, 3, 0, 0]}
-                        maxBarSize={18}
+                      <Area
+                        type="monotone"
+                        dataKey={metric}
+                        stroke={`var(--color-${metric})`}
+                        fill="url(#sesMetricFill)"
+                        strokeWidth={2}
+                        dot={false}
+                        activeDot={{ r: 4, strokeWidth: 2 }}
                       />
-                      <Bar
-                        dataKey="complaintRate"
-                        fill="var(--color-complaintRate)"
-                        radius={[3, 3, 0, 0]}
-                        maxBarSize={18}
-                      />
-                    </BarChart>
+                    </AreaChart>
                   </ChartContainer>
-                )}
-              </CardContent>
-              {!loading && data && (
-                <CardFooter className="flex flex-wrap gap-4 border-t px-4 py-3 text-xs text-muted-foreground sm:px-6">
-                  <span>
-                    AWS Threshold targets: Bounce &lt; 5.0% · Complaint &lt; 0.10%
-                  </span>
-                </CardFooter>
+                </div>
               )}
-            </Card>
-          </div>
+            </CardContent>
+          </Card>
 
           {/* Daily Table */}
           <Card className="gap-0 py-0 shadow-sm">
@@ -986,7 +902,11 @@ export default function SesAnalyticsPage() {
                   ? 'Loading…'
                   : `${data?.dailyStats.length ?? 0} days recorded · ${formatCompactCount(
                       data?.totalsLast14Days.deliveryAttempts ?? 0
-                    )} total delivery attempts`}
+                    )} total delivery attempts${
+                      data?.scope === 'company' && selectedCompanyName
+                        ? ` · ${selectedCompanyName}`
+                        : ''
+                    }`}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
