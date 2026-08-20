@@ -23,6 +23,7 @@ export const MODELS = {
   OVERAGE_CONSUMPTION: "overage-comsumption",
   TOPUP: "topup",
   CUSTOMER_REQUESTS: "customer-requests",
+  PRODUCT_FEEDBACK: "product-feedback",
   SUPPORT_CHAT_THREAD: "support-chat-thread",
   SUPPORT_CHAT_MESSAGE: "support-chat-message",
   COMPANY_GROUPING: "company-grouping",
@@ -95,6 +96,7 @@ export const SOCKET_CHANNELS = {
 
 export const ADMIN_NOTIFICATION_TYPES = {
   CUSTOMER_REQUEST_CREATED: "CUSTOMER_REQUEST_CREATED",
+  FEEDBACK_CREATED: "FEEDBACK_CREATED",
   SUPPORT_REQUEST_CREATED: "SUPPORT_REQUEST_CREATED",
   SUPPORT_CHAT_CUSTOMER_MESSAGE: "SUPPORT_CHAT_CUSTOMER_MESSAGE",
 };
@@ -142,4 +144,34 @@ export const SUPPORT_REQUEST_STATUS_LABELS: Record<string, string> = {
   [SUPPORT_REQUEST_STATUS.PENDING_RESOLUTION]: "Pending customer confirmation",
   [SUPPORT_REQUEST_STATUS.RESOLVED]: "Resolved",
   [SUPPORT_REQUEST_STATUS.CLOSED]: "Closed",
+};
+
+export const FEEDBACK_TYPE = {
+  FEATURE: "FEATURE",
+  BUG: "BUG",
+  IMPROVEMENT: "IMPROVEMENT",
+  OTHER: "OTHER",
+} as const;
+
+export const FEEDBACK_TYPE_LABELS: Record<string, string> = {
+  [FEEDBACK_TYPE.FEATURE]: "Feature request",
+  [FEEDBACK_TYPE.BUG]: "Bug",
+  [FEEDBACK_TYPE.IMPROVEMENT]: "Improvement",
+  [FEEDBACK_TYPE.OTHER]: "Other",
+};
+
+export const FEEDBACK_STATUS = {
+  NEW: "NEW",
+  REVIEWED: "REVIEWED",
+  PLANNED: "PLANNED",
+  DONE: "DONE",
+  DISMISSED: "DISMISSED",
+} as const;
+
+export const FEEDBACK_STATUS_LABELS: Record<string, string> = {
+  [FEEDBACK_STATUS.NEW]: "New",
+  [FEEDBACK_STATUS.REVIEWED]: "Reviewed",
+  [FEEDBACK_STATUS.PLANNED]: "Planned",
+  [FEEDBACK_STATUS.DONE]: "Done",
+  [FEEDBACK_STATUS.DISMISSED]: "Dismissed",
 };

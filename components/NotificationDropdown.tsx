@@ -28,6 +28,7 @@ type AdminNotification = AdminNotificationPayload & {
   metadata: {
     customerRequestId?: string;
     supportRequestId?: string;
+    feedbackId?: string;
     assignedAdminId?: string;
     companyId?: string;
     companyName?: string;
@@ -257,6 +258,14 @@ export default function NotificationDropdown({
         setIsOpen(false);
         router.push(`/dashboard/customer-requests?highlight=${customerRequestId}`);
       }
+    } else if (notification.type === ADMIN_NOTIFICATION_TYPES.FEEDBACK_CREATED) {
+      const feedbackId = notification.metadata?.feedbackId;
+      setIsOpen(false);
+      router.push(
+        feedbackId
+          ? `/dashboard/feedback?highlight=${feedbackId}`
+          : '/dashboard/feedback',
+      );
     } else if (notification.type === ADMIN_NOTIFICATION_TYPES.SUPPORT_REQUEST_CREATED) {
       const supportRequestId = notification.metadata?.supportRequestId;
       if (supportRequestId) {

@@ -39,6 +39,7 @@ import {
   Plug,
   Handshake,
   Inbox,
+  MessageSquarePlus,
   Bell,
   MailWarning,
   ChevronDown,
@@ -87,11 +88,13 @@ type SidebarItem = {
   countKey?:
     | "unreadChatMessages"
     | "openSupportRequests"
-    | "pendingCustomerRequests";
+    | "pendingCustomerRequests"
+    | "newFeedbackCount";
   secondaryCountKey?:
     | "unreadChatMessages"
     | "openSupportRequests"
-    | "pendingCustomerRequests";
+    | "pendingCustomerRequests"
+    | "newFeedbackCount";
   children?: SidebarChildItem[];
 };
 
@@ -109,6 +112,12 @@ const sidebarItems: SidebarItem[] = [
     icon: Inbox,
     countKey: "unreadChatMessages",
     secondaryCountKey: "openSupportRequests",
+  },
+  {
+    name: "Product Feedback",
+    href: "/dashboard/feedback",
+    icon: MessageSquarePlus,
+    countKey: "newFeedbackCount",
   },
   { name: "Companies", href: "/dashboard/companies", icon: Building2 },
   { name: "Users", href: "/dashboard/users", icon: Users },

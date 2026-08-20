@@ -166,6 +166,11 @@ export function buildAuditSummary(
       PENDING: 'pending',
       COMPLETED: 'completed',
       REJECTED: 'rejected',
+      NEW: 'new',
+      REVIEWED: 'reviewed',
+      PLANNED: 'planned',
+      DONE: 'done',
+      DISMISSED: 'dismissed',
     };
     if (labels[key]) return labels[key];
     return String(status ?? 'unknown').toLowerCase().replace(/_/g, ' ');
@@ -194,6 +199,27 @@ export function buildAuditSummary(
       return typeLabel
         ? `${typeLabel} request marked as ${statusLabel}${companySuffix}`
         : `Customer request marked as ${statusLabel}${companySuffix}`;
+    }
+    case ADMIN_AUDIT_ACTION.FEEDBACK_STATUS: {
+      const typeKey = String(d.type ?? '');
+      const typeLabels: Record<string, string> = {
+        FEATURE: 'Feature request',
+        BUG: 'Bug',
+        IMPROVEMENT: 'Improvement',
+        OTHER: 'Other',
+      };
+      const typeLabel = typeLabels[typeKey] || typeKey.replace(/_/g, ' ').toLowerCase();
+      const company = companySuffix(d.companyName);
+      const previousStatus = d.previousStatus;
+      const nextStatus = d.status;
+      if (
+        previousStatus &&
+        nextStatus &&
+        String(previousStatus) !== String(nextStatus)
+      ) {
+        return `${typeLabel} feedback marked ${formatStatus(previousStatus)} → ${formatStatus(nextStatus)}${company}`;
+      }
+      return `${typeLabel} feedback marked as ${formatStatus(nextStatus)}${company}`;
     }
     case ADMIN_AUDIT_ACTION.SUPPORT_SETTINGS_UPDATE:
       return 'Updated support request settings';

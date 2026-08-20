@@ -15,6 +15,7 @@ export const ADMIN_AUDIT_CATEGORY = {
   PARTNER_PORTAL: 'partner_portal',
   SUPPORT_REQUEST: 'support_request',
   SUPPORT_SETTINGS: 'support_settings',
+  FEEDBACK: 'feedback',
   SYSTEM_NOTIFICATIONS: 'system_notifications',
   DLQ: 'dlq',
 } as const;
@@ -61,6 +62,7 @@ export const ADMIN_AUDIT_ACTION = {
   SUPPORT_MESSAGE_REPLY: 'support_request.message_reply',
   SUPPORT_CHAT_DELETE: 'support_chat.delete',
   SUPPORT_SETTINGS_UPDATE: 'support_settings.update',
+  FEEDBACK_STATUS: 'feedback.status_update',
   SYSTEM_NOTIFICATIONS_UPDATE: 'system_notifications.update',
   DLQ_SETTINGS_UPDATE: 'dlq.settings_update',
   DLQ_REDRIVE: 'dlq.redrive',
@@ -98,6 +100,7 @@ export const ADMIN_AUDIT_CATEGORY_LABELS: Record<string, string> = {
   [ADMIN_AUDIT_CATEGORY.PARTNER_PORTAL]: 'Partner portal',
   [ADMIN_AUDIT_CATEGORY.SUPPORT_REQUEST]: 'Support request',
   [ADMIN_AUDIT_CATEGORY.SUPPORT_SETTINGS]: 'Support request settings',
+  [ADMIN_AUDIT_CATEGORY.FEEDBACK]: 'Product feedback',
   [ADMIN_AUDIT_CATEGORY.SYSTEM_NOTIFICATIONS]: 'System notifications',
   [ADMIN_AUDIT_CATEGORY.DLQ]: 'Dead letter queue',
 };
