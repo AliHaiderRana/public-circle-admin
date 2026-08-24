@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,14 +10,15 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import {
-  ArrowLeft, 
-  Building2, 
-  Users, 
-  Mail, 
-  Send, 
-  FileText, 
-  Pause, 
+  ArrowLeft,
+  Building2,
+  Users,
+  Mail,
+  Send,
+  FileText,
+  Pause,
   Archive,
+  ArchiveRestore,
   UserPlus,
   Activity,
   TrendingUp,
@@ -26,9 +27,14 @@ import {
   Loader2,
   Play,
   LogIn,
+  Trash2,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useBackgroundTasks } from '@/context/BackgroundTasksContext';
 import { startImpersonation } from '@/lib/impersonate-client';
+import { RemoveCompanyDialog, type RemoveCompanyMode } from '@/components/RemoveCompanyDialog';
+import { RestoreCompanyDialog, type ArchivedCompanyRow } from '@/components/RestoreCompanyDialog';
+import { DeleteArchivedCompanyDialog } from '@/components/DeleteArchivedCompanyDialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -93,16 +99,54 @@ export default function CompanyDetailPage() {
   const router = useRouter();
   const { token: adminToken, user: authUser } = useAuth();
   const isPartnerView = Boolean(authUser?.isPartner);
+  const isSuperAdmin = Boolean(authUser?.isSuperAdmin);
   const [companyDetails, setCompanyDetails] = useState<CompanyDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [impersonateUserId, setImpersonateUserId] = useState<string | null>(null);
+  const [removeMode, setRemoveMode] = useState<RemoveCompanyMode | null>(null);
+  const [archivedRecord, setArchivedRecord] = useState<ArchivedCompanyRow | null>(null);
+  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
+  const [deleteArchivedDialogOpen, setDeleteArchivedDialogOpen] = useState(false);
+  const { tasks } = useBackgroundTasks();
+  const handledTaskIds = useRef(new Set<string>());
 
   useEffect(() => {
     if (params.id) {
       fetchCompanyDetails();
     }
   }, [params.id]);
+
+  // Once a background archive/restore/delete task for this company finishes,
+  // refetch so the page doesn't keep showing the pre-operation status.
+  useEffect(() => {
+    const companyId = companyDetails?.company.id;
+    if (!companyId) return;
+    const justFinished = tasks.some(
+      (t) => t.companyId === companyId && t.status !== 'running' && !handledTaskIds.current.has(t.id)
+    );
+    if (!justFinished) return;
+    tasks
+      .filter((t) => t.companyId === companyId && t.status !== 'running')
+      .forEach((t) => handledTaskIds.current.add(t.id));
+    fetchCompanyDetails();
+  }, [tasks, companyDetails?.company.id]);
+
+  useEffect(() => {
+    if (companyDetails?.company.status !== 'ARCHIVED' || !isSuperAdmin) {
+      setArchivedRecord(null);
+      return;
+    }
+    (async () => {
+      try {
+        const res = await fetch(`/api/companies/${companyDetails.company.id}/archived-record`);
+        const data = await res.json();
+        setArchivedRecord(res.ok ? data.data : null);
+      } catch {
+        setArchivedRecord(null);
+      }
+    })();
+  }, [companyDetails?.company.status, companyDetails?.company.id, isSuperAdmin]);
 
   const fetchCompanyDetails = async () => {
     setLoading(true);
@@ -269,6 +313,8 @@ export default function CompanyDetailPage() {
                       ? 'default'
                       : companyDetails.company.status === 'BLOCKED'
                       ? 'destructive'
+                      : companyDetails.company.status === 'ARCHIVED'
+                      ? 'outline'
                       : 'secondary'
                   }
                 >
@@ -284,13 +330,50 @@ export default function CompanyDetailPage() {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          <Button 
-            onClick={() => router.push(`/dashboard/campaign-runs?company=${companyDetails.company.id}`)}
-            className="flex items-center gap-2"
-          >
-            <Play className="h-4 w-4" />
-            View Campaign Runs
-          </Button>
+          {companyDetails.company.status === 'ARCHIVED' ? (
+            isSuperAdmin && (
+              <>
+                <Button
+                  className="flex items-center gap-2"
+                  onClick={() => setRestoreDialogOpen(true)}
+                  disabled={!archivedRecord}
+                >
+                  <ArchiveRestore className="h-4 w-4" />
+                  Restore Company
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="flex items-center gap-2"
+                  onClick={() => setDeleteArchivedDialogOpen(true)}
+                  disabled={!archivedRecord}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Company
+                </Button>
+              </>
+            )
+          ) : (
+            <>
+          {isSuperAdmin && (
+            <Button
+              variant="outline"
+              className="flex items-center gap-2"
+              onClick={() => setRemoveMode('archive')}
+            >
+              <Archive className="h-4 w-4" />
+              Archive Company
+            </Button>
+          )}
+          {isSuperAdmin && (
+            <Button
+              variant="destructive"
+              className="flex items-center gap-2"
+              onClick={() => setRemoveMode('delete')}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete Company
+            </Button>
+          )}
           {!isPartnerView && companyDetails.company.status === 'ACTIVE' ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -371,6 +454,8 @@ export default function CompanyDetailPage() {
               </AlertDialogContent>
             </AlertDialog>
           ) : null}
+            </>
+          )}
         </div>
       </div>
 
@@ -700,13 +785,24 @@ export default function CompanyDetailPage() {
                 <Send className="h-5 w-5" />
                 Campaigns Overview
               </CardTitle>
-              <Button 
-                onClick={() => router.push(`/dashboard/campaigns?company=${companyDetails.company.id}`)}
-                className="flex items-center gap-2"
-              >
-                <Send className="h-4 w-4" />
-                View Campaigns
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => router.push(`/dashboard/campaign-runs?company=${companyDetails.company.id}`)}
+                  className="flex items-center gap-2"
+                >
+                  <Play className="h-4 w-4" />
+                  View Campaign Runs
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push(`/dashboard/campaigns?company=${companyDetails.company.id}`)}
+                  className="flex items-center gap-2"
+                >
+                  <Send className="h-4 w-4" />
+                  View Campaigns
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -759,6 +855,39 @@ export default function CompanyDetailPage() {
         </Card>
 
       </div>
+
+      {isSuperAdmin && removeMode && (
+        <RemoveCompanyDialog
+          open={Boolean(removeMode)}
+          onOpenChange={(next) => !next && setRemoveMode(null)}
+          mode={removeMode}
+          companyId={companyDetails.company.id}
+          companyName={companyDetails.company.name}
+          onQueued={() => {
+            router.push('/dashboard/companies');
+          }}
+        />
+      )}
+
+      {isSuperAdmin && archivedRecord && (
+        <RestoreCompanyDialog
+          open={restoreDialogOpen}
+          onOpenChange={setRestoreDialogOpen}
+          archived={archivedRecord}
+          onQueued={() => {}}
+        />
+      )}
+
+      {isSuperAdmin && archivedRecord && (
+        <DeleteArchivedCompanyDialog
+          open={deleteArchivedDialogOpen}
+          onOpenChange={setDeleteArchivedDialogOpen}
+          archived={archivedRecord}
+          onQueued={() => {
+            router.push('/dashboard/companies');
+          }}
+        />
+      )}
     </div>
   );
 }

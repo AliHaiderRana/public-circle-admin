@@ -1,6 +1,7 @@
 import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { resolveTemplateStorage, templateFileUrl } from './template-storage';
 
 const FALLBACK_HTML =
   '<div style="font-family:Arial,sans-serif;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f5f5f5;color:#333;">Template</div>';
@@ -33,24 +34,6 @@ function normalizeHtml(html: string) {
   return `<!doctype html><html><head><meta charset="utf-8" /></head><body>${cleaned}</body></html>`;
 }
 
-function createS3Client() {
-  const region = process.env.AWS_REGION || process.env.S3_REGION;
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-
-  if (!region || !accessKeyId || !secretAccessKey) {
-    return null;
-  }
-
-  return new S3Client({
-    region,
-    credentials: {
-      accessKeyId,
-      secretAccessKey,
-    },
-  });
-}
-
 async function renderThumbnailBuffer(html: string) {
   const executablePath = await resolveExecutablePath();
   const isServerless = Boolean(process.env.VERCEL);
@@ -79,7 +62,7 @@ async function renderThumbnailBuffer(html: string) {
 
 /**
  * Sample thumbnails live ONLY on the main server bucket:
- * sample-templates/{templateId}/{timestamp}.png
+ * sample-templates/{templateId}/thumbnail.png
  *
  * Do not use admin S3BUCKET — that bucket is for admin assets/archives only.
  */
@@ -95,23 +78,8 @@ export async function generateTemplateThumbnailUrl({
   }
 
   const buffer = await renderThumbnailBuffer(html);
-
-  // Server / public-circle bucket only (never admin bucket)
-  const bucket = (
-    process.env.TEMPLATE_THUMBNAILS_BUCKET ||
-    process.env.PUBLIC_CIRCLE_S3BUCKET ||
-    ''
-  ).trim();
-  const region = process.env.AWS_REGION || process.env.S3_REGION;
-  const s3Client = createS3Client();
-
-  if (!bucket || !region || !s3Client) {
-    throw new Error(
-      'S3 thumbnail configuration is missing (set TEMPLATE_THUMBNAILS_BUCKET to the server bucket)',
-    );
-  }
-
-  const key = `sample-templates/${templateId}/${Date.now()}.png`;
+  const { bucket, region, s3Client } = resolveTemplateStorage();
+  const key = `sample-templates/${templateId}/thumbnail.png`;
 
   await s3Client.send(
     new PutObjectCommand({
@@ -119,14 +87,10 @@ export async function generateTemplateThumbnailUrl({
       Key: key,
       Body: buffer,
       ContentType: 'image/png',
-      CacheControl: 'public, max-age=31536000, immutable',
+      // the key is stable per template, so an edit must not serve the old preview
+      CacheControl: 'public, max-age=60, must-revalidate',
     }),
   );
 
-  const publicBaseUrl = process.env.TEMPLATE_THUMBNAIL_PUBLIC_BASE_URL?.trim();
-  if (publicBaseUrl) {
-    return `${publicBaseUrl.replace(/\/$/, '')}/${key}`;
-  }
-
-  return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+  return templateFileUrl({ bucket, region, key });
 }

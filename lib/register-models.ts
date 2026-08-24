@@ -1,6 +1,7 @@
 import Company from './models/Company';
 import User from './models/User';
 import CustomerRequest from './models/CustomerRequest';
+import Feedback from './models/Feedback';
 import AdminUser from './models/AdminUser';
 import AppConfig from './models/AppConfig';
 import Campaign from './models/Campaign';
@@ -22,6 +23,7 @@ export function registerModels() {
     Company,
     User,
     CustomerRequest,
+    Feedback,
     AdminUser,
     AppConfig,
     Campaign,
