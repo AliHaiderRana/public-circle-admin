@@ -21,6 +21,8 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  --color-chart-bounce: var(--chart-bounce);
+  --color-chart-complaint: var(--chart-complaint);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -73,6 +75,10 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+  /* Deliverability series: amber = bounces, red = complaints (complaints carry
+     the far stricter SES threshold, so they read as the more severe signal). */
+  --chart-bounce: oklch(0.769 0.188 70.08);
+  --chart-complaint: oklch(0.577 0.245 27.325);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -108,6 +114,8 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
+  --chart-bounce: oklch(0.828 0.189 84.429);
+  --chart-complaint: oklch(0.704 0.191 22.216);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.922 0 0);

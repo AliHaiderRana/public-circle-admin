@@ -22,6 +22,13 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { ViewToggle } from '@/components/aws-analytics/ViewToggle';
+import { FilePreviewDialog } from '@/components/aws-analytics/FilePreviewDialog';
+import {
+  compareValues,
+  SortableHeader,
+  toggleSort,
+  type SortState,
+} from '@/components/aws-analytics/SortableHeader';
 import { useAwsViewMode } from '@/hooks/use-aws-view-mode';
 import {
   ArrowLeft,
@@ -29,7 +36,6 @@ import {
   Database,
   Download,
   Eye,
-  ExternalLink,
   File,
   FileJson,
   Folder,
@@ -37,6 +43,7 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatTimeAgo, formatTimeAgoShort } from '@/lib/format-time-ago';
 import { formatBytes, formatCompactCount, formatCount } from '../../db-analytics/format';
 
 const IMAGE_EXTENSIONS = new Set([
@@ -60,6 +67,46 @@ function isImageFile(name: string): boolean {
   return IMAGE_EXTENSIONS.has(fileExtension(name));
 }
 
+type BrowseSortKey = 'name' | 'items' | 'bytes' | 'createdAt' | 'updatedAt';
+
+function timestamp(iso: string | null): number {
+  return iso ? new Date(iso).getTime() : 0;
+}
+
+function formatDate(iso: string | null): string {
+  return iso ? new Date(iso).toLocaleString() : '—';
+}
+
+/** Relative time ("2 hours ago"), with the exact date revealed on hover. */
+function DateCell({ iso }: { iso: string | null }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help">{formatTimeAgo(iso)}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {formatDate(iso)}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Compact relative time for tight spaces (grid tiles), with the exact date on hover. */
+function RelativeTimeLabel({ label, iso }: { label: string; iso: string | null }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help truncate">
+          {label} {formatTimeAgoShort(iso)}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {formatDate(iso)}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function FileTypeIcon({ name, className }: { name: string; className?: string }) {
   if (fileExtension(name) === 'json') {
     return <FileJson className={className} />;
@@ -72,6 +119,8 @@ type BrowseFolder = {
   prefix: string;
   objects: number;
   bytes: number;
+  createdAt: string | null;
+  updatedAt: string | null;
 };
 
 type BrowseFile = {
@@ -107,8 +156,14 @@ function BucketBrowserContent() {
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useAwsViewMode();
+  const [browseSort, setBrowseSort] = useState<SortState<BrowseSortKey>>(null);
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
   const [thumbErrors, setThumbErrors] = useState<Set<string>>(new Set());
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<BrowseFile | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && user && !user.isSuperAdmin) {
@@ -204,16 +259,22 @@ function BucketBrowserContent() {
     async (file: BrowseFile) => {
       setOpeningKey(file.key);
       setOpenError(null);
+      setPreviewFile(file);
+      setPreviewUrl(null);
+      setPreviewError(null);
+      setPreviewLoading(true);
+      setPreviewOpen(true);
       try {
         const qs = new URLSearchParams({ bucket: bucketName, key: file.key });
         const res = await fetch(`/api/aws-analytics/file-url?${qs}`);
         const json = await res.json();
         if (!res.ok) throw new Error(json?.error || 'Failed to open file');
-        window.open(json.url, '_blank', 'noopener,noreferrer');
+        setPreviewUrl(json.url);
       } catch (err) {
-        setOpenError(err instanceof Error ? err.message : 'Failed to open file');
+        setPreviewError(err instanceof Error ? err.message : 'Failed to open file');
       } finally {
         setOpeningKey(null);
+        setPreviewLoading(false);
       }
     },
     [bucketName]
@@ -261,6 +322,67 @@ function BucketBrowserContent() {
     if (breadcrumbs.length <= 1) return '';
     return breadcrumbs[breadcrumbs.length - 2].prefix;
   }, [breadcrumbs]);
+
+  const sortedFolders = useMemo(() => {
+    const rows = data?.folders ?? [];
+    if (!browseSort) return rows;
+    return [...rows].sort((a, b) => {
+      let av: string | number;
+      let bv: string | number;
+      switch (browseSort.key) {
+        case 'name':
+          av = a.name;
+          bv = b.name;
+          break;
+        case 'items':
+          av = a.objects;
+          bv = b.objects;
+          break;
+        case 'bytes':
+          av = a.bytes;
+          bv = b.bytes;
+          break;
+        case 'createdAt':
+          av = timestamp(a.createdAt);
+          bv = timestamp(b.createdAt);
+          break;
+        case 'updatedAt':
+          av = timestamp(a.updatedAt);
+          bv = timestamp(b.updatedAt);
+          break;
+      }
+      return compareValues(av, bv, browseSort.dir);
+    });
+  }, [data, browseSort]);
+
+  const sortedFiles = useMemo(() => {
+    const rows = data?.files ?? [];
+    if (!browseSort) return rows;
+    return [...rows].sort((a, b) => {
+      let av: string | number;
+      let bv: string | number;
+      switch (browseSort.key) {
+        case 'name':
+          av = a.name;
+          bv = b.name;
+          break;
+        case 'items':
+          av = 0;
+          bv = 0;
+          break;
+        case 'bytes':
+          av = a.bytes;
+          bv = b.bytes;
+          break;
+        case 'createdAt':
+        case 'updatedAt':
+          av = timestamp(a.lastModified);
+          bv = timestamp(b.lastModified);
+          break;
+      }
+      return compareValues(av, bv, browseSort.dir);
+    });
+  }, [data, browseSort]);
 
   if (authLoading || !user?.isSuperAdmin) {
     return (
@@ -404,6 +526,12 @@ function BucketBrowserContent() {
                       <span className="truncate text-[10px] text-muted-foreground">
                         {formatCompactCount(folder.objects)} items · {formatBytes(folder.bytes)}
                       </span>
+                      <span className="flex w-full justify-center text-[10px] text-muted-foreground">
+                        <RelativeTimeLabel label="Created" iso={folder.createdAt} />
+                      </span>
+                      <span className="flex w-full justify-center text-[10px] text-muted-foreground">
+                        <RelativeTimeLabel label="Updated" iso={folder.updatedAt} />
+                      </span>
                     </button>
                   ))}
                   {(data?.files ?? []).map((file) => {
@@ -474,9 +602,47 @@ function BucketBrowserContent() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="pl-4">Name</TableHead>
-                <TableHead className="text-right">Items</TableHead>
-                <TableHead className="text-right">Size</TableHead>
+                <SortableHeader
+                  label="Name"
+                  sortKey="name"
+                  activeKey={browseSort?.key ?? null}
+                  direction={browseSort?.dir ?? 'asc'}
+                  onSort={(key) => setBrowseSort((prev) => toggleSort(prev, key))}
+                  className="pl-4"
+                />
+                <SortableHeader
+                  label="Items"
+                  sortKey="items"
+                  activeKey={browseSort?.key ?? null}
+                  direction={browseSort?.dir ?? 'asc'}
+                  onSort={(key) => setBrowseSort((prev) => toggleSort(prev, key))}
+                  align="right"
+                />
+                <SortableHeader
+                  label="Size"
+                  sortKey="bytes"
+                  activeKey={browseSort?.key ?? null}
+                  direction={browseSort?.dir ?? 'asc'}
+                  onSort={(key) => setBrowseSort((prev) => toggleSort(prev, key))}
+                  className="pr-6"
+                  align="right"
+                />
+                <SortableHeader
+                  label="Created At"
+                  sortKey="createdAt"
+                  activeKey={browseSort?.key ?? null}
+                  direction={browseSort?.dir ?? 'asc'}
+                  onSort={(key) => setBrowseSort((prev) => toggleSort(prev, key))}
+                  className="pl-4"
+                />
+                <SortableHeader
+                  label="Updated At"
+                  sortKey="updatedAt"
+                  activeKey={browseSort?.key ?? null}
+                  direction={browseSort?.dir ?? 'asc'}
+                  onSort={(key) => setBrowseSort((prev) => toggleSort(prev, key))}
+                  className="pl-4"
+                />
                 <TableHead className="w-[90px] pr-4 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -484,14 +650,14 @@ function BucketBrowserContent() {
               {loading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={4} className="py-3">
+                    <TableCell colSpan={6} className="py-3">
                       <Skeleton className="h-8 w-full" />
                     </TableCell>
                   </TableRow>
                 ))
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-10">
+                  <TableCell colSpan={6} className="py-10">
                     <div className="flex flex-col items-center justify-center gap-3 text-center">
                       <p className="text-sm font-medium text-destructive">{error}</p>
                       <Button type="button" size="sm" onClick={() => void fetchBrowse()}>
@@ -503,7 +669,7 @@ function BucketBrowserContent() {
               ) : isEmpty ? (
                 <TableRow>
                   <TableCell
-                    colSpan={4}
+                    colSpan={6}
                     className="py-12 text-center text-sm text-muted-foreground"
                   >
                     {companyFilter
@@ -513,8 +679,12 @@ function BucketBrowserContent() {
                 </TableRow>
               ) : (
                 <>
-                  {(data?.folders ?? []).map((folder) => (
-                    <TableRow key={folder.prefix}>
+                  {sortedFolders.map((folder) => (
+                    <TableRow
+                      key={folder.prefix}
+                      className="cursor-pointer"
+                      onClick={() => openFolder(folder.prefix)}
+                    >
                       <TableCell className="pl-4 py-2.5">
                         <div className="flex items-center gap-2">
                           <Folder className="size-4 shrink-0 text-muted-foreground" />
@@ -524,8 +694,14 @@ function BucketBrowserContent() {
                       <TableCell className="py-2.5 text-right tabular-nums text-sm text-muted-foreground">
                         {formatCompactCount(folder.objects)}
                       </TableCell>
-                      <TableCell className="py-2.5 text-right tabular-nums text-sm">
+                      <TableCell className="py-2.5 pr-6 text-right tabular-nums text-sm">
                         {formatBytes(folder.bytes)}
+                      </TableCell>
+                      <TableCell className="py-2.5 pl-4 text-sm text-muted-foreground whitespace-nowrap">
+                        <DateCell iso={folder.createdAt} />
+                      </TableCell>
+                      <TableCell className="py-2.5 pl-4 text-sm text-muted-foreground whitespace-nowrap">
+                        <DateCell iso={folder.updatedAt} />
                       </TableCell>
                       <TableCell className="py-2.5 pr-4 text-right">
                         <Tooltip>
@@ -535,7 +711,10 @@ function BucketBrowserContent() {
                               variant="outline"
                               size="icon-sm"
                               className="h-7 w-7"
-                              onClick={() => openFolder(folder.prefix)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openFolder(folder.prefix);
+                              }}
                               aria-label={`Open folder ${folder.name}`}
                             >
                               <Eye className="h-3.5 w-3.5" />
@@ -548,10 +727,14 @@ function BucketBrowserContent() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {(data?.files ?? []).map((file) => (
-                    <TableRow key={file.key}>
+                  {sortedFiles.map((file) => (
+                    <TableRow
+                      key={file.key}
+                      className="cursor-pointer"
+                      onClick={() => void openFile(file)}
+                    >
                       <TableCell className="pl-4 py-2.5">
-                        <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex min-w-0 items-center gap-2">
                           <File className="size-4 shrink-0 text-muted-foreground" />
                           <span className="truncate text-sm">{file.name}</span>
                         </div>
@@ -559,8 +742,14 @@ function BucketBrowserContent() {
                       <TableCell className="py-2.5 text-right text-sm text-muted-foreground">
                         —
                       </TableCell>
-                      <TableCell className="py-2.5 text-right tabular-nums text-sm">
+                      <TableCell className="py-2.5 pr-6 text-right tabular-nums text-sm">
                         {formatBytes(file.bytes)}
+                      </TableCell>
+                      <TableCell className="py-2.5 pl-4 text-sm text-muted-foreground whitespace-nowrap">
+                        <DateCell iso={file.lastModified} />
+                      </TableCell>
+                      <TableCell className="py-2.5 pl-4 text-sm text-muted-foreground whitespace-nowrap">
+                        <DateCell iso={file.lastModified} />
                       </TableCell>
                       <TableCell className="py-2.5 pr-4">
                         <div className="flex items-center justify-end gap-1.5">
@@ -571,15 +760,18 @@ function BucketBrowserContent() {
                                 variant="outline"
                                 size="icon-sm"
                                 className="h-7 w-7"
-                                onClick={() => void openFile(file)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void openFile(file);
+                                }}
                                 disabled={openingKey === file.key}
-                                aria-label={`Open ${file.name}`}
+                                aria-label={`Preview ${file.name}`}
                               >
-                                <ExternalLink className="h-3.5 w-3.5" />
+                                <Eye className="h-3.5 w-3.5" />
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent side="top" className="text-xs">
-                              {openingKey === file.key ? 'Opening…' : 'Open'}
+                              {openingKey === file.key ? 'Opening…' : 'Preview'}
                             </TooltipContent>
                           </Tooltip>
                           <Tooltip>
@@ -589,7 +781,10 @@ function BucketBrowserContent() {
                                 variant="outline"
                                 size="icon-sm"
                                 className="h-7 w-7"
-                                onClick={() => void downloadFile(file)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void downloadFile(file);
+                                }}
                                 disabled={downloadingKey === file.key}
                                 aria-label={`Download ${file.name}`}
                               >
@@ -625,6 +820,24 @@ function BucketBrowserContent() {
           )}
         </CardContent>
       </Card>
+
+      <FilePreviewDialog
+        open={previewOpen}
+        onOpenChange={(next) => {
+          setPreviewOpen(next);
+          if (!next) {
+            setPreviewFile(null);
+            setPreviewUrl(null);
+            setPreviewError(null);
+          }
+        }}
+        file={previewFile}
+        url={previewUrl}
+        loading={previewLoading}
+        error={previewError}
+        onDownload={() => previewFile && void downloadFile(previewFile)}
+        downloading={Boolean(previewFile) && downloadingKey === previewFile?.key}
+      />
     </div>
   );
 }
