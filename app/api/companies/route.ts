@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import dbConnect from '@/lib/db';
 import Company from '@/lib/models/Company';
 import Campaign from '@/lib/models/Campaign';
@@ -107,20 +108,61 @@ export async function GET(request: Request) {
     const sortBy = searchParams.get('sortBy') || 'createdAt';
 
     const query: Record<string, unknown> = {};
+    const partnerFilter = isPartnerSession(session)
+      ? await partnerCompaniesFilter(session)
+      : {};
 
-    if (isPartnerSession(session)) {
-      Object.assign(query, await partnerCompaniesFilter(session));
+    if (Object.keys(partnerFilter).length) {
+      Object.assign(query, partnerFilter);
     }
 
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { city: { $regex: search, $options: 'i' } },
-        { country: { $regex: search, $options: 'i' } },
-        { address: { $regex: search, $options: 'i' } },
-        { postalCode: { $regex: search, $options: 'i' } },
-        { companySize: { $regex: search, $options: 'i' } },
-      ];
+    const searchRaw = search.trim();
+    const searchTokens = searchRaw
+      ? searchRaw.split(/[,\s]+/).map((t) => t.trim()).filter(Boolean)
+      : [];
+    const exactIdTokens = searchTokens.filter(
+      (t) => /^[a-fA-F0-9]{24}$/.test(t) && mongoose.Types.ObjectId.isValid(t)
+    );
+    const exactObjectIds = exactIdTokens.map((t) => new mongoose.Types.ObjectId(t));
+    const remainingTokens = searchTokens.filter((t) => !exactIdTokens.includes(t));
+    const partialIdToken =
+      remainingTokens.length === 1 && /^[a-fA-F0-9]{4,23}$/.test(remainingTokens[0])
+        ? remainingTokens[0]
+        : null;
+    const textSearch = partialIdToken ? '' : remainingTokens.join(' ');
+
+    if (exactObjectIds.length || textSearch || partialIdToken) {
+      const or: Record<string, unknown>[] = [];
+
+      if (exactObjectIds.length) {
+        or.push({ _id: { $in: exactObjectIds } });
+      }
+
+      if (textSearch) {
+        or.push(
+          { name: { $regex: textSearch, $options: 'i' } },
+          { city: { $regex: textSearch, $options: 'i' } },
+          { country: { $regex: textSearch, $options: 'i' } },
+          { address: { $regex: textSearch, $options: 'i' } },
+          { postalCode: { $regex: textSearch, $options: 'i' } },
+          { companySize: { $regex: textSearch, $options: 'i' } },
+        );
+      }
+
+      // Partial ObjectId prefix match (hex only). Keep this out of distinct() queries.
+      if (partialIdToken) {
+        or.push({
+          $expr: {
+            $regexMatch: {
+              input: { $toString: '$_id' },
+              regex: `^${partialIdToken}`,
+              options: 'i',
+            },
+          },
+        });
+      }
+
+      if (or.length) query.$or = or;
     }
 
     if (companySize) query.companySize = companySize;
@@ -131,11 +173,21 @@ export async function GET(request: Request) {
     const skip = (page - 1) * limit;
     const sortOrder: 1 | -1 = sort === 'asc' ? 1 : -1;
 
+    // distinct() can fail / be unreliable with $expr — strip it for facet filters only
+    const distinctQuery: Record<string, unknown> = { ...query };
+    if (Array.isArray(distinctQuery.$or)) {
+      const withoutExpr = (distinctQuery.$or as Record<string, unknown>[]).filter(
+        (clause) => !('$expr' in clause)
+      );
+      if (withoutExpr.length) distinctQuery.$or = withoutExpr;
+      else delete distinctQuery.$or;
+    }
+
     const [totalCount, distinctCountries, distinctSizes, distinctCities] = await Promise.all([
       Company.countDocuments(query),
-      Company.distinct('country', query),
-      Company.distinct('companySize', query),
-      Company.distinct('city', query),
+      Company.distinct('country', distinctQuery),
+      Company.distinct('companySize', distinctQuery),
+      Company.distinct('city', distinctQuery),
     ]);
 
     let companies;

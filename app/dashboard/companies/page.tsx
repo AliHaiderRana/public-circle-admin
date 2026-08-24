@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 import {
   Search,
   Building2,
@@ -41,7 +42,9 @@ import {
   ArrowDown,
   Send,
   Mail,
+  Archive,
 } from "lucide-react";
+import { useBackgroundTasks } from "@/context/BackgroundTasksContext";
 
 export default function CompaniesPage() {
   const router = useRouter();
@@ -66,6 +69,8 @@ export default function CompaniesPage() {
     sizes: [] as string[],
     cities: [] as string[],
   });
+  const { tasks } = useBackgroundTasks();
+  const handledTaskIds = useRef(new Set<string>());
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
@@ -120,6 +125,20 @@ export default function CompaniesPage() {
     fetchCompanies();
   }, [fetchCompanies]);
 
+  // Once a background archive/restore/delete task for a company on this page
+  // finishes, refetch so its row doesn't keep showing the pre-operation status.
+  useEffect(() => {
+    const listedIds = new Set(companies.map((c) => c._id));
+    const justFinished = tasks.some(
+      (t) => listedIds.has(t.companyId) && t.status !== 'running' && !handledTaskIds.current.has(t.id)
+    );
+    if (!justFinished) return;
+    tasks
+      .filter((t) => listedIds.has(t.companyId) && t.status !== 'running')
+      .forEach((t) => handledTaskIds.current.add(t.id));
+    fetchCompanies();
+  }, [tasks, companies, fetchCompanies]);
+
   const handlePageChange = (newPage: number) => {
     setPagination((prev) => ({ ...prev, page: newPage }));
   };
@@ -162,6 +181,13 @@ export default function CompaniesPage() {
           <p className="text-muted-foreground">
             Manage all registered organizations and their settings.
           </p>
+          <Link
+            href="/dashboard/companies/archived"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mt-1"
+          >
+            <Archive className="h-3.5 w-3.5" />
+            Archived companies
+          </Link>
         </div>
         <div className="flex items-center gap-4 text-sm text-muted-foreground bg-card p-2 rounded-lg border">
           <div className="flex items-center gap-1 px-2 border-r">
@@ -288,6 +314,7 @@ export default function CompaniesPage() {
                 <SelectItem value="SUSPENDED">Suspended</SelectItem>
                 <SelectItem value="BLOCKED">Blocked</SelectItem>
                 <SelectItem value="DELETED">Deleted</SelectItem>
+                <SelectItem value="ARCHIVED">Archived</SelectItem>
               </SelectContent>
             </Select>
 
