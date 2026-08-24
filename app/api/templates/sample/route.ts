@@ -30,6 +30,9 @@ const categoryIdsSchema = z
 
 const createTemplateSchema = z
   .object({
+    // the editor reserves an id so images uploaded before saving already sit in
+    // sample-templates/{id}/template-images/
+    _id: objectIdSchema.optional(),
     name: z.string().trim().min(1, 'Template name is required'),
     description: z.string().trim().optional().default(''),
     body: z.string().min(1, 'Template body is required'),
@@ -169,7 +172,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const templateId = new mongoose.Types.ObjectId();
+    const templateId = payload._id
+      ? new mongoose.Types.ObjectId(payload._id)
+      : new mongoose.Types.ObjectId();
+
+    if (payload._id && (await Template.exists({ _id: templateId }))) {
+      return NextResponse.json(
+        { error: 'A template with this id already exists' },
+        { status: 409 }
+      );
+    }
 
     const thumbnailURL = await generateTemplateThumbnailUrl({
       html: payload.body,

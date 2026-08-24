@@ -42,11 +42,10 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
   ChartConfig,
   ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
 } from '@/components/ui/chart';
+import { CompanyCombobox } from '@/components/CompanyCombobox';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -57,10 +56,11 @@ import {
   RefreshCw,
   Send,
   ShieldAlert,
+  ShieldCheck,
   XCircle,
   Zap,
 } from 'lucide-react';
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { cn } from '@/lib/utils';
 import { formatCompactCount, formatCount } from '../../db-analytics/format';
 
@@ -70,6 +70,14 @@ type SesDailyStat = {
   bounces: number;
   complaints: number;
   rejects: number;
+};
+
+type SesReputation = {
+  bounceRate: number | null;
+  complaintRate: number | null;
+  asOf: string | null;
+  daily: { date: string; bounceRate: number | null; complaintRate: number | null }[];
+  unavailableReason: string | null;
 };
 
 type SesAnalytics = {
@@ -88,6 +96,10 @@ type SesAnalytics = {
     complaints: number;
     rejects: number;
   };
+  reputation?: SesReputation;
+  scope?: 'account' | 'company';
+  companyId?: string | null;
+  companyName?: string | null;
   generatedAt: string;
 };
 
@@ -119,26 +131,15 @@ const volumeChartConfig = {
   },
   bounces: {
     label: 'Bounces',
-    color: 'var(--chart-4)',
+    color: 'var(--chart-bounce)',
   },
   complaints: {
     label: 'Complaints',
-    color: 'var(--chart-5)',
+    color: 'var(--chart-complaint)',
   },
   rejects: {
     label: 'Rejects',
     color: 'var(--chart-3)',
-  },
-} satisfies ChartConfig;
-
-const reputationChartConfig = {
-  bounceRate: {
-    label: 'Bounce rate',
-    color: 'var(--chart-4)',
-  },
-  complaintRate: {
-    label: 'Complaint rate',
-    color: 'var(--chart-5)',
   },
 } satisfies ChartConfig;
 
@@ -172,15 +173,47 @@ function formatDayLabel(isoDate: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-function rateStatus(
+function getOverallHealthStatus(
   bounceRate: number | null,
-  complaintRate: number | null
-): 'Healthy' | 'Warning' | 'Account at risk' {
+  complaintRate: number | null,
+  sendingEnabled: boolean
+): {
+  status: 'HEALTHY' | 'WARNING' | 'CRITICAL';
+  title: string;
+  description: string;
+} {
+  if (!sendingEnabled) {
+    return {
+      status: 'CRITICAL',
+      title: 'Account Sending Paused by AWS',
+      description: 'Amazon SES sending is paused for this account. Check SES console for suspension details.',
+    };
+  }
+
   const b = bounceRate ?? 0;
   const c = complaintRate ?? 0;
-  if (b > 10 || c > 0.5) return 'Account at risk';
-  if (b > 5 || c > 0.1) return 'Warning';
-  return 'Healthy';
+
+  if (b >= 10.0 || c >= 0.5) {
+    return {
+      status: 'CRITICAL',
+      title: 'CRITICAL — High Danger of AWS Suspension',
+      description: 'Account reputation metrics exceed AWS pause limits (10% Bounce / 0.5% Complaint). Immediate cleanup required.',
+    };
+  }
+
+  if (b >= 5.0 || c >= 0.1) {
+    return {
+      status: 'WARNING',
+      title: 'WARNING — Approaching AWS Risk Thresholds',
+      description: 'Reputation metrics exceed AWS target limits (5% Bounce / 0.1% Complaint). AWS may place account under review.',
+    };
+  }
+
+  return {
+    status: 'HEALTHY',
+    title: 'HEALTHY — Low Danger of AWS Action',
+    description: 'Account metrics are safely within AWS operating limits (Bounce < 5.0%, Complaint < 0.10%).',
+  };
 }
 
 export default function SesAnalyticsPage() {
@@ -191,6 +224,10 @@ export default function SesAnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [metric, setMetric] = useState<ChartMetric>('deliveryAttempts');
+  const [companyFilter, setCompanyFilter] = useState('');
+  const [selectedCompanyLabel, setSelectedCompanyLabel] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     if (!authLoading && user && !user.isSuperAdmin) {
@@ -198,27 +235,37 @@ export default function SesAnalyticsPage() {
     }
   }, [authLoading, user, router]);
 
-  const fetchAnalytics = useCallback(async (forceRefresh = false) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/aws-analytics/ses${forceRefresh ? '?refresh=1' : ''}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || 'Failed to load SES analytics');
-      setData(json);
-    } catch (err) {
-      setData(null);
-      setError(err instanceof Error ? err.message : 'Failed to load SES analytics');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchAnalytics = useCallback(
+    async (forceRefresh = false, companyId = companyFilter) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const qs = new URLSearchParams();
+        if (forceRefresh) qs.set('refresh', '1');
+        if (companyId) qs.set('company', companyId);
+        const suffix = qs.toString() ? `?${qs.toString()}` : '';
+        const res = await fetch(`/api/aws-analytics/ses${suffix}`);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error || 'Failed to load SES analytics');
+        setData(json);
+        if (json?.companyName) {
+          setSelectedCompanyLabel(json.companyName);
+        }
+      } catch (err) {
+        setData(null);
+        setError(err instanceof Error ? err.message : 'Failed to load SES analytics');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [companyFilter]
+  );
 
   useEffect(() => {
     if (!authLoading && user?.isSuperAdmin) {
-      void fetchAnalytics();
+      void fetchAnalytics(false, companyFilter);
     }
-  }, [authLoading, user, fetchAnalytics]);
+  }, [authLoading, user, companyFilter, fetchAnalytics]);
 
   const tone = usageTone(data?.usagePercent ?? null);
 
@@ -239,21 +286,15 @@ export default function SesAnalyticsPage() {
     [data]
   );
 
-  const bounceRate14d = useMemo(() => {
-    const attempts = data?.totalsLast14Days.deliveryAttempts ?? 0;
-    const bounces = data?.totalsLast14Days.bounces ?? 0;
-    if (attempts <= 0) return null;
-    return (bounces / attempts) * 100;
-  }, [data]);
+  const awsReputation = data?.reputation;
+  const awsBounceRate = awsReputation?.bounceRate ?? 0;
+  const awsComplaintRate = awsReputation?.complaintRate ?? 0;
 
-  const complaintRate14d = useMemo(() => {
-    const attempts = data?.totalsLast14Days.deliveryAttempts ?? 0;
-    const complaints = data?.totalsLast14Days.complaints ?? 0;
-    if (attempts <= 0) return null;
-    return (complaints / attempts) * 100;
-  }, [data]);
-
-  const reputation = rateStatus(bounceRate14d, complaintRate14d);
+  const health = getOverallHealthStatus(
+    awsBounceRate,
+    awsComplaintRate,
+    data?.sendingEnabled ?? true
+  );
 
   const metricPeak = useMemo(() => {
     if (!chartData.length) return 0;
@@ -271,6 +312,16 @@ export default function SesAnalyticsPage() {
     return map[metric];
   }, [data, metric]);
 
+  const selectedCompanyName = useMemo(() => {
+    if (!companyFilter) return null;
+    return selectedCompanyLabel || data?.companyName || 'Selected company';
+  }, [companyFilter, selectedCompanyLabel, data?.companyName]);
+
+  const activitySourceLabel =
+    data?.scope === 'company'
+      ? `Daily totals for ${selectedCompanyName ?? 'selected company'} from platform sends (EmailsSent).`
+      : 'Daily totals aggregated from SES GetSendStatistics (all companies / account-wide).';
+
   if (authLoading || !user?.isSuperAdmin) {
     return (
       <div className="space-y-4">
@@ -286,38 +337,21 @@ export default function SesAnalyticsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Top Header Row */}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1.5">
-          <h1 className="flex flex-wrap items-center gap-2 text-xl font-semibold tracking-tight">
-            <Mail className="size-5 text-muted-foreground" />
-            AWS SES Analytics
+        <div className="space-y-1">
+          <h1 className="flex flex-wrap items-center gap-2 text-2xl font-bold tracking-tight">
+            <Mail className="size-6 text-primary" />
+            AWS SES Analytics & Account Health
             {data?.region && (
               <Badge variant="outline" className="font-mono text-xs font-normal">
                 {data.region}
               </Badge>
             )}
-            {data && (
-              <Badge
-                variant="outline"
-                className={cn(
-                  'gap-1 text-xs font-normal',
-                  data.sendingEnabled
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400'
-                    : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400'
-                )}
-              >
-                {data.sendingEnabled ? (
-                  <CheckCircle2 className="size-3" />
-                ) : (
-                  <XCircle className="size-3" />
-                )}
-                {data.sendingEnabled ? 'Sending enabled' : 'Sending paused'}
-              </Badge>
-            )}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Account sending quota, rate limits, and recent delivery statistics.
+            Monitor AWS SES Account Health, CloudWatch Reputation Metrics, and Sending Limits.
             {data?.generatedAt &&
               ` Snapshot taken ${new Date(data.generatedAt).toLocaleTimeString()} · cached up to 2 min.`}
           </p>
@@ -326,11 +360,11 @@ export default function SesAnalyticsPage() {
           type="button"
           variant="outline"
           size="sm"
-          className="h-8 gap-1.5 shrink-0"
+          className="h-9 gap-1.5 shrink-0"
           onClick={() => void fetchAnalytics(true)}
           disabled={loading}
         >
-          <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+          <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
           Refresh
         </Button>
       </div>
@@ -348,26 +382,171 @@ export default function SesAnalyticsPage() {
         </Alert>
       ) : (
         <>
-          {data && !data.sendingEnabled && (
-            <Alert variant="destructive">
-              <ShieldAlert className="size-4" />
-              <AlertTitle>Account sending is paused</AlertTitle>
-              <AlertDescription>
-                Amazon SES is not accepting send requests for this account. Check the SES console
-                for pause reasons (reputation, bounce/complaint thresholds, or manual pause).
-              </AlertDescription>
-            </Alert>
-          )}
+          {/* AWS ACCOUNT HEALTH & DANGER HERO BANNER */}
+          <Card
+            className={cn(
+              'gap-0 py-0 border-2 shadow-md overflow-hidden transition-all',
+              health.status === 'HEALTHY' &&
+                'border-emerald-500/30 bg-emerald-500/5 dark:border-emerald-500/40 dark:bg-emerald-950/20',
+              health.status === 'WARNING' &&
+                'border-amber-500/40 bg-amber-500/5 dark:border-amber-500/40 dark:bg-amber-950/20',
+              health.status === 'CRITICAL' &&
+                'border-red-500/50 bg-red-500/10 dark:border-red-500/50 dark:bg-red-950/30'
+            )}
+          >
+            <CardHeader className="py-4 px-5 border-b bg-background/50">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  {health.status === 'HEALTHY' && (
+                    <div className="p-2 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <ShieldCheck className="size-6" />
+                    </div>
+                  )}
+                  {health.status === 'WARNING' && (
+                    <div className="p-2 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                      <AlertTriangle className="size-6" />
+                    </div>
+                  )}
+                  {health.status === 'CRITICAL' && (
+                    <div className="p-2 rounded-full bg-red-500/10 text-red-600 dark:text-red-400">
+                      <ShieldAlert className="size-6" />
+                    </div>
+                  )}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-lg font-bold">{health.title}</CardTitle>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'font-semibold text-xs px-2.5 py-0.5',
+                          health.status === 'HEALTHY' &&
+                            'border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+                          health.status === 'WARNING' &&
+                            'border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300',
+                          health.status === 'CRITICAL' &&
+                            'border-red-300 bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
+                        )}
+                      >
+                        {health.status}
+                      </Badge>
+                    </div>
+                    <CardDescription className="text-xs mt-0.5">
+                      {health.description}
+                    </CardDescription>
+                  </div>
+                </div>
 
-          {/* KPI strip */}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      'gap-1.5 py-1 px-3 text-xs font-medium',
+                      data?.sendingEnabled
+                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-400'
+                        : 'border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/60 dark:text-red-400'
+                    )}
+                  >
+                    {data?.sendingEnabled ? (
+                      <CheckCircle2 className="size-3.5" />
+                    ) : (
+                      <XCircle className="size-3.5" />
+                    )}
+                    {data?.sendingEnabled ? 'AWS Sending Enabled' : 'AWS Sending Paused'}
+                  </Badge>
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-5 grid gap-6 md:grid-cols-2">
+              {/* Gauge 1: AWS Bounce Rate */}
+              <div className="space-y-2 rounded-xl border bg-background/80 p-4 shadow-sm">
+                <div className="flex items-center justify-between text-xs font-semibold">
+                  <span className="flex items-center gap-1.5 text-foreground">
+                    <MailWarning className="size-4 text-amber-500" />
+                    AWS Bounce Rate (CloudWatch)
+                  </span>
+                  <span className="font-mono text-sm font-bold tabular-nums">
+                    {loading ? '…' : `${awsBounceRate.toFixed(3)}%`}
+                  </span>
+                </div>
+                <div className="relative pt-1">
+                  <Progress
+                    value={Math.min(100, (awsBounceRate / 10.0) * 100)}
+                    className={cn(
+                      'h-3.5',
+                      awsBounceRate >= 10.0
+                        ? 'bg-red-100 [&>div]:bg-red-600'
+                        : awsBounceRate >= 5.0
+                          ? 'bg-amber-100 [&>div]:bg-amber-500'
+                          : '[&>div]:bg-emerald-500'
+                    )}
+                  />
+                  <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground font-mono">
+                    <span>0% (Ideal)</span>
+                    <span className="font-semibold text-amber-600 dark:text-amber-400">
+                      5.0% (AWS Target Max)
+                    </span>
+                    <span className="font-semibold text-red-600 dark:text-red-400">
+                      10.0% (Pause Limit)
+                    </span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground pt-1">
+                  AWS recommends keeping bounce rate under <strong>5%</strong>. Exceeding{' '}
+                  <strong>10%</strong> risks account suspension.
+                </p>
+              </div>
+
+              {/* Gauge 2: AWS Complaint Rate */}
+              <div className="space-y-2 rounded-xl border bg-background/80 p-4 shadow-sm">
+                <div className="flex items-center justify-between text-xs font-semibold">
+                  <span className="flex items-center gap-1.5 text-foreground">
+                    <AlertTriangle className="size-4 text-red-500" />
+                    AWS Complaint Rate (CloudWatch)
+                  </span>
+                  <span className="font-mono text-sm font-bold tabular-nums">
+                    {loading ? '…' : `${awsComplaintRate.toFixed(4)}%`}
+                  </span>
+                </div>
+                <div className="relative pt-1">
+                  <Progress
+                    value={Math.min(100, (awsComplaintRate / 0.5) * 100)}
+                    className={cn(
+                      'h-3.5',
+                      awsComplaintRate >= 0.5
+                        ? 'bg-red-100 [&>div]:bg-red-600'
+                        : awsComplaintRate >= 0.1
+                          ? 'bg-amber-100 [&>div]:bg-amber-500'
+                          : '[&>div]:bg-emerald-500'
+                    )}
+                  />
+                  <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground font-mono">
+                    <span>0% (Ideal)</span>
+                    <span className="font-semibold text-amber-600 dark:text-amber-400">
+                      0.10% (AWS Target Max)
+                    </span>
+                    <span className="font-semibold text-red-600 dark:text-red-400">
+                      0.50% (Pause Limit)
+                    </span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground pt-1">
+                  AWS requires keeping complaint rate under <strong>0.1%</strong>. Exceeding{' '}
+                  <strong>0.5%</strong> risks account suspension.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 5 KPI Cards Strip */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <Card className="gap-0 py-0 shadow-sm">
               <CardHeader className="border-b py-3 px-4 [.border-b]:pb-3">
-                <CardDescription className="flex items-center gap-1.5 text-xs">
-                  <Send className="size-3.5" />
+                <CardDescription className="flex items-center gap-1.5 text-xs font-medium">
+                  <Send className="size-3.5 text-primary" />
                   Sent (last 24h)
                 </CardDescription>
-                <CardTitle className="text-2xl font-semibold tabular-nums tracking-tight">
+                <CardTitle className="text-2xl font-bold tabular-nums tracking-tight">
                   {loading ? (
                     <Skeleton className="h-7 w-24" />
                   ) : (
@@ -375,22 +554,22 @@ export default function SesAnalyticsPage() {
                   )}
                 </CardTitle>
               </CardHeader>
-              <CardFooter className="px-4 py-2.5 text-xs text-muted-foreground">
+              <CardFooter className="px-4 py-2 text-xs text-muted-foreground">
                 {loading
                   ? '…'
                   : data?.unlimited
-                    ? 'Unlimited daily quota'
+                    ? 'Unlimited quota'
                     : `of ${formatCount(Math.round(data?.max24HourSend ?? 0))} quota`}
               </CardFooter>
             </Card>
 
             <Card className="gap-0 py-0 shadow-sm">
               <CardHeader className="border-b py-3 px-4 [.border-b]:pb-3">
-                <CardDescription className="flex items-center gap-1.5 text-xs">
-                  <Gauge className="size-3.5" />
-                  24h sending quota
+                <CardDescription className="flex items-center gap-1.5 text-xs font-medium">
+                  <Gauge className="size-3.5 text-primary" />
+                  24h Sending Quota
                 </CardDescription>
-                <CardTitle className="text-2xl font-semibold tabular-nums tracking-tight">
+                <CardTitle className="text-2xl font-bold tabular-nums tracking-tight">
                   {loading ? (
                     <Skeleton className="h-7 w-24" />
                   ) : data?.unlimited ? (
@@ -400,7 +579,7 @@ export default function SesAnalyticsPage() {
                   )}
                 </CardTitle>
               </CardHeader>
-              <CardFooter className="px-4 py-2.5 text-xs text-muted-foreground">
+              <CardFooter className="px-4 py-2 text-xs text-muted-foreground">
                 {loading
                   ? '…'
                   : data && !data.unlimited && data.remaining != null
@@ -411,11 +590,11 @@ export default function SesAnalyticsPage() {
 
             <Card className="gap-0 py-0 shadow-sm">
               <CardHeader className="border-b py-3 px-4 [.border-b]:pb-3">
-                <CardDescription className="flex items-center gap-1.5 text-xs">
-                  <Zap className="size-3.5" />
-                  Max send rate
+                <CardDescription className="flex items-center gap-1.5 text-xs font-medium">
+                  <Zap className="size-3.5 text-amber-500" />
+                  Max Send Rate
                 </CardDescription>
-                <CardTitle className="text-2xl font-semibold tabular-nums tracking-tight">
+                <CardTitle className="text-2xl font-bold tabular-nums tracking-tight">
                   {loading ? (
                     <Skeleton className="h-7 w-16" />
                   ) : data ? (
@@ -423,70 +602,78 @@ export default function SesAnalyticsPage() {
                       {data.maxSendRate % 1 === 0
                         ? data.maxSendRate
                         : data.maxSendRate.toFixed(1)}
-                      <span className="text-base font-medium text-muted-foreground">/s</span>
+                      <span className="text-sm font-normal text-muted-foreground">/sec</span>
                     </>
                   ) : (
                     '—'
                   )}
                 </CardTitle>
               </CardHeader>
-              <CardFooter className="px-4 py-2.5 text-xs text-muted-foreground">
-                Emails SES will accept per second
+              <CardFooter className="px-4 py-2 text-xs text-muted-foreground">
+                Emails accepted / second
               </CardFooter>
             </Card>
 
-            <Card className="gap-0 py-0 shadow-sm">
+            {/* AWS Bounce Rate KPI */}
+            <Card className="gap-0 py-0 shadow-sm border-l-4 border-l-amber-500">
               <CardHeader className="border-b py-3 px-4 [.border-b]:pb-3">
-                <div className="flex items-center justify-between gap-2">
-                  <CardDescription className="flex items-center gap-1.5 text-xs">
+                <div className="flex items-center justify-between gap-1">
+                  <CardDescription className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
                     <MailWarning className="size-3.5" />
-                    Reputation (14d)
+                    AWS Bounce Rate
                   </CardDescription>
-                  {!loading && (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        'text-[10px] font-normal',
-                        reputation === 'Healthy' &&
-                          'border-emerald-200 text-emerald-700 dark:border-emerald-900 dark:text-emerald-400',
-                        reputation === 'Warning' &&
-                          'border-amber-200 text-amber-700 dark:border-amber-900 dark:text-amber-400',
-                        reputation === 'Account at risk' &&
-                          'border-red-200 text-red-700 dark:border-red-900 dark:text-red-400'
-                      )}
-                    >
-                      {reputation}
-                    </Badge>
-                  )}
+                  <Badge variant="secondary" className="text-[10px] py-0 font-mono">
+                    CloudWatch
+                  </Badge>
                 </div>
-                <CardTitle className="text-2xl font-semibold tabular-nums tracking-tight">
+                <CardTitle className="text-2xl font-bold tabular-nums tracking-tight text-foreground">
                   {loading ? (
                     <Skeleton className="h-7 w-20" />
-                  ) : bounceRate14d != null ? (
-                    `${bounceRate14d.toFixed(2)}%`
                   ) : (
-                    '—'
+                    `${awsBounceRate.toFixed(2)}%`
                   )}
                 </CardTitle>
               </CardHeader>
-              <CardFooter className="px-4 py-2.5 text-xs text-muted-foreground">
-                Bounce rate
-                {complaintRate14d != null
-                  ? ` · complaint ${complaintRate14d.toFixed(3)}%`
-                  : ''}
+              <CardFooter className="px-4 py-2 text-xs text-muted-foreground">
+                AWS threshold target: &lt; 5.00%
+              </CardFooter>
+            </Card>
+
+            {/* AWS Complaint Rate KPI */}
+            <Card className="gap-0 py-0 shadow-sm border-l-4 border-l-red-500">
+              <CardHeader className="border-b py-3 px-4 [.border-b]:pb-3">
+                <div className="flex items-center justify-between gap-1">
+                  <CardDescription className="flex items-center gap-1.5 text-xs font-semibold text-red-700 dark:text-red-400">
+                    <AlertTriangle className="size-3.5" />
+                    AWS Complaint Rate
+                  </CardDescription>
+                  <Badge variant="secondary" className="text-[10px] py-0 font-mono">
+                    CloudWatch
+                  </Badge>
+                </div>
+                <CardTitle className="text-2xl font-bold tabular-nums tracking-tight text-foreground">
+                  {loading ? (
+                    <Skeleton className="h-7 w-20" />
+                  ) : (
+                    `${awsComplaintRate.toFixed(3)}%`
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardFooter className="px-4 py-2 text-xs text-muted-foreground">
+                AWS threshold target: &lt; 0.10%
               </CardFooter>
             </Card>
           </div>
 
-          {/* Quota hero */}
+          {/* Quota Progress */}
           <Card className="gap-0 py-0 shadow-sm overflow-hidden">
             <CardHeader className="border-b py-4 px-4 sm:px-6 [.border-b]:pb-4">
-              <CardTitle className="text-base">24-hour quota usage</CardTitle>
+              <CardTitle className="text-base font-semibold">24-Hour Quota Usage</CardTitle>
               <CardDescription>
-                Rolling window — SES checks how many emails you sent in the previous 24 hours.
+                Rolling 24-hour window enforced by Amazon SES.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-5 p-4 sm:p-6">
+            <CardContent className="space-y-4 p-4 sm:p-6">
               {loading ? (
                 <div className="space-y-3">
                   <Skeleton className="h-8 w-48" />
@@ -508,20 +695,20 @@ export default function SesAnalyticsPage() {
                 <>
                   <div className="flex flex-wrap items-end justify-between gap-3">
                     <div>
-                      <p className="text-3xl font-semibold tabular-nums tracking-tight">
+                      <p className="text-3xl font-bold tabular-nums tracking-tight">
                         {formatCount(Math.round(data?.sentLast24Hours ?? 0))}
                         <span className="text-lg font-normal text-muted-foreground">
                           {' '}
                           / {formatCount(Math.round(data?.max24HourSend ?? 0))}
                         </span>
                       </p>
-                      <p className="mt-1 text-sm text-muted-foreground">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {formatCount(Math.round(data?.remaining ?? 0))} emails remaining today
                       </p>
                     </div>
                     <div
                       className={cn(
-                        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium tabular-nums',
+                        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold tabular-nums',
                         tone === 'risk' &&
                           'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400',
                         tone === 'warn' &&
@@ -539,12 +726,12 @@ export default function SesAnalyticsPage() {
                       'h-3',
                       tone === 'risk' && 'bg-red-100 [&>div]:bg-red-500 dark:bg-red-950',
                       tone === 'warn' && 'bg-amber-100 [&>div]:bg-amber-500 dark:bg-amber-950',
-                      tone === 'ok' && '[&>div]:bg-[var(--chart-2)]'
+                      tone === 'ok' && '[&>div]:bg-primary'
                     )}
                   />
                   <div className="grid grid-cols-3 gap-3 text-center sm:text-left">
                     <div className="rounded-lg border bg-muted/20 px-3 py-2.5">
-                      <p className="text-[11px] text-muted-foreground">Used</p>
+                      <p className="text-[11px] text-muted-foreground">Used (24h)</p>
                       <p className="text-sm font-semibold tabular-nums">
                         {formatCompactCount(Math.round(data?.sentLast24Hours ?? 0))}
                       </p>
@@ -556,7 +743,7 @@ export default function SesAnalyticsPage() {
                       </p>
                     </div>
                     <div className="rounded-lg border bg-muted/20 px-3 py-2.5">
-                      <p className="text-[11px] text-muted-foreground">Quota</p>
+                      <p className="text-[11px] text-muted-foreground">Daily Limit</p>
                       <p className="text-sm font-semibold tabular-nums">
                         {formatCompactCount(Math.round(data?.max24HourSend ?? 0))}
                       </p>
@@ -567,15 +754,30 @@ export default function SesAnalyticsPage() {
             </CardContent>
           </Card>
 
-          {/* Charts row */}
-          <div className="grid gap-4 xl:grid-cols-5">
-            <Card className="gap-0 py-0 shadow-sm xl:col-span-3">
-              <CardHeader className="border-b py-4 px-4 sm:px-6 [.border-b]:pb-4">
-                <CardTitle className="text-base">Sending activity</CardTitle>
-                <CardDescription>
-                  Last ~14 days from SES GetSendStatistics (daily totals).
-                </CardDescription>
-                <CardAction>
+          {/* Sending Activity Chart */}
+          <Card className="gap-0 py-0 shadow-sm">
+            <CardHeader className="border-b py-4 px-4 sm:px-6 [.border-b]:pb-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <CardTitle className="text-base font-semibold">
+                    Sending Activity (14 Days)
+                    {data?.scope === 'company' && selectedCompanyName && (
+                      <Badge variant="secondary" className="ml-2 align-middle text-xs font-normal">
+                        {selectedCompanyName}
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription>{activitySourceLabel}</CardDescription>
+                </div>
+                <CardAction className="static flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
+                  <CompanyCombobox
+                    value={companyFilter}
+                    selectedLabel={selectedCompanyName}
+                    onChange={(companyId, companyName) => {
+                      setCompanyFilter(companyId);
+                      setSelectedCompanyLabel(companyName);
+                    }}
+                  />
                   <ToggleGroup
                     type="single"
                     value={metric}
@@ -598,198 +800,113 @@ export default function SesAnalyticsPage() {
                     ))}
                   </ToggleGroup>
                 </CardAction>
-              </CardHeader>
-              <CardContent className="p-4 sm:p-6">
-                {loading ? (
-                  <Skeleton className="aspect-[2/1] w-full rounded-lg" />
-                ) : chartData.length === 0 ? (
-                  <Empty className="min-h-[240px] border-0">
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <Send />
-                      </EmptyMedia>
-                      <EmptyTitle>No send statistics yet</EmptyTitle>
-                      <EmptyDescription>
-                        SES will populate this once the account starts sending mail.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          {METRIC_OPTIONS.find((m) => m.value === metric)?.label} · 14-day total
-                        </p>
-                        <p className="text-2xl font-semibold tabular-nums tracking-tight">
-                          {formatCount(metricTotal)}
-                        </p>
-                      </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6">
+              {loading ? (
+                <Skeleton className="aspect-[3/1] w-full rounded-lg" />
+              ) : chartData.length === 0 ? (
+                <Empty className="min-h-[240px] border-0">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <Send />
+                    </EmptyMedia>
+                    <EmptyTitle>No send statistics yet</EmptyTitle>
+                    <EmptyDescription>
+                      {companyFilter
+                        ? 'This company has no recorded sends in the last 14 days.'
+                        : 'SES will populate this once the account starts sending mail.'}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <div>
                       <p className="text-xs text-muted-foreground">
-                        Peak day {formatCompactCount(metricPeak)}
+                        {METRIC_OPTIONS.find((m) => m.value === metric)?.label} · 14-day total
+                      </p>
+                      <p className="text-2xl font-bold tabular-nums tracking-tight">
+                        {formatCount(metricTotal)}
                       </p>
                     </div>
-                    <ChartContainer
-                      config={volumeChartConfig}
-                      className="aspect-auto h-[280px] w-full"
-                    >
-                      <AreaChart
-                        accessibilityLayer
-                        data={chartData}
-                        margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-                      >
-                        <defs>
-                          <linearGradient id="sesMetricFill" x1="0" y1="0" x2="0" y2="1">
-                            <stop
-                              offset="5%"
-                              stopColor={`var(--color-${metric})`}
-                              stopOpacity={0.35}
-                            />
-                            <stop
-                              offset="95%"
-                              stopColor={`var(--color-${metric})`}
-                              stopOpacity={0.02}
-                            />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                        <XAxis
-                          dataKey="label"
-                          tickLine={false}
-                          axisLine={false}
-                          tickMargin={8}
-                          minTickGap={24}
-                        />
-                        <YAxis
-                          tickLine={false}
-                          axisLine={false}
-                          tickMargin={8}
-                          width={44}
-                          allowDecimals={false}
-                          tickFormatter={(v) => formatCompactCount(Number(v))}
-                        />
-                        <ChartTooltip
-                          cursor={{ stroke: 'var(--border)', strokeWidth: 1 }}
-                          content={<ChartTooltipContent indicator="line" />}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey={metric}
-                          stroke={`var(--color-${metric})`}
-                          fill="url(#sesMetricFill)"
-                          strokeWidth={2}
-                          dot={false}
-                          activeDot={{ r: 4, strokeWidth: 2 }}
-                        />
-                      </AreaChart>
-                    </ChartContainer>
+                    <p className="text-xs text-muted-foreground">
+                      Peak day {formatCompactCount(metricPeak)}
+                    </p>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="gap-0 py-0 shadow-sm xl:col-span-2">
-              <CardHeader className="border-b py-4 px-4 sm:px-6 [.border-b]:pb-4">
-                <CardTitle className="text-base">Reputation rates</CardTitle>
-                <CardDescription>
-                  Bounce & complaint % of delivery attempts (SES thresholds: bounce 5%/10%,
-                  complaint 0.1%/0.5%).
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-4 sm:p-6">
-                {loading ? (
-                  <Skeleton className="aspect-[4/3] w-full rounded-lg" />
-                ) : chartData.length === 0 ? (
-                  <Empty className="min-h-[240px] border-0">
-                    <EmptyHeader>
-                      <EmptyTitle>No rate data</EmptyTitle>
-                    </EmptyHeader>
-                  </Empty>
-                ) : (
                   <ChartContainer
-                    config={reputationChartConfig}
-                    className="aspect-auto h-[280px] w-full"
+                    config={volumeChartConfig}
+                    className="aspect-auto h-[320px] w-full"
                   >
-                    <BarChart
+                    <AreaChart
                       accessibilityLayer
                       data={chartData}
                       margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
                     >
+                      <defs>
+                        <linearGradient id="sesMetricFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop
+                            offset="5%"
+                            stopColor={`var(--color-${metric})`}
+                            stopOpacity={0.35}
+                          />
+                          <stop
+                            offset="95%"
+                            stopColor={`var(--color-${metric})`}
+                            stopOpacity={0.02}
+                          />
+                        </linearGradient>
+                      </defs>
                       <CartesianGrid vertical={false} strokeDasharray="3 3" />
                       <XAxis
                         dataKey="label"
                         tickLine={false}
                         axisLine={false}
                         tickMargin={8}
-                        minTickGap={28}
+                        minTickGap={24}
                       />
                       <YAxis
                         tickLine={false}
                         axisLine={false}
                         tickMargin={8}
-                        width={40}
-                        tickFormatter={(v) => `${v}%`}
+                        width={44}
+                        allowDecimals={false}
+                        tickFormatter={(v) => formatCompactCount(Number(v))}
                       />
                       <ChartTooltip
-                        content={
-                          <ChartTooltipContent
-                            formatter={(value, name) => {
-                              const isComplaint =
-                                name === 'complaintRate' ||
-                                String(name).toLowerCase().includes('complaint');
-                              return (
-                                <div className="flex flex-1 items-center justify-between gap-4 leading-none">
-                                  <span className="text-muted-foreground">
-                                    {isComplaint ? 'Complaint rate' : 'Bounce rate'}
-                                  </span>
-                                  <span className="font-mono font-medium tabular-nums text-foreground">
-                                    {Number(value ?? 0).toFixed(isComplaint ? 3 : 2)}%
-                                  </span>
-                                </div>
-                              );
-                            }}
-                          />
-                        }
+                        cursor={{ stroke: 'var(--border)', strokeWidth: 1 }}
+                        content={<ChartTooltipContent indicator="line" />}
                       />
-                      <ChartLegend content={<ChartLegendContent />} />
-                      <Bar
-                        dataKey="bounceRate"
-                        fill="var(--color-bounceRate)"
-                        radius={[3, 3, 0, 0]}
-                        maxBarSize={18}
+                      <Area
+                        type="monotone"
+                        dataKey={metric}
+                        stroke={`var(--color-${metric})`}
+                        fill="url(#sesMetricFill)"
+                        strokeWidth={2}
+                        dot={false}
+                        activeDot={{ r: 4, strokeWidth: 2 }}
                       />
-                      <Bar
-                        dataKey="complaintRate"
-                        fill="var(--color-complaintRate)"
-                        radius={[3, 3, 0, 0]}
-                        maxBarSize={18}
-                      />
-                    </BarChart>
+                    </AreaChart>
                   </ChartContainer>
-                )}
-              </CardContent>
-              {!loading && data && (
-                <CardFooter className="flex flex-wrap gap-4 border-t px-4 py-3 text-xs text-muted-foreground sm:px-6">
-                  <span>
-                    {formatCount(data.totalsLast14Days.bounces)} bounces ·{' '}
-                    {formatCount(data.totalsLast14Days.complaints)} complaints ·{' '}
-                    {formatCount(data.totalsLast14Days.rejects)} rejects
-                  </span>
-                </CardFooter>
+                </div>
               )}
-            </Card>
-          </div>
+            </CardContent>
+          </Card>
 
-          {/* Daily table */}
+          {/* Daily Table */}
           <Card className="gap-0 py-0 shadow-sm">
             <CardHeader className="border-b py-4 px-4 sm:px-6 [.border-b]:pb-4">
-              <CardTitle className="text-base">Daily breakdown</CardTitle>
+              <CardTitle className="text-base font-semibold font-sans">Daily Breakdown</CardTitle>
               <CardDescription>
                 {loading
                   ? 'Loading…'
-                  : `${data?.dailyStats.length ?? 0} days · ${formatCompactCount(
+                  : `${data?.dailyStats.length ?? 0} days recorded · ${formatCompactCount(
                       data?.totalsLast14Days.deliveryAttempts ?? 0
-                    )} delivery attempts total`}
+                    )} total delivery attempts${
+                      data?.scope === 'company' && selectedCompanyName
+                        ? ` · ${selectedCompanyName}`
+                        : ''
+                    }`}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
