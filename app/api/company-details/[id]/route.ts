@@ -9,7 +9,7 @@ import { getServerSession } from '@/lib/auth';
 import { canPartnerAccessCompany, isPartnerSession } from '@/lib/partner-access.util';
 import { toAdminAuditSession } from '@/lib/auth';
 import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
-
+import dbConnect from '@/lib/db';
 const COMPANY_CONTACT_STATUS = {
   ACTIVE: "ACTIVE",
   INACTIVE: "INACTIVE", 
@@ -35,10 +35,8 @@ export async function GET(
       );
     }
 
-    // Connect to database if not already connected
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/circles');
-    }
+    // Prefer shared pooled connector; avoid uncapped second connect.
+    await dbConnect();
 
     const company = await Company.findById(id).lean();
     if (!company) {

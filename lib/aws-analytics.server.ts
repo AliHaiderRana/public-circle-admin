@@ -1,4 +1,5 @@
 import {
+  DeleteObjectsCommand,
   GetObjectCommand,
   ListBucketsCommand,
   ListObjectsV2Command,
@@ -21,6 +22,9 @@ export type BucketFolderUsage = {
   folder: string;
   objects: number;
   bytes: number;
+  /** Earliest/latest object LastModified within this folder — S3 has no real folder metadata, so these are derived from its contents. */
+  createdAt: string | null;
+  updatedAt: string | null;
 };
 
 export type BrowseFile = {
@@ -52,6 +56,8 @@ export type CompanyUsageRow = {
   objects: number;
   bytes: number;
   buckets: CompanyBucketUsage[];
+  /** True when this id only resolved via the archived-companies record (the live company document is gone). */
+  archived: boolean;
 };
 
 export type AwsAnalytics = {
@@ -87,7 +93,7 @@ function getAllowedBucketNames(): Set<string> | null {
   return names.length ? new Set(names) : null;
 }
 
-function createClient(): { client: S3Client; region: string } | null {
+export function createClient(): { client: S3Client; region: string } | null {
   const region = (process.env.AWS_REGION || 'ca-central-1').trim();
   const accessKeyId = (process.env.AWS_ACCESS_KEY_ID || '').trim();
   const secretAccessKey = (process.env.AWS_SECRET_ACCESS_KEY || '').trim();
@@ -114,6 +120,24 @@ function extractTopFolder(key: string): string | null {
   return slash === -1 ? null : key.slice(0, slash);
 }
 
+type FolderAgg = { objects: number; bytes: number; minModified: number | null; maxModified: number | null };
+
+/** Folds one object's size/LastModified into a folder's running aggregate. */
+function touchFolderAgg(agg: FolderAgg, size: number, lastModified: Date | undefined): FolderAgg {
+  agg.objects += 1;
+  agg.bytes += size;
+  if (lastModified) {
+    const t = lastModified.getTime();
+    if (agg.minModified === null || t < agg.minModified) agg.minModified = t;
+    if (agg.maxModified === null || t > agg.maxModified) agg.maxModified = t;
+  }
+  return agg;
+}
+
+function emptyFolderAgg(): FolderAgg {
+  return { objects: 0, bytes: 0, minModified: null, maxModified: null };
+}
+
 type CandidateAgg = {
   objects: number;
   bytes: number;
@@ -135,7 +159,7 @@ async function scanBucket(
     folders: [],
     rootFiles: [],
   };
-  const folderAgg = new Map<string, { objects: number; bytes: number }>();
+  const folderAgg = new Map<string, FolderAgg>();
 
   try {
     let token: string | undefined;
@@ -160,9 +184,8 @@ async function scanBucket(
               lastModified: obj.LastModified ? obj.LastModified.toISOString() : null,
             });
           } else {
-            const fAgg = folderAgg.get(folder) ?? { objects: 0, bytes: 0 };
-            fAgg.objects += 1;
-            fAgg.bytes += size;
+            const fAgg = folderAgg.get(folder) ?? emptyFolderAgg();
+            touchFolderAgg(fAgg, size, obj.LastModified);
             folderAgg.set(folder, fAgg);
           }
         }
@@ -196,7 +219,13 @@ async function scanBucket(
   }
 
   stats.folders = [...folderAgg.entries()]
-    .map(([folder, usage]) => ({ folder, ...usage }))
+    .map(([folder, { objects, bytes, minModified, maxModified }]) => ({
+      folder,
+      objects,
+      bytes,
+      createdAt: minModified !== null ? new Date(minModified).toISOString() : null,
+      updatedAt: maxModified !== null ? new Date(maxModified).toISOString() : null,
+    }))
     .sort((a, b) => b.bytes - a.bytes);
   stats.rootFiles.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -208,6 +237,8 @@ export type BrowseFolder = {
   prefix: string;
   objects: number;
   bytes: number;
+  createdAt: string | null;
+  updatedAt: string | null;
 };
 
 export type BrowseResult = {
@@ -256,7 +287,7 @@ export async function browseBucketPrefix(
   }
   const { client } = setup;
 
-  const folderAgg = new Map<string, { objects: number; bytes: number }>();
+  const folderAgg = new Map<string, FolderAgg>();
   const files: BrowseFile[] = [];
   let truncated = false;
 
@@ -287,9 +318,8 @@ export async function browseBucketPrefix(
         });
       } else {
         const folder = rest.slice(0, slash);
-        const agg = folderAgg.get(folder) ?? { objects: 0, bytes: 0 };
-        agg.objects += 1;
-        agg.bytes += size;
+        const agg = folderAgg.get(folder) ?? emptyFolderAgg();
+        touchFolderAgg(agg, size, obj.LastModified);
         folderAgg.set(folder, agg);
       }
     }
@@ -304,10 +334,13 @@ export async function browseBucketPrefix(
     bucket: bucketName,
     prefix: normalizedPrefix,
     folders: [...folderAgg.entries()]
-      .map(([folder, usage]) => ({
+      .map(([folder, { objects, bytes, minModified, maxModified }]) => ({
         name: folder,
         prefix: `${normalizedPrefix}${folder}/`,
-        ...usage,
+        objects,
+        bytes,
+        createdAt: minModified !== null ? new Date(minModified).toISOString() : null,
+        updatedAt: maxModified !== null ? new Date(maxModified).toISOString() : null,
       }))
       .sort((a, b) => b.bytes - a.bytes),
     files: files.sort((a, b) => a.name.localeCompare(b.name)),
@@ -376,8 +409,11 @@ async function computeAwsAnalytics(db: Db): Promise<AwsAnalytics> {
     .filter((b): b is BucketStats => b !== null)
     .sort((a, b) => b.bytes - a.bytes);
 
-  // Only ids that exist in the companies collection count as company usage;
-  // other id-like segments (users, templates) fall into "unattributed".
+  // Ids that exist in the companies collection count as company usage; ids
+  // that no longer have a live company (archived) still resolve via the
+  // archived-companies record, so backed-up files stay attributed by name
+  // instead of falling into "unattributed". Everything else (users,
+  // templates, etc.) falls into "unattributed".
   const candidateIds = [...byCandidate.keys()];
   const companyDocs = candidateIds.length
     ? await db
@@ -390,13 +426,27 @@ async function computeAwsAnalytics(db: Db): Promise<AwsAnalytics> {
     : [];
   const nameById = new Map(companyDocs.map((c) => [String(c._id), String(c.name ?? '')]));
 
+  const unresolvedIds = candidateIds.filter((id) => !nameById.has(id));
+  const archivedDocs = unresolvedIds.length
+    ? await db
+        .collection('archived-companies')
+        .find({ companyId: { $in: unresolvedIds } }, { projection: { companyId: 1, companyName: 1 } })
+        .toArray()
+    : [];
+  const archivedNameById = new Map(
+    archivedDocs.map((c) => [String(c.companyId), String(c.companyName ?? '')])
+  );
+
   const companies: CompanyUsageRow[] = [];
   const unattributed = { ...noCandidate };
   for (const [id, agg] of byCandidate) {
-    if (nameById.has(id)) {
+    const liveName = nameById.get(id);
+    const archivedName = archivedNameById.get(id);
+    if (liveName !== undefined || archivedName !== undefined) {
       companies.push({
         companyId: id,
-        companyName: nameById.get(id) || null,
+        companyName: (liveName ?? archivedName) || null,
+        archived: liveName === undefined,
         objects: agg.objects,
         bytes: agg.bytes,
         buckets: [...agg.buckets.entries()]
@@ -463,4 +513,152 @@ export async function getCompanyAwsUsage(
 ): Promise<CompanyUsageRow | null> {
   const analytics = await getAwsAnalytics(db);
   return analytics.companies.find((c) => c.companyId === companyId.toLowerCase()) ?? null;
+}
+
+/**
+ * Same lookup as getCompanyAwsUsage, but never blocks on a full account-wide
+ * scan — used where response time matters more than freshness (e.g. the
+ * company deletion preview). Returns null immediately if the cache hasn't
+ * been warmed yet, kicking off a background refresh so a later call (or the
+ * AWS Analytics page) finds it ready.
+ */
+export async function peekCompanyAwsUsage(
+  db: Db,
+  companyId: string
+): Promise<CompanyUsageRow | null> {
+  if (!cache) {
+    void startRefresh(db).catch(() => {});
+    return null;
+  }
+  if (Date.now() - cache.cachedAt >= CACHE_TTL_MS) {
+    void startRefresh(db).catch(() => {});
+  }
+  return cache.data.companies.find((c) => c.companyId === companyId.toLowerCase()) ?? null;
+}
+
+/** Every object key belonging to this company within one bucket, paginated with the same safety cap as a full bucket scan. */
+async function collectCompanyKeysInBucket(
+  client: S3Client,
+  bucketName: string,
+  companyId: string
+): Promise<{ key: string; size: number }[]> {
+  const matches: { key: string; size: number }[] = [];
+  let token: string | undefined;
+  let pages = 0;
+  do {
+    const res = await client.send(
+      new ListObjectsV2Command({ Bucket: bucketName, ContinuationToken: token, MaxKeys: 1000 })
+    );
+    pages += 1;
+    for (const obj of res.Contents ?? []) {
+      if (obj.Key && keyBelongsToCompany(obj.Key, companyId)) {
+        matches.push({ key: obj.Key, size: obj.Size ?? 0 });
+      }
+    }
+    token = res.IsTruncated ? res.NextContinuationToken : undefined;
+    if (pages >= MAX_PAGES_PER_BUCKET && token) break;
+  } while (token);
+  return matches;
+}
+
+/**
+ * Buckets that hold this company's LIVE data — excludes AWS_BACKUP_BUCKET,
+ * whose contents are, by construction, keyed by companyId too (so they'd
+ * otherwise look like more of "this company's data" to delete/copy). The
+ * backup bucket still shows up in getCompanyAwsUsage for display/attribution
+ * in AWS Analytics; it's only excluded from these operational paths.
+ */
+function excludeBackupBucket(buckets: CompanyBucketUsage[]): CompanyBucketUsage[] {
+  const backupBucket = (process.env.AWS_BACKUP_BUCKET || '').trim();
+  if (!backupBucket) return buckets;
+  return buckets.filter((b) => b.bucket !== backupBucket);
+}
+
+/**
+ * Every real {bucket, key, size} for a company's S3 objects, across only the
+ * buckets the cached account-wide scan already found it in. Used by Archive
+ * to know exactly what to copy into the backup bucket before anything is
+ * deleted (deleteCompanyObjects only needs keys transiently; this exposes
+ * them to a caller).
+ */
+export async function listCompanyObjectLocations(
+  db: Db,
+  companyId: string
+): Promise<{ bucket: string; key: string; size: number }[]> {
+  const usage = await getCompanyAwsUsage(db, companyId);
+  const buckets = excludeBackupBucket(usage?.buckets ?? []);
+  if (buckets.length === 0) return [];
+
+  const setup = createClient();
+  if (!setup) {
+    throw new Error('AWS credentials are not configured');
+  }
+  const { client } = setup;
+
+  const perBucket = await Promise.all(
+    buckets.map(async ({ bucket }) => {
+      const keys = await collectCompanyKeysInBucket(client, bucket, companyId);
+      return keys.map((k) => ({ bucket, key: k.key, size: k.size }));
+    })
+  );
+
+  return perBucket.flat();
+}
+
+/**
+ * Permanently deletes every S3 object belonging to this company, across only
+ * the buckets the cached account-wide scan already found it in (excluding
+ * the backup bucket — see excludeBackupBucket). Invalidates that cache
+ * afterward so the next analytics view reflects the deletion.
+ */
+export async function deleteCompanyObjects(
+  db: Db,
+  companyId: string
+): Promise<{ deletedObjects: number; deletedBytes: number; errors: string[] }> {
+  const usage = await getCompanyAwsUsage(db, companyId);
+  const buckets = excludeBackupBucket(usage?.buckets ?? []);
+  if (buckets.length === 0) {
+    return { deletedObjects: 0, deletedBytes: 0, errors: [] };
+  }
+
+  const setup = createClient();
+  if (!setup) {
+    throw new Error('AWS credentials are not configured');
+  }
+  const { client } = setup;
+
+  let deletedObjects = 0;
+  let deletedBytes = 0;
+  const errors: string[] = [];
+
+  for (const { bucket } of buckets) {
+    try {
+      const keys = await collectCompanyKeysInBucket(client, bucket, companyId);
+      for (let i = 0; i < keys.length; i += 1000) {
+        const batch = keys.slice(i, i + 1000);
+        const res = await client.send(
+          new DeleteObjectsCommand({
+            Bucket: bucket,
+            Delete: { Objects: batch.map((k) => ({ Key: k.key })), Quiet: true },
+          })
+        );
+        const failedKeys = new Set((res.Errors ?? []).map((e) => e.Key));
+        for (const k of batch) {
+          if (!failedKeys.has(k.key)) {
+            deletedObjects += 1;
+            deletedBytes += k.size;
+          }
+        }
+        for (const err of res.Errors ?? []) {
+          errors.push(`${bucket}/${err.Key}: ${err.Message}`);
+        }
+      }
+    } catch (err) {
+      errors.push(`${bucket}: ${err instanceof Error ? err.message : 'Failed to delete objects'}`);
+    }
+  }
+
+  cache = null;
+
+  return { deletedObjects, deletedBytes, errors };
 }
