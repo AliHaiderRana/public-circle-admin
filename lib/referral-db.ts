@@ -41,7 +41,16 @@ export async function getReferralDbConnection(): Promise<mongoose.Connection> {
 
   if (!cached!.promise) {
     cached!.uri = uri;
-    cached!.promise = mongoose.createConnection(uri, { bufferCommands: false }).asPromise();
+    cached!.promise = mongoose
+      .createConnection(uri, {
+        bufferCommands: false,
+        maxPoolSize: Number(process.env.MONGODB_MAX_POOL_SIZE || 1),
+        minPoolSize: 0,
+        maxIdleTimeMS: Number(process.env.MONGODB_MAX_IDLE_TIME_MS || 10000),
+        maxConnecting: 1,
+        appName: process.env.MONGODB_APP_NAME || 'public-circles-admin-referral',
+      })
+      .asPromise();
   }
 
   cached!.conn = await cached!.promise;
