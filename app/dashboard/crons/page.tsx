@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -10,6 +10,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -30,6 +37,8 @@ import {
   Database,
   History,
   XCircle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -45,6 +54,7 @@ import {
 } from "@/lib/disk-maintenance-format";
 import {
   formatCronDateTime,
+  formatCronDuration,
   getCronScheduleDescription,
 } from "@/lib/cron-display-format";
 
@@ -58,6 +68,7 @@ interface Cron {
   lastRecordsUpdated: number;
   lastDurationMs: number | null;
   lastError: string | null;
+  isRunning?: boolean;
   isEnabled: boolean;
 }
 
@@ -73,10 +84,22 @@ export default function CronsPage() {
     type: "success" | "error" | "info";
   } | null>(null);
   const [errorDialogCron, setErrorDialogCron] = useState<Cron | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const totalPages = Math.max(1, Math.ceil(crons.length / pageSize) || 1);
+  const pagedCrons = useMemo(
+    () => crons.slice((page - 1) * pageSize, page * pageSize),
+    [crons, page, pageSize],
+  );
 
   useEffect(() => {
     fetchCrons();
   }, []);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const fetchCrons = async () => {
     setLoading(true);
@@ -195,13 +218,6 @@ export default function CronsPage() {
     }
   };
 
-  const formatDuration = (ms: number | null) => {
-    if (ms === null) return "-";
-    if (ms < 1000) return `${ms}ms`;
-    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-    return `${(ms / 60000).toFixed(1)}m`;
-  };
-
   const hasSchedule = (cron: Cron) =>
     !!cron.schedule && cron.schedule !== "unknown";
 
@@ -278,8 +294,8 @@ export default function CronsPage() {
             <CardHeader>
               <CardTitle>Scheduled Jobs</CardTitle>
               <CardDescription>
-                {crons.length} cron job
-                {crons.length !== 1 ? "s" : ""} registered
+                Showing {pagedCrons.length} of {crons.length} cron job
+                {crons.length !== 1 ? "s" : ""}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
@@ -296,7 +312,7 @@ export default function CronsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {crons.map((cron) => (
+                  {pagedCrons.map((cron) => (
                     <TableRow key={cron._id || cron.name}>
                       <TableCell className="align-top whitespace-normal break-words">
                         <div>
@@ -332,7 +348,7 @@ export default function CronsPage() {
                       </TableCell>
                       <TableCell>
                         <span className="text-sm font-mono">
-                          {formatDuration(cron.lastDurationMs)}
+                          {formatCronDuration(cron.lastDurationMs)}
                         </span>
                       </TableCell>
                       <TableCell>
@@ -341,7 +357,7 @@ export default function CronsPage() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        {cronStatuses[cron.name] === 'in-progress' ? (
+                        {cron.isRunning || cronStatuses[cron.name] === 'in-progress' ? (
                           <Badge variant="outline" className="text-xs">
                             <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                             In Progress
@@ -407,6 +423,50 @@ export default function CronsPage() {
                   ))}
                 </TableBody>
               </Table>
+              {crons.length > 0 && (
+                <div className="flex items-center justify-between px-6 py-4 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Page {page} of {totalPages} ({crons.length} total)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={String(pageSize)}
+                      onValueChange={(value) => {
+                        setPageSize(parseInt(value, 10));
+                        setPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="w-20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="5">5</SelectItem>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="20">20</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((current) => current - 1)}
+                      disabled={page === 1}
+                    >
+                      <ChevronLeft size={16} />
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((current) => current + 1)}
+                      disabled={page === totalPages}
+                    >
+                      Next
+                      <ChevronRight size={16} />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
