@@ -41,6 +41,8 @@ export async function GET(request: Request) {
           prefix: `${f.folder}/`,
           objects: f.objects,
           bytes: f.bytes,
+          createdAt: f.createdAt,
+          updatedAt: f.updatedAt,
         })),
         files: bucketStats.rootFiles,
         truncated: bucketStats.truncated,
