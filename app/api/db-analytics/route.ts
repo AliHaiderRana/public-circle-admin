@@ -93,9 +93,9 @@ export async function GET(request: Request) {
         storageSize: Number(dbStats.storageSize ?? 0),
         indexes: Number(dbStats.indexes ?? 0),
         indexSize: Number(dbStats.indexSize ?? 0),
-        // MongoDB Atlas bills against logical data size + index size, not the
-        // compressed on-disk storage size — so total size follows that, not
-        // dbStats.totalSize (which reflects storage, not billed usage).
+        // Atlas defines "Data Size" as dataSize + indexSize (see
+        // https://www.mongodb.com/docs/atlas/reference/faq/storage/) — not
+        // dbStats.totalSize, which is storageSize + indexSize instead.
         totalSize: Number(dbStats.dataSize ?? 0) + Number(dbStats.indexSize ?? 0),
         fsUsedSize: Number(dbStats.fsUsedSize ?? 0),
         fsTotalSize: Number(dbStats.fsTotalSize ?? 0),

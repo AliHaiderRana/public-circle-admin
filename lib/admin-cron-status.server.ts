@@ -12,6 +12,7 @@ export async function getAdminLocalCronsForApi() {
     lastDurationMs: number;
     lastError: string | null;
   }>([
+    { $match: { endTime: { $ne: null } } },
     { $sort: { cronName: 1, createdAt: -1 } },
     {
       $group: {
