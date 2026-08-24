@@ -30,6 +30,12 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import AdminActivityPagination from '@/components/AdminActivityPagination';
 import { ViewToggle } from '@/components/aws-analytics/ViewToggle';
+import {
+  compareValues,
+  SortableHeader,
+  toggleSort,
+  type SortState,
+} from '@/components/aws-analytics/SortableHeader';
 import { useAwsViewMode } from '@/hooks/use-aws-view-mode';
 import {
   Building2,
@@ -39,7 +45,6 @@ import {
   FileStack,
   Folder,
   HardDrive,
-  Info,
   RefreshCw,
   Search,
 } from 'lucide-react';
@@ -89,6 +94,9 @@ type AwsAnalytics = {
 
 const COMPANY_PAGE_SIZE_DEFAULT = 10;
 
+type BucketSortKey = 'name' | 'objects' | 'bytes';
+type CompanySortKey = 'company' | 'objects' | 'bytes';
+
 const COLUMN_INFO = {
   bucket: 'Name of the S3 storage bucket.',
   objects: 'Number of files stored in the bucket.',
@@ -97,24 +105,6 @@ const COLUMN_INFO = {
   companyObjects: 'Number of files across all buckets belonging to this company.',
   companyStorage: 'Total storage used by this company’s files.',
 } as const;
-
-function HeaderWithInfo({ label, info }: { label: string; info: string }) {
-  return (
-    <span className="inline-flex items-center gap-1">
-      {label}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span tabIndex={0} className="cursor-help" aria-label={`About ${label}`}>
-            <Info className="h-3 w-3 text-muted-foreground/70" />
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-64 text-xs">
-          {info}
-        </TooltipContent>
-      </Tooltip>
-    </span>
-  );
-}
 
 function StatCard({
   icon: Icon,
@@ -166,6 +156,8 @@ export default function AwsAnalyticsPage() {
   const [companyPage, setCompanyPage] = useState(1);
   const [companyLimit, setCompanyLimit] = useState(COMPANY_PAGE_SIZE_DEFAULT);
   const [viewMode, setViewMode] = useAwsViewMode();
+  const [bucketSort, setBucketSort] = useState<SortState<BucketSortKey>>(null);
+  const [companySort, setCompanySort] = useState<SortState<CompanySortKey>>(null);
 
   useEffect(() => {
     if (!authLoading && user && !user.isSuperAdmin) {
@@ -211,9 +203,28 @@ export default function AwsAnalyticsPage() {
     );
   }, [data, companySearch]);
 
+  const sortedBuckets = useMemo(() => {
+    const rows = data?.buckets ?? [];
+    if (!bucketSort) return rows;
+    return [...rows].sort((a, b) => {
+      const av = bucketSort.key === 'name' ? a.name : a[bucketSort.key];
+      const bv = bucketSort.key === 'name' ? b.name : b[bucketSort.key];
+      return compareValues(av, bv, bucketSort.dir);
+    });
+  }, [data, bucketSort]);
+
+  const sortedCompanies = useMemo(() => {
+    if (!companySort) return filteredCompanies;
+    return [...filteredCompanies].sort((a, b) => {
+      const av = companySort.key === 'company' ? (a.companyName ?? a.companyId) : a[companySort.key];
+      const bv = companySort.key === 'company' ? (b.companyName ?? b.companyId) : b[companySort.key];
+      return compareValues(av, bv, companySort.dir);
+    });
+  }, [filteredCompanies, companySort]);
+
   useEffect(() => {
     setCompanyPage(1);
-  }, [companySearch, companyLimit]);
+  }, [companySearch, companyLimit, companySort]);
 
   const companyTotalPages = useMemo(
     () => Math.max(1, Math.ceil(filteredCompanies.length / companyLimit)),
@@ -222,8 +233,8 @@ export default function AwsAnalyticsPage() {
 
   const paginatedCompanies = useMemo(() => {
     const start = (companyPage - 1) * companyLimit;
-    return filteredCompanies.slice(start, start + companyLimit);
-  }, [filteredCompanies, companyPage, companyLimit]);
+    return sortedCompanies.slice(start, start + companyLimit);
+  }, [sortedCompanies, companyPage, companyLimit]);
 
   if (authLoading || !user?.isSuperAdmin) {
     return (
@@ -368,15 +379,31 @@ export default function AwsAnalyticsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
-                      <TableHead className="pl-4">
-                        <HeaderWithInfo label="Bucket" info={COLUMN_INFO.bucket} />
-                      </TableHead>
-                      <TableHead>
-                        <HeaderWithInfo label="Objects" info={COLUMN_INFO.objects} />
-                      </TableHead>
-                      <TableHead>
-                        <HeaderWithInfo label="Size" info={COLUMN_INFO.size} />
-                      </TableHead>
+                      <SortableHeader
+                        label="Bucket"
+                        info={COLUMN_INFO.bucket}
+                        sortKey="name"
+                        activeKey={bucketSort?.key ?? null}
+                        direction={bucketSort?.dir ?? 'asc'}
+                        onSort={(key) => setBucketSort((prev) => toggleSort(prev, key))}
+                        className="pl-4"
+                      />
+                      <SortableHeader
+                        label="Objects"
+                        info={COLUMN_INFO.objects}
+                        sortKey="objects"
+                        activeKey={bucketSort?.key ?? null}
+                        direction={bucketSort?.dir ?? 'asc'}
+                        onSort={(key) => setBucketSort((prev) => toggleSort(prev, key))}
+                      />
+                      <SortableHeader
+                        label="Size"
+                        info={COLUMN_INFO.size}
+                        sortKey="bytes"
+                        activeKey={bucketSort?.key ?? null}
+                        direction={bucketSort?.dir ?? 'asc'}
+                        onSort={(key) => setBucketSort((prev) => toggleSort(prev, key))}
+                      />
                       <TableHead className="w-[70px] pr-4 text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -390,7 +417,7 @@ export default function AwsAnalyticsPage() {
                         </TableRow>
                       ))
                     ) : (
-                      (data?.buckets ?? []).map((bucket) => (
+                      sortedBuckets.map((bucket) => (
                         <TableRow key={bucket.name}>
                           <TableCell className="pl-4 py-2.5">
                             <div className="flex items-center gap-2">
@@ -507,15 +534,32 @@ export default function AwsAnalyticsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
-                      <TableHead className="pl-4">
-                        <HeaderWithInfo label="Company" info={COLUMN_INFO.company} />
-                      </TableHead>
-                      <TableHead>
-                        <HeaderWithInfo label="Objects" info={COLUMN_INFO.companyObjects} />
-                      </TableHead>
-                      <TableHead className="pr-4">
-                        <HeaderWithInfo label="Storage used" info={COLUMN_INFO.companyStorage} />
-                      </TableHead>
+                      <SortableHeader
+                        label="Company"
+                        info={COLUMN_INFO.company}
+                        sortKey="company"
+                        activeKey={companySort?.key ?? null}
+                        direction={companySort?.dir ?? 'asc'}
+                        onSort={(key) => setCompanySort((prev) => toggleSort(prev, key))}
+                        className="pl-4"
+                      />
+                      <SortableHeader
+                        label="Objects"
+                        info={COLUMN_INFO.companyObjects}
+                        sortKey="objects"
+                        activeKey={companySort?.key ?? null}
+                        direction={companySort?.dir ?? 'asc'}
+                        onSort={(key) => setCompanySort((prev) => toggleSort(prev, key))}
+                      />
+                      <SortableHeader
+                        label="Storage used"
+                        info={COLUMN_INFO.companyStorage}
+                        sortKey="bytes"
+                        activeKey={companySort?.key ?? null}
+                        direction={companySort?.dir ?? 'asc'}
+                        onSort={(key) => setCompanySort((prev) => toggleSort(prev, key))}
+                        className="pr-4"
+                      />
                       <TableHead className="w-[70px] pr-4 text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>

@@ -35,6 +35,8 @@ function regularAdminNotificationFilter(userId: string): Record<string, unknown>
       { 'metadata.assignedAdminId': { $exists: false } },
     ],
   });
+  clauses.push({ type: ADMIN_NOTIFICATION_TYPES.FEEDBACK_CREATED });
+  clauses.push({ type: ADMIN_NOTIFICATION_TYPES.CUSTOMER_REQUEST_CREATED });
   return { $or: clauses };
 }
 
@@ -106,6 +108,12 @@ export function notificationAccessibleBySession(
     if (
       notification.type === ADMIN_NOTIFICATION_TYPES.SUPPORT_REQUEST_CREATED &&
       !assignedAdminId
+    ) {
+      return true;
+    }
+    if (
+      notification.type === ADMIN_NOTIFICATION_TYPES.FEEDBACK_CREATED ||
+      notification.type === ADMIN_NOTIFICATION_TYPES.CUSTOMER_REQUEST_CREATED
     ) {
       return true;
     }

@@ -15,7 +15,7 @@ export async function GET(
   try {
     const { searchParams } = new URL(request.url);
     const page = searchParams.get('page') || '1';
-    const limit = searchParams.get('limit') || '30';
+    const limit = searchParams.get('limit') || '10';
 
     const { cronName } = await params;
     const dlqAccess = assertSuperAdminDlqAccess(cronName, session.isSuperAdmin);

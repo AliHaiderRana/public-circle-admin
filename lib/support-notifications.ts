@@ -77,6 +77,11 @@ export function getAdminNotificationDisplay(notification: AdminNotificationLike)
         title: 'New message on support ticket',
         description,
       };
+    case 'FEEDBACK_CREATED':
+      return {
+        title: 'New product feedback',
+        description,
+      };
     default:
       return {
         title:

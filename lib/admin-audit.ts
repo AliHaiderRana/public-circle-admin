@@ -166,6 +166,11 @@ export function buildAuditSummary(
       PENDING: 'pending',
       COMPLETED: 'completed',
       REJECTED: 'rejected',
+      NEW: 'new',
+      REVIEWED: 'reviewed',
+      PLANNED: 'planned',
+      DONE: 'done',
+      DISMISSED: 'dismissed',
     };
     if (labels[key]) return labels[key];
     return String(status ?? 'unknown').toLowerCase().replace(/_/g, ' ');
@@ -194,6 +199,27 @@ export function buildAuditSummary(
       return typeLabel
         ? `${typeLabel} request marked as ${statusLabel}${companySuffix}`
         : `Customer request marked as ${statusLabel}${companySuffix}`;
+    }
+    case ADMIN_AUDIT_ACTION.FEEDBACK_STATUS: {
+      const typeKey = String(d.type ?? '');
+      const typeLabels: Record<string, string> = {
+        FEATURE: 'Feature request',
+        BUG: 'Bug',
+        IMPROVEMENT: 'Improvement',
+        OTHER: 'Other',
+      };
+      const typeLabel = typeLabels[typeKey] || typeKey.replace(/_/g, ' ').toLowerCase();
+      const company = companySuffix(d.companyName);
+      const previousStatus = d.previousStatus;
+      const nextStatus = d.status;
+      if (
+        previousStatus &&
+        nextStatus &&
+        String(previousStatus) !== String(nextStatus)
+      ) {
+        return `${typeLabel} feedback marked ${formatStatus(previousStatus)} → ${formatStatus(nextStatus)}${company}`;
+      }
+      return `${typeLabel} feedback marked as ${formatStatus(nextStatus)}${company}`;
     }
     case ADMIN_AUDIT_ACTION.SUPPORT_SETTINGS_UPDATE:
       return 'Updated support request settings';
@@ -282,6 +308,51 @@ export function buildAuditSummary(
       return `Blocked company${d.companyName ? ` “${d.companyName}”` : ''}${formatImpactSuffix(d)}`;
     case ADMIN_AUDIT_ACTION.COMPANY_UNBLOCK:
       return `Unblocked company${d.companyName ? ` “${d.companyName}”` : ''}${formatImpactSuffix(d)}`;
+    case ADMIN_AUDIT_ACTION.COMPANY_DELETE: {
+      const dbCount = typeof d.dbDocumentsDeleted === 'number' ? d.dbDocumentsDeleted : null;
+      const objCount = typeof d.awsObjectsDeleted === 'number' ? d.awsObjectsDeleted : null;
+      const subsCount = typeof d.stripeSubscriptionsCancelled === 'number' ? d.stripeSubscriptionsCancelled : null;
+      const parts = [
+        dbCount != null ? `${dbCount} document(s)` : null,
+        objCount != null ? `${objCount} S3 object(s)` : null,
+        subsCount != null ? `${subsCount} Stripe subscription(s)` : null,
+      ].filter(Boolean);
+      return `Permanently deleted company${d.companyName ? ` “${d.companyName}”` : ''}${
+        parts.length ? ` (${parts.join(', ')})` : ''
+      }`;
+    }
+    case ADMIN_AUDIT_ACTION.COMPANY_ARCHIVE: {
+      const dbCount = typeof d.dbBackedUpDocuments === 'number' ? d.dbBackedUpDocuments : null;
+      const objCount = typeof d.awsBackedUpObjects === 'number' ? d.awsBackedUpObjects : null;
+      const subsCount = typeof d.stripeSubscriptionsPaused === 'number' ? d.stripeSubscriptionsPaused : null;
+      const parts = [
+        dbCount != null ? `${dbCount} document(s)` : null,
+        objCount != null ? `${objCount} S3 object(s)` : null,
+        subsCount != null ? `${subsCount} Stripe subscription(s) paused` : null,
+      ].filter(Boolean);
+      return `Archived company${d.companyName ? ` “${d.companyName}”` : ''}${
+        parts.length ? ` (backed up ${parts.join(', ')})` : ''
+      }`;
+    }
+    case ADMIN_AUDIT_ACTION.COMPANY_RESTORE: {
+      const dbCount = typeof d.dbRestoredDocuments === 'number' ? d.dbRestoredDocuments : null;
+      const objCount = typeof d.awsRestoredObjects === 'number' ? d.awsRestoredObjects : null;
+      const subsCount = typeof d.stripeSubscriptionsResumed === 'number' ? d.stripeSubscriptionsResumed : null;
+      const parts = [
+        dbCount != null ? `${dbCount} document(s)` : null,
+        objCount != null ? `${objCount} S3 object(s)` : null,
+        subsCount != null ? `${subsCount} Stripe subscription(s) resumed` : null,
+      ].filter(Boolean);
+      return `Restored archived company${d.companyName ? ` “${d.companyName}”` : ''}${
+        parts.length ? ` (restored ${parts.join(', ')})` : ''
+      }`;
+    }
+    case ADMIN_AUDIT_ACTION.ARCHIVED_COMPANY_DELETE: {
+      const objCount = typeof d.awsBackupObjectsDeleted === 'number' ? d.awsBackupObjectsDeleted : null;
+      return `Permanently deleted archived company${d.companyName ? ` “${d.companyName}”` : ''}${
+        objCount != null ? ` (removed ${objCount} backed-up S3 object(s))` : ''
+      }`;
+    }
     case ADMIN_AUDIT_ACTION.PLAN_QUOTA_UPDATE:
       return `Updated plan quota${d.planName ? ` for “${d.planName}”` : ''}${formatQuotaChangeSuffix(d)}`;
     case ADMIN_AUDIT_ACTION.CRON_TRIGGER:

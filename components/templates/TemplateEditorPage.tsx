@@ -23,6 +23,7 @@ import AdminEmailTemplateEditor from '@/components/templates/AdminEmailTemplateE
 import UnsavedChangesDialog from '@/components/templates/UnsavedChangesDialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { getTemplateCategoryIds } from '@/lib/template-categories.util';
+import { newObjectIdHex } from '@/lib/object-id';
 
 const IMPORTED_DRAFT_STORAGE_KEY = 'admin-template-import-draft';
 
@@ -62,6 +63,11 @@ type EditorSnapshot = {
 export default function TemplateEditorPage({ templateId }: TemplateEditorPageProps) {
   const router = useRouter();
   const isEditMode = Boolean(templateId);
+
+  // reserved up front so images uploaded before the first save land in this
+  // template's own folder: sample-templates/{id}/template-images/
+  const [draftTemplateId] = useState(() => newObjectIdHex());
+  const storageTemplateId = templateId || draftTemplateId;
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
@@ -282,6 +288,8 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
         description: description.trim(),
         body: htmlBody,
         categoryIds,
+        // keeps the saved template and its already-uploaded images in one folder
+        ...(isEditMode ? {} : { _id: draftTemplateId }),
       };
 
       const endpoint = isEditMode
@@ -396,21 +404,24 @@ export default function TemplateEditorPage({ templateId }: TemplateEditorPagePro
     }
   };
 
-  const getSignedUrl = useCallback(async (params: { fileName: string }) => {
-    const response = await fetch('/api/assets/file-upload-url', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(params),
-    });
+  const getSignedUrl = useCallback(
+    async (params: { fileName: string }) => {
+      const response = await fetch('/api/assets/file-upload-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ...params, templateId: storageTemplateId }),
+      });
 
-    const payload = await response.json();
-    if (!response.ok) {
-      throw new Error(payload.error || 'Failed to get upload URL');
-    }
-    return payload?.data || null;
-  }, []);
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Failed to get upload URL');
+      }
+      return payload?.data || null;
+    },
+    [storageTemplateId]
+  );
 
   const uploadToS3 = useCallback(async (file: File, signedUrl: string) => {
     const fileBinary = await file.arrayBuffer();
