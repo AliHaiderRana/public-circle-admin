@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import {
+  buildSampleTemplateImageKey,
+  resolveTemplateStorage,
+  templateFileUrl,
+} from '@/lib/template-storage';
 import dbConnect from '@/lib/db';
 import { getServerSession, toAdminAuditSession } from '@/lib/auth';
 import {
@@ -16,35 +21,16 @@ export const dynamic = 'force-dynamic';
 
 const inputSchema = z.object({
   fileName: z.string().trim().min(1, 'File name is required'),
-});
-
-function sanitizeFileName(fileName: string) {
-  return fileName
+  templateId: z
+    .string()
     .trim()
-    .replace(/[^a-zA-Z0-9._-]/g, '-')
-    .replace(/-+/g, '-');
-}
+    .regex(/^[0-9a-fA-F]{24}$/, 'Invalid template id'),
+});
 
 export async function POST(request: Request) {
   const session = await getServerSession();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const bucket = (
-    process.env.S3BUCKET ||
-    process.env.AWS_S3_BUCKET ||
-    process.env.TEMPLATE_THUMBNAILS_BUCKET
-  || '').trim();
-  const region = (process.env.AWS_REGION || '').trim() || 'ca-central-1';
-  const accessKeyId = (process.env.AWS_ACCESS_KEY_ID || '').trim();
-  const secretAccessKey = (process.env.AWS_SECRET_ACCESS_KEY || '').trim();
-
-  if (!bucket || !accessKeyId || !secretAccessKey) {
-    return NextResponse.json(
-      { error: 'S3 is not configured. Set S3BUCKET, AWS_ACCESS_KEY_ID, and AWS_SECRET_ACCESS_KEY.' },
-      { status: 500 }
-    );
   }
 
   try {
@@ -57,15 +43,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const safeName = sanitizeFileName(parsed.data.fileName);
-    const key = `assets/admin/email-assets/${Date.now()}-${safeName}`;
-
-    const s3Client = new S3Client({
-      region,
-      credentials: {
-        accessKeyId,
-        secretAccessKey,
-      },
+    const { bucket, region, s3Client } = resolveTemplateStorage();
+    const key = await buildSampleTemplateImageKey({
+      s3Client,
+      bucket,
+      templateId: parsed.data.templateId,
+      fileName: parsed.data.fileName,
     });
 
     const signedUrl = await getSignedUrl(
@@ -77,7 +60,7 @@ export async function POST(request: Request) {
       { expiresIn: 600 }
     );
 
-    const url = `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+    const url = templateFileUrl({ bucket, region, key });
 
     await dbConnect();
     const asset = await EditorAsset.create({
