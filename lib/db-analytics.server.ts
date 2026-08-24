@@ -132,8 +132,12 @@ export async function getClusterWideStats(
   return {
     databases: databases.length,
     ...totals,
-    // Same "billed usage" definition used everywhere else: data + index, not
-    // the compressed on-disk storage size.
+    // Atlas defines cluster "Data Size" as dataSize + indexSize (see
+    // https://www.mongodb.com/docs/atlas/reference/faq/storage/) — not
+    // dbStats.totalSize, which is storageSize + indexSize instead. Note
+    // Atlas's own UI labels this figure "GB" but renders it in GiB (1024-based),
+    // so its displayed number will still read ~7% lower than this decimal-GB
+    // value — that gap is Atlas's unit mislabeling, not a data discrepancy.
     totalSize: totals.dataSize + totals.indexSize,
     failedDatabases,
     perDatabase: perDatabase.sort((a, b) => b.totalSize - a.totalSize),
@@ -267,4 +271,154 @@ export async function getCompanyStats(coll: Collection, db: Db, collectionName?:
       };
     }),
   };
+}
+
+export type CompanyFootprintCollectionRow = {
+  collectionName: string;
+  field: string;
+  count: number;
+  size: number;
+};
+
+export type CompanyDbFootprint = {
+  collections: CompanyFootprintCollectionRow[];
+  totalDocuments: number;
+  totalSize: number;
+};
+
+/**
+ * Admin-panel infrastructure collections excluded from company deletion —
+ * audit trails, cron/config bookkeeping — even when they happen to reference
+ * a company (e.g. an impersonation log entry). Everything else that this
+ * company's id shows up in is treated as that company's own business data.
+ */
+const COMPANY_DELETION_EXCLUDED_COLLECTIONS = new Set([
+  'app-configs',
+  'adminusers',
+  'admin-activities',
+  'admin-impersonation-activities',
+  'admin-notifications',
+  'cron-histories',
+  'cron-metadata',
+  'changelogs',
+]);
+
+// Count/size aggregates are purely informational for the preview — cap them
+// so one huge or unindexed collection can't stall the whole scan.
+const FOOTPRINT_COUNT_TIMEOUT_MS = 5000;
+
+/**
+ * Structurally detects, in parallel, which collections reference this
+ * company at all (cheap: samples 25 docs per collection, no company-specific
+ * filter). This is the list actual deletion acts on — kept independent of
+ * the best-effort count/size aggregate below so a slow count can never cause
+ * a collection to be silently skipped at delete time.
+ */
+export async function detectCompanyReferencingCollections(): Promise<{ name: string; field: string }[]> {
+  const db = mongoose.connection.db;
+  if (!db) throw new Error('Database connection unavailable');
+
+  const collectionInfos = await db.listCollections().toArray();
+  const candidates = collectionInfos
+    .map((info) => info.name)
+    .filter((name) => name !== 'companies' && !COMPANY_DELETION_EXCLUDED_COLLECTIONS.has(name));
+
+  const detected = await Promise.all(
+    candidates.map(async (name) => {
+      const field = await detectCompanyField(db.collection(name), name);
+      return field ? { name, field } : null;
+    })
+  );
+
+  return detected.filter((r): r is { name: string; field: string } => r !== null);
+}
+
+/** Scans every collection in the app database for documents referencing this company. */
+export async function getCompanyDbFootprint(companyId: string): Promise<CompanyDbFootprint> {
+  const db = mongoose.connection.db;
+  if (!db) throw new Error('Database connection unavailable');
+  const objectId = new ObjectId(companyId);
+
+  const referencing = await detectCompanyReferencingCollections();
+
+  const rows = await Promise.all(
+    referencing.map(async ({ name, field }): Promise<CompanyFootprintCollectionRow> => {
+      try {
+        const [agg] = await db
+          .collection(name)
+          .aggregate(
+            [
+              { $match: { [field]: objectId } },
+              { $group: { _id: null, count: { $sum: 1 }, size: { $sum: { $bsonSize: '$$ROOT' } } } },
+            ],
+            { maxTimeMS: FOOTPRINT_COUNT_TIMEOUT_MS }
+          )
+          .toArray();
+        return {
+          collectionName: name,
+          field,
+          count: agg ? Number(agg.count) || 0 : 0,
+          size: agg ? Number(agg.size) || 0 : 0,
+        };
+      } catch {
+        // Count timed out or failed — still surface the collection (with an
+        // unknown count) rather than silently dropping it from the preview.
+        return { collectionName: name, field, count: -1, size: -1 };
+      }
+    })
+  );
+
+  const withMatches = rows.filter((r) => r.count !== 0);
+  withMatches.sort((a, b) => b.size - a.size);
+
+  return {
+    collections: withMatches,
+    totalDocuments: withMatches.reduce((s, r) => s + Math.max(r.count, 0), 0),
+    totalSize: withMatches.reduce((s, r) => s + Math.max(r.size, 0), 0),
+  };
+}
+
+/**
+ * Deletes every document in every collection structurally detected as
+ * referencing this company, then the company document itself last. Re-runs
+ * detection fresh rather than trusting a previously computed preview, so
+ * completeness never depends on the preview's (best-effort, capped) counts.
+ * Pass a transaction session when the deployment supports it (see
+ * runWithOptionalTransaction) so a failure partway through doesn't leave the
+ * company half-deleted.
+ */
+export async function deleteCompanyDbFootprint(
+  companyId: string,
+  session?: import('mongoose').ClientSession,
+  onProgress?: (collectionName: string, index: number, total: number) => void
+): Promise<{ deletedDocuments: number; deletedCollections: string[] }> {
+  const db = mongoose.connection.db;
+  if (!db) throw new Error('Database connection unavailable');
+  const objectId = new ObjectId(companyId);
+  const options = session ? { session } : undefined;
+
+  const referencing = await detectCompanyReferencingCollections();
+  const total = referencing.length + 1; // + the companies collection itself
+
+  let deletedDocuments = 0;
+  const deletedCollections: string[] = [];
+
+  for (let i = 0; i < referencing.length; i++) {
+    const { name, field } = referencing[i];
+    onProgress?.(name, i, total);
+    const result = await db.collection(name).deleteMany({ [field]: objectId }, options);
+    deletedDocuments += result.deletedCount ?? 0;
+    if (result.deletedCount) deletedCollections.push(name);
+  }
+
+  onProgress?.('companies', referencing.length, total);
+  const companyResult = await db
+    .collection('companies')
+    .deleteOne({ _id: objectId }, options);
+  if (companyResult.deletedCount) {
+    deletedDocuments += companyResult.deletedCount;
+    deletedCollections.push('companies');
+  }
+
+  return { deletedDocuments, deletedCollections };
 }
