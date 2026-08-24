@@ -36,8 +36,21 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatBytes, formatCompactCount, formatCount } from "./format";
+import { formatBytes, formatBytesAtlasStyle, formatCompactCount, formatCount } from "./format";
 import { StatCard } from "./StatCard";
+import { HeaderWithInfo } from "./HeaderWithInfo";
+
+const CLUSTER_COLUMN_INFO = {
+  storageSize:
+    "Actual space this database takes up on disk, after compression. Usually smaller than data size.",
+  dataSize:
+    "Full size of everything stored in this database, before compression is applied.",
+  documents: "Total number of records saved across every table in this database.",
+  collections: "Number of tables (called \"collections\") in this database.",
+  indexes:
+    "Shortcuts MongoDB keeps so it can find records quickly instead of scanning everything.",
+  totalIndexSize: "Disk space used by those shortcuts, combined.",
+} as const;
 
 type ClusterDatabaseOption = {
   name: string;
@@ -184,7 +197,7 @@ export default function DbAnalyticsPage() {
           <StatCard
             icon={HardDrive}
             label="Total size (billed usage)"
-            value={formatBytes(clusterStats?.totalSize ?? 0)}
+            value={formatBytesAtlasStyle(clusterStats?.totalSize ?? 0)}
             hint={
               clusterStats
                 ? `${formatBytes(clusterStats.dataSize)} data · ${formatBytes(clusterStats.indexSize)} indexes`
@@ -204,6 +217,12 @@ export default function DbAnalyticsPage() {
             loading={clusterStatsLoading}
           />
           <StatCard
+            icon={Key}
+            label="Total index size"
+            value={formatBytes(clusterStats?.indexSize ?? 0)}
+            loading={clusterStatsLoading}
+          />
+          <StatCard
             icon={Layers}
             label="Documents"
             value={formatCount(clusterStats?.objects ?? 0)}
@@ -212,12 +231,6 @@ export default function DbAnalyticsPage() {
                 ? `across ${clusterStats.collections} collections in ${clusterStats.databases} databases`
                 : undefined
             }
-            loading={clusterStatsLoading}
-          />
-          <StatCard
-            icon={Key}
-            label="Total index size"
-            value={formatBytes(clusterStats?.indexSize ?? 0)}
             loading={clusterStatsLoading}
           />
         </CardContent>
@@ -237,12 +250,27 @@ export default function DbAnalyticsPage() {
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="pl-4">Database name</TableHead>
-                <TableHead>Storage size</TableHead>
-                <TableHead>Data size</TableHead>
-                <TableHead>Documents</TableHead>
-                <TableHead>Collections</TableHead>
-                <TableHead>Indexes</TableHead>
-                <TableHead>Total index size</TableHead>
+                <TableHead>
+                  <HeaderWithInfo label="Storage size" info={CLUSTER_COLUMN_INFO.storageSize} />
+                </TableHead>
+                <TableHead>
+                  <HeaderWithInfo label="Data size" info={CLUSTER_COLUMN_INFO.dataSize} />
+                </TableHead>
+                <TableHead>
+                  <HeaderWithInfo label="Documents" info={CLUSTER_COLUMN_INFO.documents} />
+                </TableHead>
+                <TableHead>
+                  <HeaderWithInfo label="Collections" info={CLUSTER_COLUMN_INFO.collections} />
+                </TableHead>
+                <TableHead>
+                  <HeaderWithInfo label="Indexes" info={CLUSTER_COLUMN_INFO.indexes} />
+                </TableHead>
+                <TableHead>
+                  <HeaderWithInfo
+                    label="Total index size"
+                    info={CLUSTER_COLUMN_INFO.totalIndexSize}
+                  />
+                </TableHead>
                 <TableHead className="w-[70px] pr-4 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
