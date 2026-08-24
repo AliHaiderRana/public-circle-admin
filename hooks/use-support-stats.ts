@@ -7,12 +7,14 @@ export type SupportStats = {
   openSupportRequests: number;
   unassignedTickets?: number;
   pendingCustomerRequests?: number;
+  newFeedbackCount?: number;
 };
 
 const DEFAULT_STATS: SupportStats = {
   unreadChatMessages: 0,
   openSupportRequests: 0,
   pendingCustomerRequests: 0,
+  newFeedbackCount: 0,
 };
 
 const STATS_KEY = '/api/support-stats';
@@ -47,6 +49,7 @@ async function fetchSupportStats(force = false): Promise<SupportStats> {
         openSupportRequests: data.openSupportRequests ?? 0,
         unassignedTickets: data.unassignedTickets ?? 0,
         pendingCustomerRequests: data.pendingCustomerRequests ?? 0,
+        newFeedbackCount: data.newFeedbackCount ?? 0,
       };
       return sharedStats;
     } catch {
