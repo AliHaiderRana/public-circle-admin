@@ -37,7 +37,6 @@ import {
   FileStack,
   Gauge,
   HardDrive,
-  Info,
   Key,
   Layers,
   RefreshCw,
@@ -46,11 +45,13 @@ import {
 import { cn } from "@/lib/utils";
 import {
   formatBytes,
+  formatBytesAtlasStyle,
   formatCompactCount,
   formatCount,
   type CollectionAnalytics,
 } from "../../format";
 import { StatCard } from "../../StatCard";
+import { HeaderWithInfo } from "../../HeaderWithInfo";
 
 const COLUMN_INFO = {
   collectionName: "Name of the MongoDB collection.",
@@ -65,28 +66,6 @@ const COLUMN_INFO = {
   totalIndexSize:
     "Disk space used by all of the collection’s indexes combined.",
 } as const;
-
-function HeaderWithInfo({ label, info }: { label: string; info: string }) {
-  return (
-    <span className="inline-flex items-center gap-1">
-      {label}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span
-            tabIndex={0}
-            className="cursor-help"
-            aria-label={`About ${label}`}
-          >
-            <Info className="h-3 w-3 text-muted-foreground/70" />
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-64 text-xs">
-          {info}
-        </TooltipContent>
-      </Tooltip>
-    </span>
-  );
-}
 
 type DatabaseAnalytics = {
   name: string;
@@ -258,7 +237,7 @@ export default function DbDatabaseDetailPage() {
             <StatCard
               icon={HardDrive}
               label="Total size (billed usage)"
-              value={formatBytes(database?.totalSize ?? 0)}
+              value={formatBytesAtlasStyle(database?.totalSize ?? 0)}
               hint={
                 database
                   ? `${formatBytes(database.dataSize)} data · ${formatBytes(database.indexSize)} indexes`
@@ -278,6 +257,13 @@ export default function DbDatabaseDetailPage() {
               loading={loading}
             />
             <StatCard
+              icon={Key}
+              label="Total index size"
+              value={formatBytes(database?.indexSize ?? 0)}
+              hint={database ? `${database.indexes} indexes total` : undefined}
+              loading={loading}
+            />
+            <StatCard
               icon={Layers}
               label="Documents"
               value={formatCount(database?.objects ?? 0)}
@@ -286,13 +272,6 @@ export default function DbDatabaseDetailPage() {
                   ? `across ${database.collections} collection${database.collections === 1 ? "" : "s"}`
                   : undefined
               }
-              loading={loading}
-            />
-            <StatCard
-              icon={Key}
-              label="Total index size"
-              value={formatBytes(database?.indexSize ?? 0)}
-              hint={database ? `${database.indexes} indexes total` : undefined}
               loading={loading}
             />
           </div>

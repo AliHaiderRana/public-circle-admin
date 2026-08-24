@@ -135,3 +135,14 @@ export async function requireSuperAdminSession(): Promise<
   }
   return { session, error: null };
 }
+
+/**
+ * Re-checks the currently logged-in admin's own password — used as a second
+ * confirmation gate before irreversible actions (company delete/archive/
+ * restore), independent of the session cookie already proving who they are.
+ */
+export async function verifyAdminPassword(email: string, password: string): Promise<boolean> {
+  await dbConnect();
+  const admin = await AdminUser.findOne({ email });
+  return Boolean(admin && admin.password === password);
+}

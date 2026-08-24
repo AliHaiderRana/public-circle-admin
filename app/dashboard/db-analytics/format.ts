@@ -8,6 +8,18 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(2)} ${units[i]}`;
 }
 
+// Binary (1024-based) math labeled with decimal unit names — matches how the
+// Atlas cluster dashboard renders storage (Atlas computes in GiB/MiB/etc but
+// labels the units "GB"/"MB"), so "billed usage" lines up with what admins
+// see in Atlas instead of reading ~7% higher.
+export function formatBytesAtlasStyle(bytes: number): string {
+  if (!bytes || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** i;
+  return `${value.toFixed(2)} ${units[i]}`;
+}
+
 export function formatCount(n: number): string {
   return n.toLocaleString();
 }
