@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -21,6 +21,12 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { ViewToggle } from '@/components/aws-analytics/ViewToggle';
+import {
+  compareValues,
+  SortableHeader,
+  toggleSort,
+  type SortState,
+} from '@/components/aws-analytics/SortableHeader';
 import { useAwsViewMode } from '@/hooks/use-aws-view-mode';
 import { ArrowLeft, Building2, Folder, FolderOpen, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -40,6 +46,8 @@ type CompanyUsageRow = {
   buckets: CompanyBucketUsage[];
 };
 
+type CompanyBucketSortKey = 'bucket' | 'objects' | 'bytes' | 'share';
+
 function CompanyAwsDetailContent() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -53,6 +61,7 @@ function CompanyAwsDetailContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useAwsViewMode();
+  const [bucketSort, setBucketSort] = useState<SortState<CompanyBucketSortKey>>(null);
 
   useEffect(() => {
     if (!authLoading && user && !user.isSuperAdmin) {
@@ -81,6 +90,26 @@ function CompanyAwsDetailContent() {
       void fetchCompany();
     }
   }, [authLoading, user, companyId, fetchCompany]);
+
+  const sortedBuckets = useMemo(() => {
+    const rows = company?.buckets ?? [];
+    if (!bucketSort) return rows;
+    return [...rows].sort((a, b) => {
+      const av =
+        bucketSort.key === 'bucket'
+          ? a.bucket
+          : bucketSort.key === 'share'
+            ? a.bytes
+            : a[bucketSort.key];
+      const bv =
+        bucketSort.key === 'bucket'
+          ? b.bucket
+          : bucketSort.key === 'share'
+            ? b.bytes
+            : b[bucketSort.key];
+      return compareValues(av, bv, bucketSort.dir);
+    });
+  }, [company, bucketSort]);
 
   if (authLoading || !user?.isSuperAdmin) {
     return (
@@ -195,15 +224,44 @@ function CompanyAwsDetailContent() {
                 <Table>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
-                      <TableHead className="pl-4">Bucket</TableHead>
-                      <TableHead className="text-right">Files</TableHead>
-                      <TableHead className="text-right">Storage</TableHead>
-                      <TableHead className="w-[60px] text-right">Share</TableHead>
+                      <SortableHeader
+                        label="Bucket"
+                        sortKey="bucket"
+                        activeKey={bucketSort?.key ?? null}
+                        direction={bucketSort?.dir ?? 'asc'}
+                        onSort={(key) => setBucketSort((prev) => toggleSort(prev, key))}
+                        className="pl-4"
+                      />
+                      <SortableHeader
+                        label="Files"
+                        sortKey="objects"
+                        activeKey={bucketSort?.key ?? null}
+                        direction={bucketSort?.dir ?? 'asc'}
+                        onSort={(key) => setBucketSort((prev) => toggleSort(prev, key))}
+                        align="right"
+                      />
+                      <SortableHeader
+                        label="Storage"
+                        sortKey="bytes"
+                        activeKey={bucketSort?.key ?? null}
+                        direction={bucketSort?.dir ?? 'asc'}
+                        onSort={(key) => setBucketSort((prev) => toggleSort(prev, key))}
+                        align="right"
+                      />
+                      <SortableHeader
+                        label="Share"
+                        sortKey="share"
+                        activeKey={bucketSort?.key ?? null}
+                        direction={bucketSort?.dir ?? 'asc'}
+                        onSort={(key) => setBucketSort((prev) => toggleSort(prev, key))}
+                        className="w-[60px]"
+                        align="right"
+                      />
                       <TableHead className="w-[70px] pr-4 text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {company.buckets.map((usage) => {
+                    {sortedBuckets.map((usage) => {
                       const share = company.bytes > 0 ? (usage.bytes / company.bytes) * 100 : 0;
                       const browseQs = new URLSearchParams({
                         company: company.companyId,
