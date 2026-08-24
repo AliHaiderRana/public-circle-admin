@@ -4,7 +4,7 @@ import { checkAndSendDbStorageAlert } from '@/lib/db-storage-alert.server';
 import { getAdminLocalCronDefinition } from '@/lib/admin-cron-definitions';
 import dbConnect from '@/lib/db';
 
-const CRON_HISTORY_LIMIT = 30;
+const CRON_HISTORY_LIMIT = 500;
 
 async function cleanupOldHistory(cronName: string) {
   const allRecords = await CronHistory.find({ cronName })

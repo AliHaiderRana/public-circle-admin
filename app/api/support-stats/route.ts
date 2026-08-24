@@ -13,6 +13,7 @@ import {
   setSupportStatsCache,
 } from '@/lib/support-stats-cache.server';
 import { getPendingCustomerRequestsCount } from '@/lib/customer-request-stats.server';
+import { getNewFeedbackCount } from '@/lib/feedback-stats.server';
 
 const CACHE_TTL_MS = 15000;
 
@@ -46,6 +47,7 @@ export async function GET() {
         openSupportRequests,
         unassignedTickets: 0,
         pendingCustomerRequests: 0,
+        newFeedbackCount: 0,
       });
     } catch (error) {
       console.error('[support-stats] partner fetch failed:', error);
@@ -64,7 +66,7 @@ export async function GET() {
         SUPPORT_REQUEST_STATUS.IN_PROGRESS,
       ];
       const scopedFilter = await ticketsFilterForSession(session);
-      const [chatAgg, openSupportRequests, pendingCustomerRequests] = await Promise.all([
+      const [chatAgg, openSupportRequests, pendingCustomerRequests, newFeedbackCount] = await Promise.all([
         SupportRequest.aggregate([
           { $match: scopedFilter },
           { $group: { _id: null, unreadChatMessages: { $sum: '$unreadByAdmin' } } },
@@ -74,6 +76,7 @@ export async function GET() {
           status: { $in: activeStatuses },
         }),
         isPartnerSession(session) ? Promise.resolve(0) : getPendingCustomerRequestsCount(),
+        isPartnerSession(session) ? Promise.resolve(0) : getNewFeedbackCount(),
       ]);
 
       return NextResponse.json({
@@ -81,6 +84,7 @@ export async function GET() {
         openSupportRequests,
         unassignedTickets: 0,
         pendingCustomerRequests,
+        newFeedbackCount,
       });
     } catch (error) {
       console.error('[support-stats] scoped fetch failed:', error);
@@ -94,8 +98,15 @@ export async function GET() {
   const now = Date.now();
   const statsCache = getSupportStatsCache();
   if (statsCache && statsCache.expiresAt > now) {
-    const pendingCustomerRequests = await getPendingCustomerRequestsCount();
-    return NextResponse.json({ ...statsCache.data, pendingCustomerRequests });
+    const [pendingCustomerRequests, newFeedbackCount] = await Promise.all([
+      getPendingCustomerRequestsCount(),
+      getNewFeedbackCount(),
+    ]);
+    return NextResponse.json({
+      ...statsCache.data,
+      pendingCustomerRequests,
+      newFeedbackCount,
+    });
   }
 
   try {
@@ -104,7 +115,7 @@ export async function GET() {
       SUPPORT_REQUEST_STATUS.OPEN,
       SUPPORT_REQUEST_STATUS.IN_PROGRESS,
     ];
-    const [chatAgg, openSupportRequests, unassignedTickets] = await Promise.all([
+    const [chatAgg, openSupportRequests, unassignedTickets, pendingCustomerRequests, newFeedbackCount] = await Promise.all([
       SupportRequest.aggregate([
         { $group: { _id: null, unreadChatMessages: { $sum: '$unreadByAdmin' } } },
       ]),
@@ -113,14 +124,16 @@ export async function GET() {
         status: { $in: activeStatuses },
         $or: [{ assignedAdminId: null }, { assignedAdminId: { $exists: false } }],
       }),
+      getPendingCustomerRequestsCount(),
+      getNewFeedbackCount(),
     ]);
 
-    const pendingCustomerRequests = await getPendingCustomerRequestsCount();
     const merged = {
       unreadChatMessages: chatAgg[0]?.unreadChatMessages ?? 0,
       openSupportRequests,
       unassignedTickets,
       pendingCustomerRequests,
+      newFeedbackCount,
     };
 
     setSupportStatsCache({
