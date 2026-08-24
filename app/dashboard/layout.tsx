@@ -39,6 +39,7 @@ import {
   Plug,
   Handshake,
   Inbox,
+  MessageSquarePlus,
   Bell,
   MailWarning,
   ChevronDown,
@@ -70,6 +71,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { BackgroundTasksProvider } from "@/context/BackgroundTasksContext";
+import { BackgroundTasksWidget } from "@/components/BackgroundTasksWidget";
 
 type SidebarChildItem = {
   name: string;
@@ -85,11 +88,13 @@ type SidebarItem = {
   countKey?:
     | "unreadChatMessages"
     | "openSupportRequests"
-    | "pendingCustomerRequests";
+    | "pendingCustomerRequests"
+    | "newFeedbackCount";
   secondaryCountKey?:
     | "unreadChatMessages"
     | "openSupportRequests"
-    | "pendingCustomerRequests";
+    | "pendingCustomerRequests"
+    | "newFeedbackCount";
   children?: SidebarChildItem[];
 };
 
@@ -107,6 +112,12 @@ const sidebarItems: SidebarItem[] = [
     icon: Inbox,
     countKey: "unreadChatMessages",
     secondaryCountKey: "openSupportRequests",
+  },
+  {
+    name: "Product Feedback",
+    href: "/dashboard/feedback",
+    icon: MessageSquarePlus,
+    countKey: "newFeedbackCount",
   },
   { name: "Companies", href: "/dashboard/companies", icon: Building2 },
   { name: "Users", href: "/dashboard/users", icon: Users },
@@ -404,6 +415,7 @@ export default function DashboardLayout({
     <ProtectedRoute>
       <AdminNotificationSoundProvider>
         <TooltipProvider delayDuration={300}>
+        <BackgroundTasksProvider>
           <div className="flex h-screen bg-background text-foreground">
             <aside className="hidden w-64 min-h-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:flex lg:h-full lg:shrink-0">
               {sidebarContent}
@@ -475,6 +487,8 @@ export default function DashboardLayout({
               </main>
             </div>
           </div>
+          <BackgroundTasksWidget />
+        </BackgroundTasksProvider>
         </TooltipProvider>
       </AdminNotificationSoundProvider>
     </ProtectedRoute>

@@ -24,6 +24,7 @@ import {
   Building2,
   Database,
   Eye,
+  FileJson,
   FileStack,
   HardDrive,
   Key,
@@ -40,6 +41,9 @@ import {
   type CompanyStatsRow,
 } from '../format';
 import { StatCard } from '../StatCard';
+import { DocumentRow } from '../DocumentRow';
+
+const DOCS_PAGE_SIZE_DEFAULT = 20;
 
 const COMPANY_PAGE_SIZE_DEFAULT = 25;
 
@@ -65,12 +69,22 @@ function DbCollectionDetailContent() {
     ? `/dashboard/db-analytics/database/${encodeURIComponent(databaseName)}`
     : '/dashboard/db-analytics';
 
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('documents');
 
   // Storage metadata (from $collStats — no document reads)
   const [storage, setStorage] = useState<CollectionAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // All documents, irrespective of company (lazy, on tab open — default tab)
+  const [docs, setDocs] = useState<Record<string, unknown>[]>([]);
+  const [docsTotal, setDocsTotal] = useState(0);
+  const [docsPages, setDocsPages] = useState(1);
+  const [docsPage, setDocsPage] = useState(1);
+  const [docsLimit, setDocsLimit] = useState(DOCS_PAGE_SIZE_DEFAULT);
+  const [docsLoaded, setDocsLoaded] = useState(false);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [docsError, setDocsError] = useState<string | null>(null);
 
   // Per-company counts (lazy, on tab open)
   const [companyStats, setCompanyStats] = useState<CompanyStats | null>(null);
@@ -105,6 +119,36 @@ function DbCollectionDetailContent() {
     }
   }, [collectionName, databaseName]);
 
+  const fetchDocuments = useCallback(
+    async (nextPage: number, nextLimit: number) => {
+      setDocsLoading(true);
+      setDocsError(null);
+      try {
+        const qs = new URLSearchParams({
+          name: collectionName,
+          page: String(nextPage),
+          limit: String(nextLimit),
+        });
+        if (databaseName) qs.set('database', databaseName);
+        const res = await fetch(`/api/db-analytics/collection/documents?${qs}`);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error || 'Failed to load documents');
+        setDocs(json.documents ?? []);
+        setDocsTotal(json.total ?? 0);
+        setDocsPages(json.pages ?? 1);
+        setDocsLoaded(true);
+      } catch (err) {
+        setDocs([]);
+        setDocsTotal(0);
+        setDocsPages(1);
+        setDocsError(err instanceof Error ? err.message : 'Failed to load documents');
+      } finally {
+        setDocsLoading(false);
+      }
+    },
+    [collectionName, databaseName]
+  );
+
   const fetchCompanyStats = useCallback(async () => {
     setCompanyLoading(true);
     setCompanyError(null);
@@ -137,14 +181,34 @@ function DbCollectionDetailContent() {
     }
   }, [activeTab, companyLoaded, companyLoading, user, fetchCompanyStats]);
 
+  useEffect(() => {
+    if (
+      activeTab === 'documents' &&
+      !docsLoaded &&
+      !docsLoading &&
+      user?.isSuperAdmin &&
+      collectionName
+    ) {
+      void fetchDocuments(1, docsLimit);
+    }
+    // docsLimit intentionally omitted — page-size changes are handled by the
+    // pagination control's own onLimitChange, not by re-running this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, docsLoaded, docsLoading, user, collectionName, fetchDocuments]);
+
   const handleRefresh = useCallback(() => {
     void fetchStorage();
     setCompanyLoaded(false);
     setCompanyStats(null);
+    setDocsLoaded(false);
+    setDocs([]);
     if (activeTab === 'companies') {
       void fetchCompanyStats();
+    } else if (activeTab === 'documents') {
+      setDocsPage(1);
+      void fetchDocuments(1, docsLimit);
     }
-  }, [fetchStorage, fetchCompanyStats, activeTab]);
+  }, [fetchStorage, fetchCompanyStats, fetchDocuments, activeTab, docsLimit]);
 
   // Company search + client-side pagination
   const filteredCompanyRows = useMemo(() => {
@@ -291,11 +355,83 @@ function DbCollectionDetailContent() {
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
             <TabsList>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="documents">All documents</TabsTrigger>
+              <TabsTrigger value="indexes">Indexes</TabsTrigger>
               <TabsTrigger value="companies">By company</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="overview" className="mt-0">
+            <TabsContent value="documents" className="mt-0">
+              <Card>
+                <CardContent className="p-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <FileJson className="size-4 text-muted-foreground" />
+                      <p className="text-sm font-medium">
+                        {docsLoading
+                          ? 'Loading documents…'
+                          : `${formatCount(docsTotal)} document${docsTotal === 1 ? '' : 's'}`}
+                      </p>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      Size shown per document · click a row to expand
+                    </span>
+                  </div>
+
+                  {docsError ? (
+                    <SectionError
+                      message={docsError}
+                      onRetry={() => void fetchDocuments(docsPage, docsLimit)}
+                    />
+                  ) : docsLoading ? (
+                    <div className="space-y-2 p-4">
+                      {Array.from({ length: 8 }).map((_, i) => (
+                        <Skeleton key={i} className="h-9 w-full" />
+                      ))}
+                    </div>
+                  ) : docs.length === 0 ? (
+                    <div className="py-12 text-center text-sm text-muted-foreground">
+                      No documents in this collection.
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-center gap-2 border-b bg-muted/30 px-4 py-1.5 text-[11px] font-medium text-muted-foreground">
+                        <span className="w-3.5 shrink-0" />
+                        <span className="shrink-0">Document ID</span>
+                        <span className="min-w-0 flex-1">Fields</span>
+                        <span className="w-20 shrink-0 text-right">Size</span>
+                      </div>
+                      {docs.map((doc, i) => (
+                        <DocumentRow key={doc._id != null ? String(doc._id) : i} doc={doc} />
+                      ))}
+                    </div>
+                  )}
+
+                  {!docsError && docsTotal > 0 && (
+                    <div className="px-4 py-3">
+                      <AdminActivityPagination
+                        page={docsPage}
+                        totalPages={docsPages}
+                        total={docsTotal}
+                        limit={docsLimit}
+                        loading={docsLoading}
+                        compact={false}
+                        onPageChange={(nextPage) => {
+                          setDocsPage(nextPage);
+                          void fetchDocuments(nextPage, docsLimit);
+                        }}
+                        onLimitChange={(nextLimit) => {
+                          setDocsLimit(nextLimit);
+                          setDocsPage(1);
+                          void fetchDocuments(1, nextLimit);
+                        }}
+                      />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="indexes" className="mt-0">
               <Card>
                 <CardContent className="p-4">
                   <p className="pb-2 text-sm font-medium">
