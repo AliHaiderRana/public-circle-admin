@@ -13,6 +13,24 @@ const CRON_SCHEDULE_DESCRIPTIONS: Record<string, string> = {
   "15 2 * * *": "Daily at 2:15 AM",
 };
 
+export function formatCronDuration(ms: number | null | undefined): string {
+  if (ms == null || !Number.isFinite(Number(ms))) return "-";
+  const value = Number(ms);
+  if (value < 1000) return `${Math.round(value)}ms`;
+  if (value < 60000) return `${(value / 1000).toFixed(2)}s`;
+  return `${(value / 60000).toFixed(2)}m`;
+}
+
+export function formatCronElapsed(
+  startTime: string | Date | null | undefined,
+  now = Date.now(),
+): string {
+  if (!startTime) return "-";
+  const start = new Date(startTime).getTime();
+  if (!Number.isFinite(start)) return "-";
+  return formatCronDuration(Math.max(0, now - start));
+}
+
 export function formatCronDateTime(value: string | null | undefined): string {
   if (!value) return "Never";
   const d = new Date(value);

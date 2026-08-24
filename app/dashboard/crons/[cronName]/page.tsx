@@ -13,6 +13,13 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -35,6 +42,9 @@ import {
   Database,
   Timer,
   Info,
+  FileText,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   Dialog,
@@ -52,8 +62,11 @@ import {
 } from "@/lib/disk-maintenance-format";
 import {
   formatCronDateTime,
+  formatCronDuration,
+  formatCronElapsed,
   getCronScheduleDescription,
 } from "@/lib/cron-display-format";
+import { Progress } from "@/components/ui/progress";
 
 interface CronDetails {
   name: string;
@@ -64,20 +77,42 @@ interface CronDetails {
   lastRecordsUpdated: number;
   lastDurationMs: number | null;
   lastError: string | null;
+  isRunning?: boolean;
   isEnabled: boolean;
+}
+
+interface MicrosoftSyncLog {
+  at?: string;
+  message?: string;
+}
+
+interface MicrosoftSyncMetadata {
+  configs?: number;
+  processed?: number;
+  failed?: number;
+  imported?: number;
+  updated?: number;
+  skipped?: number;
+  recordsUpdated?: number;
+  currentCompany?: string | null;
+  currentAccount?: string | null;
+  stage?: string;
+  logs?: MicrosoftSyncLog[];
+  reclaimedHuman?: string;
+  reclaimedKb?: number;
 }
 
 interface HistoryItem {
   _id: string;
   cronName: string;
   startTime: string;
-  endTime: string;
-  duration: number;
+  endTime?: string | null;
+  duration?: number | null;
   recordsUpdated: number;
   status: "SUCCESS" | "FAILED";
   error: string | null;
   errorStack: string | null;
-  metadata?: DiskMaintenanceMetadata | null;
+  metadata?: MicrosoftSyncMetadata | DiskMaintenanceMetadata | null;
   createdAt: string;
 }
 
@@ -100,28 +135,21 @@ export default function CronDetailPage() {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [selectedError, setSelectedError] = useState<HistoryItem | null>(null);
   const [selectedDiskDetails, setSelectedDiskDetails] =
     useState<HistoryItem | null>(null);
+  const [selectedLogs, setSelectedLogs] = useState<HistoryItem | null>(null);
+  const [now, setNow] = useState(Date.now());
   const [message, setMessage] = useState<{
     text: string;
     type: "success" | "error" | "info";
   } | null>(null);
 
-  useEffect(() => {
-    if (!authLoading && isSuperAdminDlqCron(cronName) && user && !user.isSuperAdmin) {
-      router.push("/dashboard/crons");
-      return;
-    }
-
-    fetchCronDetails();
-    fetchHistory();
-  }, [cronName, page, authLoading, user, router]);
-
-  const fetchCronDetails = async () => {
-    setLoading(true);
+  const fetchCronDetails = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch(`/api/crons/${cronName}`, {
         credentials: "include",
@@ -129,21 +157,21 @@ export default function CronDetailPage() {
       if (res.ok) {
         const data = await res.json();
         setCron(data.cron);
-      } else {
+      } else if (!silent) {
         setMessage({ text: "Failed to load cron details", type: "error" });
       }
     } catch (error) {
-      setMessage({ text: "Failed to load cron details", type: "error" });
+      if (!silent) setMessage({ text: "Failed to load cron details", type: "error" });
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
-  const fetchHistory = async () => {
-    setHistoryLoading(true);
+  const fetchHistory = async ({ silent = false } = {}) => {
+    if (!silent) setHistoryLoading(true);
     try {
       const res = await fetch(
-        `/api/crons/${cronName}/history?page=${page}&limit=30`,
+        `/api/crons/${cronName}/history?page=${page}&limit=${pageSize}`,
         {
           credentials: "include",
         }
@@ -158,9 +186,37 @@ export default function CronDetailPage() {
     } catch (error) {
       console.error("Failed to load history:", error);
     } finally {
-      setHistoryLoading(false);
+      if (!silent) setHistoryLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!authLoading && isSuperAdminDlqCron(cronName) && user && !user.isSuperAdmin) {
+      router.push("/dashboard/crons");
+      return;
+    }
+
+    fetchCronDetails();
+    fetchHistory();
+  }, [cronName, page, pageSize, authLoading, user, router]);
+
+  const hasRunningJob =
+    Boolean(cron?.isRunning) || history.some((item) => !item.endTime);
+
+  useEffect(() => {
+    if (!hasRunningJob) return;
+    const tick = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(tick);
+  }, [hasRunningJob]);
+
+  useEffect(() => {
+    if (!hasRunningJob) return;
+    const poll = window.setInterval(() => {
+      fetchCronDetails({ silent: true });
+      fetchHistory({ silent: true });
+    }, 3000);
+    return () => window.clearInterval(poll);
+  }, [hasRunningJob, cronName, page, pageSize]);
 
   const triggerCron = async () => {
     setTriggering(true);
@@ -181,9 +237,9 @@ export default function CronDetailPage() {
         });
         // Refresh details and history
         setTimeout(() => {
-          fetchCronDetails();
-          fetchHistory();
-        }, 2000);
+          fetchCronDetails({ silent: true });
+          fetchHistory({ silent: true });
+        }, 800);
       } else {
         setMessage({
           text: data.error || "Failed to trigger cron",
@@ -195,13 +251,6 @@ export default function CronDetailPage() {
     } finally {
       setTriggering(false);
     }
-  };
-
-  const formatDuration = (ms: number | null) => {
-    if (ms === null) return "-";
-    if (ms < 1000) return `${ms}ms`;
-    if (ms < 60000) return `${(ms / 1000).toFixed(2)}s`;
-    return `${(ms / 60000).toFixed(2)}m`;
   };
 
   if (authLoading || (isSuperAdminDlqCron(cronName) && !user?.isSuperAdmin)) {
@@ -257,10 +306,22 @@ export default function CronDetailPage() {
   const successRate =
     totalCount > 0
       ? (
-          (history.filter((h) => h.status === "SUCCESS").length / totalCount) *
+          (history.filter((h) => h.status === "SUCCESS" && h.endTime).length /
+            Math.max(1, history.filter((h) => h.endTime).length)) *
           100
         ).toFixed(1)
       : "N/A";
+
+  const runningItem = history.find((item) => !item.endTime) || null;
+  const runningMeta = (runningItem?.metadata || {}) as MicrosoftSyncMetadata;
+  const progressTotal = Number(runningMeta.configs) || 0;
+  const progressDone = Number(runningMeta.processed) || 0;
+  const progressPercent =
+    progressTotal > 0
+      ? Math.min(100, Math.round((progressDone / progressTotal) * 100))
+      : runningItem
+        ? 8
+        : 0;
 
   return (
     <>
@@ -295,7 +356,7 @@ export default function CronDetailPage() {
               />
               Refresh
             </Button>
-            <Button onClick={triggerCron} disabled={triggering}>
+            <Button onClick={triggerCron} disabled={triggering || hasRunningJob}>
               {triggering ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
@@ -359,7 +420,7 @@ export default function CronDetailPage() {
                     {formatCronDateTime(cron.lastRunAt)}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Duration: {formatDuration(cron.lastDurationMs)}
+                    Duration: {formatCronDuration(cron.lastDurationMs)}
                   </div>
                 </div>
               </div>
@@ -374,7 +435,22 @@ export default function CronDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2">
-                {cron.lastError ? (
+                {cron.isRunning ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <div>
+                      <Badge variant="secondary">Running</Badge>
+                      {runningItem ? (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {formatCronElapsed(runningItem.startTime, now)}
+                          {progressTotal
+                            ? ` · ${progressDone}/${progressTotal} companies`
+                            : ""}
+                        </p>
+                      ) : null}
+                    </div>
+                  </>
+                ) : cron.lastError ? (
                   <>
                     <XCircle className="h-4 w-4 text-red-500" />
                     <Badge variant="destructive">Failed</Badge>
@@ -391,7 +467,7 @@ export default function CronDetailPage() {
                   </>
                 )}
               </div>
-              {cron.lastError && (
+              {cron.lastError && !cron.isRunning && (
                 <p className="text-xs text-destructive mt-2 truncate">
                   {cron.lastError}
                 </p>
@@ -420,6 +496,73 @@ export default function CronDetailPage() {
             </CardContent>
           </Card>
         </div>
+
+        {runningItem && cronName === "microsoftContactsSync" ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Live progress
+              </CardTitle>
+              <CardDescription>
+                Elapsed {formatCronElapsed(runningItem.startTime, now)}
+                {progressTotal
+                  ? ` · company ${Math.min(progressDone + (runningMeta.currentCompany ? 1 : 0), progressTotal)} of ${progressTotal}`
+                  : ""}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Progress value={progressPercent} />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <div>
+                  <div className="text-xs text-muted-foreground">Companies</div>
+                  <div className="font-semibold">
+                    {progressDone}/{progressTotal || "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Contacts this run</div>
+                  <div className="font-semibold">
+                    {Number(runningMeta.recordsUpdated || runningItem.recordsUpdated || 0).toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Failed</div>
+                  <div className="font-semibold">{runningMeta.failed || 0}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Current account</div>
+                  <div className="font-semibold truncate" title={runningMeta.currentAccount || ""}>
+                    {runningMeta.currentAccount || runningMeta.currentCompany || "Starting…"}
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-md border bg-muted/40 p-3 max-h-56 overflow-auto">
+                <div className="text-xs font-medium text-muted-foreground mb-2">Logs</div>
+                {(runningMeta.logs || []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Waiting for the first log line…</p>
+                ) : (
+                  <div className="space-y-1 font-mono text-xs">
+                    {[...(runningMeta.logs || [])].slice(-20).map((log, index) => (
+                      <div key={`${log.at}-${index}`} className="flex gap-2">
+                        <span className="text-muted-foreground shrink-0">
+                          {log.at
+                            ? new Date(log.at).toLocaleTimeString(undefined, {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                second: "2-digit",
+                              })
+                            : ""}
+                        </span>
+                        <span className="break-all">{log.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
 
         {/* Statistics Card */}
         <Card>
@@ -470,12 +613,6 @@ export default function CronDetailPage() {
                 </CardDescription>
               </div>
             </div>
-            <Alert className="mt-4">
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                We're maintaining only the 30 most recent execution records for this cron job. Historical data beyond the most recent 30 records will not be available.
-              </AlertDescription>
-            </Alert>
           </CardHeader>
           <CardContent className="p-0">
             {historyLoading ? (
@@ -516,7 +653,9 @@ export default function CronDetailPage() {
                           <div className="flex items-center gap-2">
                             <Timer className="h-4 w-4 text-muted-foreground" />
                             <span className="text-sm font-mono">
-                              {formatDuration(item.duration)}
+                              {item.endTime
+                                ? formatCronDuration(item.duration)
+                                : formatCronElapsed(item.startTime, now)}
                             </span>
                           </div>
                         </TableCell>
@@ -529,7 +668,12 @@ export default function CronDetailPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {item.status === "SUCCESS" ? (
+                          {!item.endTime ? (
+                            <Badge variant="secondary">
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              Running
+                            </Badge>
+                          ) : item.status === "SUCCESS" ? (
                             <Badge>
                               <CheckCircle2 className="mr-1 h-3 w-3" />
                               Success
@@ -553,6 +697,17 @@ export default function CronDetailPage() {
                                 <span className="hidden xl:inline">Details</span>
                               </Button>
                             ) : null}
+                            {Array.isArray((item.metadata as MicrosoftSyncMetadata | undefined)?.logs) &&
+                            ((item.metadata as MicrosoftSyncMetadata).logs?.length || 0) > 0 ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSelectedLogs(item)}
+                              >
+                                <FileText className="h-3 w-3 xl:mr-1" />
+                                <span className="hidden xl:inline">Logs</span>
+                              </Button>
+                            ) : null}
                             {item.error && (
                               <Button
                                 size="sm"
@@ -570,19 +725,36 @@ export default function CronDetailPage() {
                   </TableBody>
                 </Table>
 
-                {/* Pagination */}
-                {totalPages > 1 && (
+                {totalCount > 0 && (
                   <div className="flex items-center justify-between px-6 py-4 border-t">
                     <div className="text-sm text-muted-foreground">
-                      Page {page} of {totalPages}
+                      Page {page} of {totalPages} ({totalCount} total)
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={String(pageSize)}
+                        onValueChange={(value) => {
+                          setPageSize(parseInt(value, 10));
+                          setPage(1);
+                        }}
+                      >
+                        <SelectTrigger className="w-20">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="5">5</SelectItem>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setPage(page - 1)}
                         disabled={page === 1}
                       >
+                        <ChevronLeft size={16} />
                         Previous
                       </Button>
                       <Button
@@ -592,6 +764,7 @@ export default function CronDetailPage() {
                         disabled={page === totalPages}
                       >
                         Next
+                        <ChevronRight size={16} />
                       </Button>
                     </div>
                   </div>
@@ -646,10 +819,41 @@ export default function CronDetailPage() {
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Duration</div>
                 <div className="text-sm">
-                  {formatDuration(selectedError?.duration || null)}
+                  {formatCronDuration(selectedError?.duration)}
                 </div>
               </div>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={selectedLogs !== null} onOpenChange={() => setSelectedLogs(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Sync logs</DialogTitle>
+            <DialogDescription>
+              {selectedLogs?.startTime
+                ? `Run started ${formatCronDateTime(selectedLogs.startTime)}`
+                : "Run logs"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border bg-muted/40 p-3 max-h-[60vh] overflow-auto font-mono text-xs space-y-1">
+            {((selectedLogs?.metadata as MicrosoftSyncMetadata | undefined)?.logs || []).map(
+              (log, index) => (
+                <div key={`${log.at}-${index}`} className="flex gap-2">
+                  <span className="text-muted-foreground shrink-0">
+                    {log.at
+                      ? new Date(log.at).toLocaleTimeString(undefined, {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })
+                      : ""}
+                  </span>
+                  <span className="break-all">{log.message}</span>
+                </div>
+              ),
+            )}
           </div>
         </DialogContent>
       </Dialog>
