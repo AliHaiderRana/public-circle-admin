@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ComponentType, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { isSuperAdminDlqCron } from "@/lib/dlq-access";
@@ -40,9 +40,7 @@ import {
   Calendar,
   Activity,
   Database,
-  Timer,
   Info,
-  FileText,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -64,9 +62,12 @@ import {
   formatCronDateTime,
   formatCronDuration,
   formatCronElapsed,
+  resolveCronDurationMs,
   getCronScheduleDescription,
 } from "@/lib/cron-display-format";
 import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface CronDetails {
   name: string;
@@ -116,11 +117,50 @@ interface HistoryItem {
   createdAt: string;
 }
 
-interface HistoryData {
-  history: HistoryItem[];
-  totalCount: number;
-  page: number;
-  totalPages: number;
+function PageLoader({ label = "Loading…" }: { label?: string }) {
+  return (
+    <div className="flex min-h-[calc(100vh-8rem)] flex-col items-center justify-center gap-3">
+      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <p className="text-sm text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+function OverviewStat({
+  icon: Icon,
+  label,
+  value,
+  hint,
+  iconClassName,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: ReactNode;
+  hint?: ReactNode;
+  iconClassName?: string;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
+            <Icon className={cn("size-4 text-muted-foreground", iconClassName)} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-muted-foreground">{label}</p>
+            <div className="mt-0.5 text-sm font-semibold leading-snug break-words">
+              {value}
+            </div>
+            {hint ? (
+              <div className="mt-0.5 text-[11px] text-muted-foreground break-words">
+                {hint}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function CronDetailPage() {
@@ -138,6 +178,8 @@ export default function CronDetailPage() {
   const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [failedCount, setFailedCount] = useState(0);
+  const [successCount, setSuccessCount] = useState(0);
   const [selectedError, setSelectedError] = useState<HistoryItem | null>(null);
   const [selectedDiskDetails, setSelectedDiskDetails] =
     useState<HistoryItem | null>(null);
@@ -147,6 +189,7 @@ export default function CronDetailPage() {
     text: string;
     type: "success" | "error" | "info";
   } | null>(null);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   const fetchCronDetails = async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -182,6 +225,8 @@ export default function CronDetailPage() {
         setHistory(data.history || []);
         setTotalPages(data.totalPages || 1);
         setTotalCount(data.totalCount || 0);
+        setFailedCount(data.failedCount || 0);
+        setSuccessCount(data.successCount || 0);
       }
     } catch (error) {
       console.error("Failed to load history:", error);
@@ -196,8 +241,18 @@ export default function CronDetailPage() {
       return;
     }
 
-    fetchCronDetails();
-    fetchHistory();
+    let cancelled = false;
+    (async () => {
+      await Promise.all([
+        fetchCronDetails({ silent: initialLoadDone }),
+        fetchHistory({ silent: initialLoadDone }),
+      ]);
+      if (!cancelled) setInitialLoadDone(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [cronName, page, pageSize, authLoading, user, router]);
 
   const hasRunningJob =
@@ -235,7 +290,6 @@ export default function CronDetailPage() {
           text: `${cronName} triggered successfully`,
           type: "success",
         });
-        // Refresh details and history
         setTimeout(() => {
           fetchCronDetails({ silent: true });
           fetchHistory({ silent: true });
@@ -253,36 +307,27 @@ export default function CronDetailPage() {
     }
   };
 
-  if (authLoading || (isSuperAdminDlqCron(cronName) && !user?.isSuperAdmin)) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
+  const pageLoading =
+    authLoading ||
+    (isSuperAdminDlqCron(cronName) && !user?.isSuperAdmin) ||
+    (!initialLoadDone && (loading || historyLoading));
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+  if (pageLoading) {
+    return <PageLoader label="Loading cron details…" />;
   }
 
   if (!cron) {
     return (
       <div className="space-y-6">
-        <Button variant="outline" onClick={() => router.back()}>
+        <Button variant="outline" size="sm" onClick={() => router.back()}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium text-foreground mb-2">
-              Cron Not Found
-            </h3>
-            <p className="text-muted-foreground">
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <AlertCircle className="mb-4 h-10 w-10 text-muted-foreground" />
+            <h3 className="mb-1 text-lg font-medium">Cron not found</h3>
+            <p className="text-sm text-muted-foreground">
               The requested cron job could not be found.
             </p>
           </CardContent>
@@ -303,14 +348,14 @@ export default function CronDetailPage() {
     return String(item.recordsUpdated);
   };
 
+  const resolvedSuccessCount =
+    successCount > 0 || failedCount > 0
+      ? successCount
+      : Math.max(0, totalCount - failedCount);
   const successRate =
     totalCount > 0
-      ? (
-          (history.filter((h) => h.status === "SUCCESS" && h.endTime).length /
-            Math.max(1, history.filter((h) => h.endTime).length)) *
-          100
-        ).toFixed(1)
-      : "N/A";
+      ? `${((resolvedSuccessCount / totalCount) * 100).toFixed(1)}%`
+      : "—";
 
   const runningItem = history.find((item) => !item.endTime) || null;
   const runningMeta = (runningItem?.metadata || {}) as MicrosoftSyncMetadata;
@@ -323,55 +368,79 @@ export default function CronDetailPage() {
         ? 8
         : 0;
 
+  const lastStatusNode = cron.isRunning ? (
+    <Badge variant="secondary" className="gap-1">
+      <Loader2 className="h-3 w-3 animate-spin" />
+      Running
+    </Badge>
+  ) : cron.lastError ? (
+    <Badge variant="destructive">Failed</Badge>
+  ) : cron.lastRunAt ? (
+    <Badge>Success</Badge>
+  ) : (
+    <Badge variant="secondary">Pending</Badge>
+  );
+
   return (
     <>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col gap-4 xl:flex-row xl:justify-between xl:items-center">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4 min-w-0">
-            <Button variant="outline" onClick={() => router.back()}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
+      <div className="space-y-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="-ml-2 h-8 px-2 text-muted-foreground"
+              onClick={() => router.push("/dashboard/crons")}
+            >
+              <ArrowLeft className="mr-1.5 h-4 w-4" />
+              Cron jobs
             </Button>
-            <div className="min-w-0">
-              <h2 className="text-2xl xl:text-3xl font-bold tracking-tight break-words">
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight break-words">
                 {cron.displayName}
               </h2>
-              <p className="text-muted-foreground break-words">{cron.description}</p>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                {cron.description}
+              </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex shrink-0 flex-wrap gap-2">
             <Button
-              onClick={() => {
-                fetchCronDetails();
-                fetchHistory();
-              }}
+              type="button"
               variant="outline"
+              size="sm"
+              onClick={() => {
+                void fetchCronDetails();
+                void fetchHistory();
+              }}
               disabled={loading || historyLoading}
             >
               <RefreshCw
-                className={`mr-2 h-4 w-4 ${
-                  loading || historyLoading ? "animate-spin" : ""
-                }`}
+                className={cn(
+                  "mr-2 h-4 w-4",
+                  (loading || historyLoading) && "animate-spin",
+                )}
               />
               Refresh
             </Button>
-            <Button onClick={triggerCron} disabled={triggering || hasRunningJob}>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void triggerCron()}
+              disabled={triggering || hasRunningJob}
+            >
               {triggering ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Play className="mr-2 h-4 w-4" />
               )}
-              Trigger Now
+              Trigger now
             </Button>
           </div>
         </div>
 
-        {/* Message */}
-        {message && (
-          <Alert
-            variant={message.type === "error" ? "destructive" : "default"}
-          >
+        {message ? (
+          <Alert variant={message.type === "error" ? "destructive" : "default"}>
             {message.type === "success" ? (
               <CheckCircle2 className="h-4 w-4" />
             ) : message.type === "error" ? (
@@ -381,127 +450,80 @@ export default function CronDetailPage() {
             )}
             <AlertDescription>{message.text}</AlertDescription>
           </Alert>
-        )}
+        ) : null}
 
-        {/* Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Schedule
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <div className="min-w-0">
-                  <div className="font-mono text-sm font-bold break-all">
-                    {cron.schedule || "Not scheduled"}
-                  </div>
-                  <div className="text-xs text-muted-foreground break-words">
-                    {getCronScheduleDescription(cron.schedule)}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <OverviewStat
+            icon={Clock}
+            label="Schedule"
+            value={
+              <span className="font-mono text-sm">
+                {cron.schedule || "Not scheduled"}
+              </span>
+            }
+            hint={getCronScheduleDescription(cron.schedule)}
+          />
+          <OverviewStat
+            icon={Calendar}
+            label="Last run"
+            value={formatCronDateTime(cron.lastRunAt)}
+            hint={`Duration ${formatCronDuration(cron.lastDurationMs)}`}
+          />
+          <OverviewStat
+            icon={cron.isRunning ? Loader2 : cron.lastError ? XCircle : CheckCircle2}
+            iconClassName={cron.isRunning ? "animate-spin" : undefined}
+            label="Last status"
+            value={lastStatusNode}
+            hint={
+              cron.isRunning && runningItem
+                ? `${formatCronElapsed(runningItem.startTime, now)}${
+                    progressTotal
+                      ? ` · ${progressDone}/${progressTotal} companies`
+                      : ""
+                  }`
+                : cron.lastError && !cron.isRunning
+                  ? cron.lastError
+                  : undefined
+            }
+          />
+          <OverviewStat
+            icon={Database}
+            label={isDiskMaintenance ? "Space reclaimed" : "Records updated"}
+            value={
+              isDiskMaintenance
+                ? formatReclaimedKb(cron.lastRecordsUpdated)
+                : cron.lastRecordsUpdated.toLocaleString()
+            }
+            hint="Last run"
+          />
+        </div>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Last Run
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <div>
-                  <div className="text-sm font-bold">
-                    {formatCronDateTime(cron.lastRunAt)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Duration: {formatCronDuration(cron.lastDurationMs)}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Last Status
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2">
-                {cron.isRunning ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    <div>
-                      <Badge variant="secondary">Running</Badge>
-                      {runningItem ? (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {formatCronElapsed(runningItem.startTime, now)}
-                          {progressTotal
-                            ? ` · ${progressDone}/${progressTotal} companies`
-                            : ""}
-                        </p>
-                      ) : null}
-                    </div>
-                  </>
-                ) : cron.lastError ? (
-                  <>
-                    <XCircle className="h-4 w-4 text-red-500" />
-                    <Badge variant="destructive">Failed</Badge>
-                  </>
-                ) : cron.lastRunAt ? (
-                  <>
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    <Badge>Success</Badge>
-                  </>
-                ) : (
-                  <>
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <Badge variant="secondary">Pending</Badge>
-                  </>
-                )}
-              </div>
-              {cron.lastError && !cron.isRunning && (
-                <p className="text-xs text-destructive mt-2 truncate">
-                  {cron.lastError}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {isDiskMaintenance ? "Space Reclaimed" : "Records Updated"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2">
-                <Database className="h-4 w-4 text-muted-foreground" />
-                <div>
-                  <div className="text-2xl font-bold">
-                    {isDiskMaintenance
-                      ? formatReclaimedKb(cron.lastRecordsUpdated)
-                      : cron.lastRecordsUpdated}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Last run</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-3 gap-3 rounded-lg border bg-card p-3 sm:p-4">
+          <div>
+            <p className="text-xs text-muted-foreground">Total executions</p>
+            <p className="mt-0.5 text-xl font-semibold tabular-nums">
+              {totalCount.toLocaleString()}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Success rate</p>
+            <p className="mt-0.5 text-xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+              {successRate}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Failed</p>
+            <p className="mt-0.5 text-xl font-semibold tabular-nums text-red-600 dark:text-red-400">
+              {failedCount.toLocaleString()}
+            </p>
+          </div>
         </div>
 
         {runningItem && cronName === "microsoftContactsSync" ? (
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Loader2 className="h-5 w-5 animate-spin" />
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Loader2 className="h-4 w-4 animate-spin" />
                 Live progress
               </CardTitle>
               <CardDescription>
@@ -513,39 +535,54 @@ export default function CronDetailPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <Progress value={progressPercent} />
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
                 <div>
                   <div className="text-xs text-muted-foreground">Companies</div>
-                  <div className="font-semibold">
+                  <div className="font-semibold tabular-nums">
                     {progressDone}/{progressTotal || "—"}
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Contacts this run</div>
-                  <div className="font-semibold">
-                    {Number(runningMeta.recordsUpdated || runningItem.recordsUpdated || 0).toLocaleString()}
+                  <div className="text-xs text-muted-foreground">Contacts</div>
+                  <div className="font-semibold tabular-nums">
+                    {Number(
+                      runningMeta.recordsUpdated ||
+                        runningItem.recordsUpdated ||
+                        0,
+                    ).toLocaleString()}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Failed</div>
-                  <div className="font-semibold">{runningMeta.failed || 0}</div>
+                  <div className="font-semibold tabular-nums">
+                    {runningMeta.failed || 0}
+                  </div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Current account</div>
-                  <div className="font-semibold truncate" title={runningMeta.currentAccount || ""}>
-                    {runningMeta.currentAccount || runningMeta.currentCompany || "Starting…"}
+                  <div className="text-xs text-muted-foreground">Current</div>
+                  <div
+                    className="truncate font-semibold"
+                    title={runningMeta.currentAccount || ""}
+                  >
+                    {runningMeta.currentAccount ||
+                      runningMeta.currentCompany ||
+                      "Starting…"}
                   </div>
                 </div>
               </div>
-              <div className="rounded-md border bg-muted/40 p-3 max-h-56 overflow-auto">
-                <div className="text-xs font-medium text-muted-foreground mb-2">Logs</div>
+              <div className="max-h-48 overflow-auto rounded-md border bg-muted/40 p-3">
+                <div className="mb-2 text-xs font-medium text-muted-foreground">
+                  Logs
+                </div>
                 {(runningMeta.logs || []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Waiting for the first log line…</p>
+                  <p className="text-sm text-muted-foreground">
+                    Waiting for the first log line…
+                  </p>
                 ) : (
                   <div className="space-y-1 font-mono text-xs">
                     {[...(runningMeta.logs || [])].slice(-20).map((log, index) => (
                       <div key={`${log.at}-${index}`} className="flex gap-2">
-                        <span className="text-muted-foreground shrink-0">
+                        <span className="shrink-0 text-muted-foreground">
                           {log.at
                             ? new Date(log.at).toLocaleTimeString(undefined, {
                                 hour: "2-digit",
@@ -564,171 +601,122 @@ export default function CronDetailPage() {
           </Card>
         ) : null}
 
-        {/* Statistics Card */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5" />
-              Execution Statistics
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <div className="text-sm text-muted-foreground mb-1">
-                  Total Executions
-                </div>
-                <div className="text-2xl font-bold">{totalCount}</div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground mb-1">
-                  Success Rate
-                </div>
-                <div className="text-2xl font-bold text-green-600">
-                  {typeof successRate === "string" && successRate !== "N/A"
-                    ? `${successRate}%`
-                    : successRate}
-                </div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground mb-1">
-                  Failed Executions
-                </div>
-                <div className="text-2xl font-bold text-red-600">
-                  {history.filter((h) => h.status === "FAILED").length}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Execution History */}
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <div>
-                <CardTitle>Execution History</CardTitle>
+                <CardTitle className="text-base">Execution history</CardTitle>
                 <CardDescription>
-                  Showing {history.length} of {totalCount} executions
+                  {totalCount > 0
+                    ? `Showing ${history.length} of ${totalCount} executions`
+                    : "No executions yet"}
                 </CardDescription>
               </div>
+              {historyLoading && initialLoadDone ? (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              ) : null}
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {historyLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            {historyLoading && !history.length ? (
+              <div className="space-y-2 px-6 py-4">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <Skeleton key={index} className="h-10 w-full" />
+                ))}
               </div>
             ) : history.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                <Activity className="h-12 w-12 mb-4 text-muted-foreground/50" />
-                <p>No execution history found</p>
+              <div className="flex flex-col items-center justify-center py-14 text-muted-foreground">
+                <Activity className="mb-3 h-10 w-10 text-muted-foreground/40" />
+                <p className="text-sm">No execution history found</p>
               </div>
             ) : (
               <>
-                <Table className="table-fixed">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[32%]">Start Time</TableHead>
-                      <TableHead className="w-[16%]">Duration</TableHead>
-                      <TableHead className="w-[12%]">
-                        {isDiskMaintenance ? "Reclaimed" : "Records"}
-                      </TableHead>
-                      <TableHead className="w-[18%]">Status</TableHead>
-                      <TableHead className="w-[22%]">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {history.map((item) => (
-                      <TableRow key={item._id}>
-                        <TableCell className="whitespace-normal">
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm">
-                              {formatCronDateTime(item.startTime)}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Timer className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm font-mono">
-                              {item.endTime
-                                ? formatCronDuration(item.duration)
-                                : formatCronElapsed(item.startTime, now)}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Database className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm">
-                              {formatHistoryMetric(item)}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {!item.endTime ? (
-                            <Badge variant="secondary">
-                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                              Running
-                            </Badge>
-                          ) : item.status === "SUCCESS" ? (
-                            <Badge>
-                              <CheckCircle2 className="mr-1 h-3 w-3" />
-                              Success
-                            </Badge>
-                          ) : (
-                            <Badge variant="destructive">
-                              <XCircle className="mr-1 h-3 w-3" />
-                              Failed
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="whitespace-normal">
-                          <div className="flex flex-wrap gap-2">
-                            {isDiskMaintenance && item.metadata ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setSelectedDiskDetails(item)}
-                              >
-                                <Info className="h-3 w-3 xl:mr-1" />
-                                <span className="hidden xl:inline">Details</span>
-                              </Button>
-                            ) : null}
-                            {Array.isArray((item.metadata as MicrosoftSyncMetadata | undefined)?.logs) &&
-                            ((item.metadata as MicrosoftSyncMetadata).logs?.length || 0) > 0 ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setSelectedLogs(item)}
-                              >
-                                <FileText className="h-3 w-3 xl:mr-1" />
-                                <span className="hidden xl:inline">Logs</span>
-                              </Button>
-                            ) : null}
-                            {item.error && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setSelectedError(item)}
-                              >
-                                <AlertCircle className="h-3 w-3 xl:mr-1" />
-                                <span className="hidden xl:inline">View Error</span>
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="pl-6">Start time</TableHead>
+                        <TableHead>Duration</TableHead>
+                        <TableHead>
+                          {isDiskMaintenance ? "Reclaimed" : "Records"}
+                        </TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="pr-6">Actions</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {history.map((item) => (
+                        <TableRow key={item._id}>
+                          <TableCell className="pl-6 text-sm">
+                            {formatCronDateTime(item.startTime)}
+                          </TableCell>
+                          <TableCell className="font-mono text-sm tabular-nums">
+                            {item.endTime
+                              ? formatCronDuration(resolveCronDurationMs(item))
+                              : formatCronElapsed(item.startTime, now)}
+                          </TableCell>
+                          <TableCell className="text-sm tabular-nums">
+                            {formatHistoryMetric(item)}
+                          </TableCell>
+                          <TableCell>
+                            {!item.endTime ? (
+                              <Badge variant="secondary" className="gap-1">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Running
+                              </Badge>
+                            ) : item.status === "SUCCESS" ? (
+                              <Badge>Success</Badge>
+                            ) : (
+                              <Badge variant="destructive">Failed</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="pr-6">
+                            <div className="flex flex-wrap gap-2">
+                              {isDiskMaintenance && item.metadata ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSelectedDiskDetails(item)}
+                                >
+                                  Details
+                                </Button>
+                              ) : null}
+                              {Array.isArray(
+                                (item.metadata as MicrosoftSyncMetadata | undefined)
+                                  ?.logs,
+                              ) &&
+                              ((item.metadata as MicrosoftSyncMetadata).logs
+                                ?.length || 0) > 0 ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSelectedLogs(item)}
+                                >
+                                  Logs
+                                </Button>
+                              ) : null}
+                              {item.error ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSelectedError(item)}
+                                >
+                                  View error
+                                </Button>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
 
-                {totalCount > 0 && (
-                  <div className="flex items-center justify-between px-6 py-4 border-t">
+                {totalCount > 0 ? (
+                  <div className="flex items-center justify-between border-t px-6 py-4">
                     <div className="text-sm text-muted-foreground">
-                      Page {page} of {totalPages} ({totalCount} total)
+                      Page {page} of {Math.max(totalPages, 1)} ({totalCount}{" "}
+                      total)
                     </div>
                     <div className="flex items-center gap-2">
                       <Select
@@ -761,21 +749,20 @@ export default function CronDetailPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => setPage(page + 1)}
-                        disabled={page === totalPages}
+                        disabled={page >= totalPages}
                       >
                         Next
                         <ChevronRight size={16} />
                       </Button>
                     </div>
                   </div>
-                )}
+                ) : null}
               </>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Error Dialog */}
       <Dialog
         open={selectedError !== null}
         onOpenChange={(open) => !open && setSelectedError(null)}
@@ -784,7 +771,7 @@ export default function CronDetailPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <XCircle className="h-5 w-5 text-red-500" />
-              Execution Error Details
+              Execution error details
             </DialogTitle>
             <DialogDescription>
               Error occurred at {formatCronDateTime(selectedError?.startTime)}
@@ -792,34 +779,34 @@ export default function CronDetailPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <div className="text-sm font-medium mb-2">Error Message:</div>
-              <div className="h-[200px] w-full rounded-md border p-4 overflow-auto">
-                <pre className="text-sm text-destructive whitespace-pre-wrap font-mono">
+              <div className="mb-2 text-sm font-medium">Error message</div>
+              <div className="h-[200px] w-full overflow-auto rounded-md border p-4">
+                <pre className="whitespace-pre-wrap font-mono text-sm text-destructive">
                   {selectedError?.error || "No error message available"}
                 </pre>
               </div>
             </div>
-            {selectedError?.errorStack && (
+            {selectedError?.errorStack ? (
               <div>
-                <div className="text-sm font-medium mb-2">Stack Trace:</div>
-                <div className="h-[300px] w-full rounded-md border p-4 bg-neutral-900 overflow-auto">
-                  <pre className="text-xs text-neutral-100 whitespace-pre-wrap font-mono">
+                <div className="mb-2 text-sm font-medium">Stack trace</div>
+                <div className="h-[300px] w-full overflow-auto rounded-md border bg-neutral-900 p-4">
+                  <pre className="whitespace-pre-wrap font-mono text-xs text-neutral-100">
                     {selectedError.errorStack}
                   </pre>
                 </div>
               </div>
-            )}
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+            ) : null}
+            <div className="grid grid-cols-2 gap-4 border-t pt-4">
               <div>
-                <div className="text-xs text-muted-foreground mb-1">Start Time</div>
+                <div className="mb-1 text-xs text-muted-foreground">Start time</div>
                 <div className="text-sm">
                   {formatCronDateTime(selectedError?.startTime)}
                 </div>
               </div>
               <div>
-                <div className="text-xs text-muted-foreground mb-1">Duration</div>
+                <div className="mb-1 text-xs text-muted-foreground">Duration</div>
                 <div className="text-sm">
-                  {formatCronDuration(selectedError?.duration)}
+                  {formatCronDuration(resolveCronDurationMs(selectedError))}
                 </div>
               </div>
             </div>
@@ -828,7 +815,7 @@ export default function CronDetailPage() {
       </Dialog>
 
       <Dialog open={selectedLogs !== null} onOpenChange={() => setSelectedLogs(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Sync logs</DialogTitle>
             <DialogDescription>
@@ -837,23 +824,24 @@ export default function CronDetailPage() {
                 : "Run logs"}
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-md border bg-muted/40 p-3 max-h-[60vh] overflow-auto font-mono text-xs space-y-1">
-            {((selectedLogs?.metadata as MicrosoftSyncMetadata | undefined)?.logs || []).map(
-              (log, index) => (
-                <div key={`${log.at}-${index}`} className="flex gap-2">
-                  <span className="text-muted-foreground shrink-0">
-                    {log.at
-                      ? new Date(log.at).toLocaleTimeString(undefined, {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          second: "2-digit",
-                        })
-                      : ""}
-                  </span>
-                  <span className="break-all">{log.message}</span>
-                </div>
-              ),
-            )}
+          <div className="max-h-[60vh] space-y-1 overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-xs">
+            {(
+              (selectedLogs?.metadata as MicrosoftSyncMetadata | undefined)?.logs ||
+              []
+            ).map((log, index) => (
+              <div key={`${log.at}-${index}`} className="flex gap-2">
+                <span className="shrink-0 text-muted-foreground">
+                  {log.at
+                    ? new Date(log.at).toLocaleTimeString(undefined, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })
+                    : ""}
+                </span>
+                <span className="break-all">{log.message}</span>
+              </div>
+            ))}
           </div>
         </DialogContent>
       </Dialog>
