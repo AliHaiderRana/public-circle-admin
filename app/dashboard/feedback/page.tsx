@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -33,41 +34,133 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationNext,
-  PaginationPrevious,
-} from '@/components/ui/pagination';
-import {
   FEEDBACK_STATUS,
   FEEDBACK_STATUS_LABELS,
   FEEDBACK_TYPE,
   FEEDBACK_TYPE_LABELS,
 } from '@/lib/constants';
-import { Filter, Loader2, MessageSquarePlus, Search, Star } from 'lucide-react';
-
-type FeedbackItem = {
-  _id: string;
-  type: string;
-  message: string;
-  rating?: number | null;
-  pagePath?: string;
-  status: string;
-  adminNotes?: string;
-  createdAt: string;
-  companyId?: { _id?: string; name?: string } | null;
-  userId?: {
-    _id?: string;
-    firstName?: string;
-    lastName?: string;
-    emailAddress?: string;
-  } | null;
-};
+import type { FeedbackItem } from '@/lib/feedback.types';
+import { cn } from '@/lib/utils';
+import {
+  ArrowUpRight,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  Loader2,
+  MessageSquarePlus,
+  RefreshCw,
+  Search,
+  Star,
+} from 'lucide-react';
 
 function formatUserName(user?: FeedbackItem['userId']) {
   const name = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
   return name || user?.emailAddress || 'Unknown user';
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return {
+    date: date.toLocaleDateString(),
+    time: date.toLocaleTimeString(),
+    full: `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`,
+  };
+}
+
+function DateTimeDisplay({
+  value,
+  compact = false,
+}: {
+  value?: string | null;
+  compact?: boolean;
+}) {
+  const formatted = formatDateTime(value);
+  if (!formatted) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  if (compact) {
+    return <span>{formatted.full}</span>;
+  }
+  return (
+    <>
+      <div>{formatted.date}</div>
+      <div className="text-xs text-muted-foreground">{formatted.time}</div>
+    </>
+  );
+}
+
+function ExternalEntityLink({
+  href,
+  children,
+  className,
+}: {
+  href: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Opens in a new tab"
+      className={cn(
+        'inline-flex max-w-full items-center gap-1 font-medium text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        className,
+      )}
+      onClick={(event: MouseEvent) => {
+        event.stopPropagation();
+      }}
+    >
+      <span className="truncate">{children}</span>
+      <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+      <span className="sr-only">(opens in a new tab)</span>
+    </Link>
+  );
+}
+
+function DetailField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 text-sm">
+      <dt className="pt-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="min-w-0 break-words text-foreground">{children}</dd>
+    </div>
+  );
+}
+
+function entityId(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === 'string' || typeof value === 'number') {
+    const id = String(value).trim();
+    return id || null;
+  }
+  if (typeof value === 'object' && value !== null && 'toString' in value) {
+    const id = String((value as { toString(): string }).toString()).trim();
+    if (id && id !== '[object Object]') return id;
+  }
+  return null;
+}
+
+function companyHref(company?: FeedbackItem['companyId'] | null) {
+  const id = entityId(company?._id);
+  return id ? `/dashboard/companies/${id}` : null;
+}
+
+function userHref(user?: FeedbackItem['userId'] | null) {
+  const email = user?.emailAddress?.trim();
+  if (email) return `/dashboard/users?search=${encodeURIComponent(email)}`;
+  const id = entityId(user?._id);
+  return id ? `/dashboard/users?search=${encodeURIComponent(id)}` : null;
 }
 
 function getStatusBadge(status: string) {
@@ -225,24 +318,43 @@ export default function FeedbackPage() {
     setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
+  const hasActiveFilters = Boolean(searchTerm.trim() || statusFilter || typeFilter);
   const newCount = items.filter((item) => item.status === FEEDBACK_STATUS.NEW).length;
+  const totalPages = Math.max(pagination.pages, 1);
+
+  const handlePageChange = (nextPage: number) => {
+    if (nextPage < 1 || nextPage > totalPages) return;
+    setPagination((prev) => ({ ...prev, page: nextPage }));
+  };
 
   return (
     <div className="space-y-8">
-      <div className="flex items-end justify-between">
+      <div className="flex items-end justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Product Feedback</h2>
           <p className="text-muted-foreground">
             Review feature requests, bugs, and product comments from customer accounts.
           </p>
         </div>
-        <div className="flex items-center gap-4 rounded-lg border bg-card p-2 text-sm text-muted-foreground">
-          <div className="flex items-center gap-1 px-2">
-            <Filter size={16} />
-            <span className="font-bold text-foreground">{pagination.total}</span> Total
-          </div>
-          <div className="flex items-center gap-1 border-l px-2">
-            <span className="font-bold text-foreground">{newCount}</span> New on this page
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void fetchItems()}
+            disabled={loading}
+          >
+            <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />
+            Refresh
+          </Button>
+          <div className="flex items-center gap-4 rounded-lg border bg-card p-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-1 px-2">
+              <Filter size={16} />
+              <span className="font-bold text-foreground">{pagination.total}</span> Total
+            </div>
+            <div className="flex items-center gap-1 border-l px-2">
+              <span className="font-bold text-foreground">{newCount}</span> New on this page
+            </div>
           </div>
         </div>
       </div>
@@ -319,13 +431,16 @@ export default function FeedbackPage() {
                 </SelectContent>
               </Select>
 
-              <Button variant="outline" size="sm" onClick={clearFilters}>
-                Clear filters
-              </Button>
+              {hasActiveFilters ? (
+                <Button variant="outline" size="sm" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              ) : null}
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -336,6 +451,7 @@ export default function FeedbackPage() {
                 <TableHead>Rating</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Submitted</TableHead>
+                <TableHead>Updated</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -363,17 +479,26 @@ export default function FeedbackPage() {
                     <TableCell>
                       <Skeleton className="h-4 w-[100px]" />
                     </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-[100px]" />
+                    </TableCell>
                   </TableRow>
                 ))
               ) : items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-48 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="h-48 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <MessageSquarePlus size={40} className="text-muted-foreground/50" />
-                      <p>No feedback found matching your filters.</p>
-                      <Button variant="outline" size="sm" onClick={clearFilters}>
-                        Clear filters
-                      </Button>
+                      <p>
+                        {hasActiveFilters
+                          ? 'No feedback found matching your filters.'
+                          : 'No product feedback yet.'}
+                      </p>
+                      {hasActiveFilters ? (
+                        <Button variant="outline" size="sm" onClick={clearFilters}>
+                          Clear filters
+                        </Button>
+                      ) : null}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -392,15 +517,35 @@ export default function FeedbackPage() {
                       onClick={() => openDetails(item)}
                     >
                       <TableCell className="pl-6 font-medium">
-                        {item.companyId?.name || 'Unknown Company'}
+                        {(() => {
+                          const href = companyHref(item.companyId);
+                          const label = item.companyId?.name || 'Unknown Company';
+                          return href ? (
+                            <ExternalEntityLink href={href}>{label}</ExternalEntityLink>
+                          ) : (
+                            label
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
-                        <div className="text-sm">{formatUserName(item.userId)}</div>
-                        {item.userId?.emailAddress && (
-                          <div className="text-xs text-muted-foreground">
-                            {item.userId.emailAddress}
-                          </div>
-                        )}
+                        {(() => {
+                          const href = userHref(item.userId);
+                          const name = formatUserName(item.userId);
+                          return (
+                            <>
+                              {href ? (
+                                <ExternalEntityLink href={href}>{name}</ExternalEntityLink>
+                              ) : (
+                                <div className="text-sm font-medium">{name}</div>
+                              )}
+                              {item.userId?.emailAddress ? (
+                                <div className="text-xs text-muted-foreground">
+                                  {item.userId.emailAddress}
+                                </div>
+                              ) : null}
+                            </>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">
@@ -422,10 +567,10 @@ export default function FeedbackPage() {
                       </TableCell>
                       <TableCell>{getStatusBadge(item.status)}</TableCell>
                       <TableCell className="text-sm">
-                        <div>{new Date(item.createdAt).toLocaleDateString()}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(item.createdAt).toLocaleTimeString()}
-                        </div>
+                        <DateTimeDisplay value={item.createdAt} />
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        <DateTimeDisplay value={item.updatedAt} />
                       </TableCell>
                     </TableRow>
                   );
@@ -433,11 +578,12 @@ export default function FeedbackPage() {
               )}
             </TableBody>
           </Table>
+          </div>
 
-          {pagination.pages > 1 && (
+          {pagination.total > 0 && (
             <div className="flex items-center justify-between border-t px-6 py-4">
               <div className="text-sm text-muted-foreground">
-                Page {pagination.page} of {pagination.pages} ({pagination.total} total)
+                Page {pagination.page} of {totalPages} ({pagination.total} total)
               </div>
               <div className="flex items-center gap-2">
                 <Select
@@ -460,40 +606,24 @@ export default function FeedbackPage() {
                     <SelectItem value="50">50</SelectItem>
                   </SelectContent>
                 </Select>
-                <Pagination className="mx-0 w-auto">
-                  <PaginationContent>
-                    <PaginationItem>
-                      <PaginationPrevious
-                        href="#"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          if (pagination.page > 1) {
-                            setPagination((prev) => ({ ...prev, page: prev.page - 1 }));
-                          }
-                        }}
-                        aria-disabled={pagination.page === 1}
-                        className={pagination.page === 1 ? 'pointer-events-none opacity-50' : ''}
-                      />
-                    </PaginationItem>
-                    <PaginationItem>
-                      <PaginationNext
-                        href="#"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          if (pagination.page < pagination.pages) {
-                            setPagination((prev) => ({ ...prev, page: prev.page + 1 }));
-                          }
-                        }}
-                        aria-disabled={pagination.page === pagination.pages}
-                        className={
-                          pagination.page === pagination.pages
-                            ? 'pointer-events-none opacity-50'
-                            : ''
-                        }
-                      />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(pagination.page - 1)}
+                  disabled={pagination.page === 1}
+                >
+                  <ChevronLeft size={16} />
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(pagination.page + 1)}
+                  disabled={pagination.page >= totalPages}
+                >
+                  Next
+                  <ChevronRight size={16} />
+                </Button>
               </div>
             </div>
           )}
@@ -510,28 +640,76 @@ export default function FeedbackPage() {
           <DialogHeader>
             <DialogTitle>Feedback details</DialogTitle>
             <DialogDescription>
-              {selected?.companyId?.name || 'Unknown company'} · {formatUserName(selected?.userId)}
+              Review this submission and update its status or notes.
             </DialogDescription>
           </DialogHeader>
 
           {selected && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">
-                  {FEEDBACK_TYPE_LABELS[selected.type] || selected.type}
-                </Badge>
-                {getStatusBadge(selected.status)}
-                {selected.rating ? (
-                  <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-                    <Star className="h-3.5 w-3.5 fill-current" />
-                    {selected.rating}/5
-                  </span>
+            <div className="space-y-5">
+              <dl className="space-y-3 rounded-lg border bg-muted/30 p-4">
+                <DetailField label="Company">
+                  {(() => {
+                    const href = companyHref(selected.companyId);
+                    const label = selected.companyId?.name || 'Unknown company';
+                    return href ? (
+                      <ExternalEntityLink href={href}>{label}</ExternalEntityLink>
+                    ) : (
+                      <span className="font-medium">{label}</span>
+                    );
+                  })()}
+                </DetailField>
+                <DetailField label="User">
+                  {(() => {
+                    const href = userHref(selected.userId);
+                    const name = formatUserName(selected.userId);
+                    return (
+                      <div className="space-y-0.5">
+                        {href ? (
+                          <ExternalEntityLink href={href}>{name}</ExternalEntityLink>
+                        ) : (
+                          <span className="font-medium">{name}</span>
+                        )}
+                        {selected.userId?.emailAddress ? (
+                          <p className="text-xs text-muted-foreground">
+                            {selected.userId.emailAddress}
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
+                </DetailField>
+                <DetailField label="Type">
+                  <Badge variant="outline">
+                    {FEEDBACK_TYPE_LABELS[selected.type] || selected.type}
+                  </Badge>
+                </DetailField>
+                <DetailField label="Rating">
+                  {selected.rating ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Star className="h-3.5 w-3.5 fill-current" />
+                      {selected.rating}/5
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </DetailField>
+                <DetailField label="Message">
+                  <p className="whitespace-pre-wrap">{selected.message}</p>
+                </DetailField>
+                {selected.pagePath ? (
+                  <DetailField label="Page">
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {selected.pagePath}
+                    </span>
+                  </DetailField>
                 ) : null}
-              </div>
-              <p className="whitespace-pre-wrap text-sm">{selected.message}</p>
-              {selected.pagePath ? (
-                <p className="text-xs text-muted-foreground">Page: {selected.pagePath}</p>
-              ) : null}
+                <DetailField label="Submitted">
+                  <DateTimeDisplay value={selected.createdAt} compact />
+                </DetailField>
+                <DetailField label="Updated">
+                  <DateTimeDisplay value={selected.updatedAt} compact />
+                </DetailField>
+              </dl>
 
               <div className="space-y-2">
                 <Label htmlFor="feedback-status">Status</Label>

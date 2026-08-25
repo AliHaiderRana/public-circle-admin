@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -67,11 +68,13 @@ import { startImpersonation } from "@/lib/impersonate-client";
 
 export default function UsersPage() {
   const { token: adminToken } = useAuth();
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams.get("search")?.trim() || "";
   const [users, setUsers] = useState<any[]>([]);
   const [companies, setCompanies] = useState<Array<{ _id: string; name: string; logo?: string }>>([]);
   const [loading, setLoading] = useState(true);
-  const [searchInput, setSearchInput] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
   const [companyFilter, setCompanyFilter] = useState("all");
   const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
@@ -92,6 +95,13 @@ export default function UsersPage() {
     }, 500);
     return () => clearTimeout(timer);
   }, [searchInput]);
+
+  useEffect(() => {
+    const nextSearch = searchParams.get("search")?.trim() || "";
+    setSearchInput(nextSearch);
+    setSearchTerm(nextSearch);
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  }, [searchParams]);
 
   useEffect(() => {
     fetchUsers();

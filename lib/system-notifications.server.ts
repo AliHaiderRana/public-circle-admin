@@ -5,6 +5,7 @@ import {
   serializeAdminRecipient,
   serializeSystemNotificationSettings,
   computeSupportRecipients,
+  computeFeedbackRecipients,
   computeDlqRecipients,
   computeDbRecipients,
   type AdminNotificationPreferenceUpdate,
@@ -14,6 +15,7 @@ import {
 export type SystemNotificationsPayload = SystemNotificationSettings & {
   adminRecipients: ReturnType<typeof serializeAdminRecipient>[];
   supportRecipients: ReturnType<typeof computeSupportRecipients>;
+  feedbackRecipients: ReturnType<typeof computeFeedbackRecipients>;
   dlqRecipients: ReturnType<typeof computeDlqRecipients>;
   dbRecipients: ReturnType<typeof computeDbRecipients>;
   /** @deprecated Use supportRecipients */
@@ -23,7 +25,7 @@ export type SystemNotificationsPayload = SystemNotificationSettings & {
 async function loadAdminRecipients() {
   const admins = await AdminUser.find({})
     .select(
-      'email name isSuperAdmin notificationPreferences.supportEmail notificationPreferences.supportAlertEmail notificationPreferences.dlqAlertEmail notificationPreferences.dbAlertEmail',
+      'email name isSuperAdmin notificationPreferences.supportEmail notificationPreferences.supportAlertEmail notificationPreferences.feedbackAlertEmail notificationPreferences.dlqAlertEmail notificationPreferences.dbAlertEmail',
     )
     .sort({ isSuperAdmin: -1, email: 1 })
     .lean();
@@ -36,6 +38,10 @@ function buildPayload(
   adminRecipients: ReturnType<typeof serializeAdminRecipient>[],
 ): SystemNotificationsPayload {
   const supportRecipients = computeSupportRecipients({
+    ...settings,
+    adminRecipients,
+  });
+  const feedbackRecipients = computeFeedbackRecipients({
     ...settings,
     adminRecipients,
   });
@@ -52,6 +58,7 @@ function buildPayload(
     ...settings,
     adminRecipients,
     supportRecipients,
+    feedbackRecipients,
     dlqRecipients,
     dbRecipients,
     teamRecipients: supportRecipients,
@@ -73,13 +80,20 @@ export async function getSystemNotifications(): Promise<SystemNotificationsPaylo
 
 export async function updateSystemNotifications(body: {
   supportSendAlertEmail?: boolean;
+  feedbackSendAlertEmail?: boolean;
   dlqSendAlertEmail?: boolean;
   dbSendAlertEmail?: boolean;
   adminPreferences?: AdminNotificationPreferenceUpdate[];
 }) {
   await dbConnect();
 
-  const { supportSendAlertEmail, dlqSendAlertEmail, dbSendAlertEmail, adminPreferences } = body;
+  const {
+    supportSendAlertEmail,
+    feedbackSendAlertEmail,
+    dlqSendAlertEmail,
+    dbSendAlertEmail,
+    adminPreferences,
+  } = body;
 
   let config = await AppConfig.findOne();
   if (!config) {
@@ -88,6 +102,9 @@ export async function updateSystemNotifications(body: {
 
   if (typeof supportSendAlertEmail === 'boolean') {
     config.supportSendAlertEmail = supportSendAlertEmail;
+  }
+  if (typeof feedbackSendAlertEmail === 'boolean') {
+    config.feedbackSendAlertEmail = feedbackSendAlertEmail;
   }
   if (typeof dlqSendAlertEmail === 'boolean') {
     config.dlqSendAlertEmail = dlqSendAlertEmail;
@@ -109,6 +126,10 @@ export async function updateSystemNotifications(body: {
         } else if (typeof pref.notifySupportEmail === 'boolean') {
           update['notificationPreferences.supportEmail'] = pref.notifySupportEmail;
           update['notificationPreferences.supportAlertEmail'] = pref.notifySupportEmail;
+        }
+
+        if (typeof pref.notifyFeedbackAlertEmail === 'boolean') {
+          update['notificationPreferences.feedbackAlertEmail'] = pref.notifyFeedbackAlertEmail;
         }
 
         if (typeof pref.notifyDlqAlertEmail === 'boolean') {

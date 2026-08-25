@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, Bell, CheckCircle2, Database, Mail, MailWarning, XCircle } from 'lucide-react';
+import { Loader2, Bell, CheckCircle2, Database, Mail, MailWarning, MessageSquarePlus, XCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   ConfirmToggleDialog,
@@ -24,6 +24,7 @@ import {
 } from '@/components/ConfirmToggleDialog';
 import {
   computeSupportRecipients,
+  computeFeedbackRecipients,
   computeDlqRecipients,
   computeDbRecipients,
   type AdminRecipient,
@@ -34,6 +35,7 @@ import {
 type SettingsState = SystemNotificationSettings & {
   adminRecipients: AdminRecipient[];
   supportRecipients: TeamRecipient[];
+  feedbackRecipients: TeamRecipient[];
   dlqRecipients: TeamRecipient[];
   dbRecipients: TeamRecipient[];
 };
@@ -138,6 +140,14 @@ export default function SystemNotificationsPage() {
     if (!settings) return [];
     return computeSupportRecipients({
       supportSendAlertEmail: settings.supportSendAlertEmail,
+      adminRecipients: settings.adminRecipients,
+    });
+  }, [settings]);
+
+  const feedbackRecipients = useMemo(() => {
+    if (!settings) return [];
+    return computeFeedbackRecipients({
+      feedbackSendAlertEmail: settings.feedbackSendAlertEmail,
       adminRecipients: settings.adminRecipients,
     });
   }, [settings]);
@@ -273,6 +283,24 @@ export default function SystemNotificationsPage() {
                 }
               />
               <ToggleRow
+                id="feedbackSendAlertEmail"
+                label="Product feedback alerts"
+                description="Notification when a customer submits product feedback."
+                checked={settings.feedbackSendAlertEmail}
+                onRequestChange={(nextValue) =>
+                  requestBooleanToggle({
+                    title: nextValue
+                      ? 'Enable product feedback alert emails?'
+                      : 'Disable product feedback alert emails?',
+                    description: nextValue
+                      ? 'Selected admins can receive product feedback alert emails.'
+                      : 'Product feedback alert emails will stop being sent.',
+                    nextValue,
+                    patchBody: { feedbackSendAlertEmail: nextValue },
+                  })
+                }
+              />
+              <ToggleRow
                 id="dlqSendAlertEmail"
                 label="DLQ alerts"
                 description="Notification when failed outbound campaign emails land in the Dead Letter Queue."
@@ -323,14 +351,16 @@ export default function SystemNotificationsPage() {
           ) : settings.adminRecipients.length === 0 ? (
             <p className="text-sm text-muted-foreground">No admin users found.</p>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Admin</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead className="w-[120px] text-center">Support</TableHead>
-                  <TableHead className="w-[120px] text-center">DLQ</TableHead>
-                  <TableHead className="w-[120px] text-center">DB</TableHead>
+                  <TableHead className="w-[100px] text-center">Support</TableHead>
+                  <TableHead className="w-[100px] text-center">Feedback</TableHead>
+                  <TableHead className="w-[100px] text-center">DLQ</TableHead>
+                  <TableHead className="w-[100px] text-center">DB</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -372,6 +402,31 @@ export default function SystemNotificationsPage() {
                           })
                         }
                         disabled={toggleSaving || !settings.supportSendAlertEmail}
+                      />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Switch
+                        checked={admin.notifyFeedbackAlertEmail}
+                        onCheckedChange={() =>
+                          requestBooleanToggle({
+                            title: admin.notifyFeedbackAlertEmail
+                              ? `Stop feedback alerts for ${admin.email}?`
+                              : `Send feedback alerts to ${admin.email}?`,
+                            description: admin.notifyFeedbackAlertEmail
+                              ? `${admin.email} will no longer receive product feedback alert emails.`
+                              : `${admin.email} will receive product feedback alert emails.`,
+                            nextValue: !admin.notifyFeedbackAlertEmail,
+                            patchBody: {
+                              adminPreferences: [
+                                {
+                                  adminId: admin.id,
+                                  notifyFeedbackAlertEmail: !admin.notifyFeedbackAlertEmail,
+                                },
+                              ],
+                            },
+                          })
+                        }
+                        disabled={toggleSaving || !settings.feedbackSendAlertEmail}
                       />
                     </TableCell>
                     <TableCell className="text-center">
@@ -428,11 +483,12 @@ export default function SystemNotificationsPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
@@ -442,6 +498,18 @@ export default function SystemNotificationsPage() {
           </CardHeader>
           <CardContent>
             <RecipientList recipients={supportRecipients} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <MessageSquarePlus className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-base">Feedback alert recipients</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <RecipientList recipients={feedbackRecipients} />
           </CardContent>
         </Card>
 

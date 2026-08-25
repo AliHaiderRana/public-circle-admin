@@ -11,6 +11,7 @@ import {
   ADMIN_AUDIT_ACTION,
   ADMIN_AUDIT_CATEGORY,
 } from '@/lib/admin-audit';
+import { serializeFeedback } from '@/lib/serialize-feedback.server';
 
 export async function PATCH(
   request: Request,
@@ -56,15 +57,20 @@ export async function PATCH(
     await feedback.save();
 
     const populated = await Feedback.findById(feedback._id)
-      .populate({ path: 'companyId', model: Company, select: 'name' })
+      .populate({ path: 'companyId', model: Company, select: '_id name' })
       .populate({
         path: 'userId',
         model: User,
-        select: 'firstName lastName emailAddress',
+        select: '_id firstName lastName emailAddress',
       })
       .lean();
 
-    const companyForAudit = populated?.companyId as { name?: string } | null | undefined;
+    const serialized = serializeFeedback(populated as Record<string, unknown> | null);
+    if (!serialized) {
+      return NextResponse.json({ error: 'Feedback not found' }, { status: 404 });
+    }
+
+    const companyForAudit = serialized.companyId;
 
     const auditSession = toAdminAuditSession(session);
     if (auditSession && status && previousStatus !== status) {
@@ -83,7 +89,7 @@ export async function PATCH(
       });
     }
 
-    return NextResponse.json(populated);
+    return NextResponse.json(serialized);
   } catch (error) {
     console.error('Error updating product feedback:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
