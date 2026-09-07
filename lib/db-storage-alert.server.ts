@@ -1,6 +1,7 @@
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import dbConnect from '@/lib/db';
 import AppConfig from '@/lib/models/AppConfig';
+import { getAwsCredentials } from '@/lib/aws-credentials';
 import {
   getClusterName,
   getClusterWideStats,
@@ -22,12 +23,10 @@ async function sendDbStorageAlertEmail(
   totalSize: number,
   clusterName: string | null,
 ) {
-  const region = (process.env.AWS_REGION || '').trim() || 'ca-central-1';
-  const accessKeyId = (process.env.AWS_ACCESS_KEY_ID || '').trim();
-  const secretAccessKey = (process.env.AWS_SECRET_ACCESS_KEY || '').trim();
+  const { region, accessKeyId, secretAccessKey } = getAwsCredentials();
 
   if (!accessKeyId || !secretAccessKey) {
-    throw new Error('AWS credentials are missing. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.');
+    throw new Error('AWS credentials are missing. Set S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY.');
   }
 
   const sesClient = new SESClient({ region, credentials: { accessKeyId, secretAccessKey } });
