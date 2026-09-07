@@ -1,4 +1,5 @@
 import { HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getAwsCredentials } from '@/lib/aws-credentials';
 
 /**
  * Sample template files live on the main server bucket, never the admin bucket
@@ -13,13 +14,11 @@ export function resolveTemplateStorage() {
     process.env.PUBLIC_CIRCLE_S3BUCKET ||
     ''
   ).trim();
-  const region = (process.env.AWS_REGION || process.env.S3_REGION || '').trim();
-  const accessKeyId = (process.env.AWS_ACCESS_KEY_ID || '').trim();
-  const secretAccessKey = (process.env.AWS_SECRET_ACCESS_KEY || '').trim();
+  const { region, accessKeyId, secretAccessKey } = getAwsCredentials('');
 
   if (!bucket || !region || !accessKeyId || !secretAccessKey) {
     throw new Error(
-      'Sample template S3 storage is not configured (set TEMPLATE_THUMBNAILS_BUCKET to the server bucket, AWS_REGION, and AWS credentials)',
+      'Sample template S3 storage is not configured (set TEMPLATE_THUMBNAILS_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY)',
     );
   }
 

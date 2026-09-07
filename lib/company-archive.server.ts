@@ -28,6 +28,7 @@ import {
   pauseCompanySubscriptions,
   resumeCompanySubscriptions,
 } from '@/lib/company-deletion.server';
+import { getBackupBucket } from '@/lib/aws-credentials';
 import { setProgress, clearProgress } from '@/lib/archive-progress.server';
 
 /**
@@ -37,8 +38,8 @@ import { setProgress, clearProgress } from '@/lib/archive-progress.server';
  * folder, just companies/<companyId>/.
  */
 function getBackupBucket(): string {
-  const bucket = (process.env.AWS_BACKUP_BUCKET || '').trim();
-  if (!bucket) throw new Error('AWS_BACKUP_BUCKET is not configured');
+  const bucket = getBackupBucket();
+  if (!bucket) throw new Error('BACKUP_BUCKET is not configured');
   return bucket;
 }
 

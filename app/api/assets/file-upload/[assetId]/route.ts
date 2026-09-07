@@ -8,6 +8,7 @@ import {
   ADMIN_AUDIT_CATEGORY,
 } from '@/lib/admin-audit';
 import EditorAsset, { EDITOR_ASSET_STATUS } from '@/lib/models/EditorAsset';
+import { getAwsCredentials, getS3Bucket } from '@/lib/aws-credentials';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -69,14 +70,8 @@ export async function DELETE(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const bucket = (
-    process.env.S3BUCKET ||
-    process.env.AWS_S3_BUCKET ||
-    process.env.TEMPLATE_THUMBNAILS_BUCKET
-  || '').trim();
-  const region = (process.env.AWS_REGION || '').trim() || 'ca-central-1';
-  const accessKeyId = (process.env.AWS_ACCESS_KEY_ID || '').trim();
-  const secretAccessKey = (process.env.AWS_SECRET_ACCESS_KEY || '').trim();
+  const bucket = getS3Bucket();
+  const { region, accessKeyId, secretAccessKey } = getAwsCredentials();
 
   try {
     const { assetId } = await params;

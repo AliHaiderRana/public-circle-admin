@@ -9,6 +9,7 @@ import {
   SESClient,
   type SendDataPoint,
 } from '@aws-sdk/client-ses';
+import { getAwsCredentials } from '@/lib/aws-credentials';
 
 const CACHE_TTL_MS = 2 * 60 * 1000;
 const REPUTATION_WINDOW_DAYS = 15;
@@ -79,13 +80,7 @@ function createClient(): {
   cloudWatch: CloudWatchClient;
   region: string;
 } | null {
-  const region = (
-    process.env.AWS_SES_REGION ||
-    process.env.AWS_REGION ||
-    'us-east-1'
-  ).trim();
-  const accessKeyId = (process.env.AWS_ACCESS_KEY_ID || '').trim();
-  const secretAccessKey = (process.env.AWS_SECRET_ACCESS_KEY || '').trim();
+  const { region, accessKeyId, secretAccessKey } = getAwsCredentials('us-east-1');
   if (!accessKeyId || !secretAccessKey) return null;
   const credentials = { accessKeyId, secretAccessKey };
   return {
@@ -214,7 +209,7 @@ async function fetchReputation(cloudWatch: CloudWatchClient): Promise<SesReputat
 async function fetchSesAnalytics(): Promise<SesAnalytics> {
   const cfg = createClient();
   if (!cfg) {
-    throw new Error('AWS credentials are not configured (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY)');
+    throw new Error('AWS credentials are not configured (S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY)');
   }
 
   const { client, cloudWatch, region } = cfg;

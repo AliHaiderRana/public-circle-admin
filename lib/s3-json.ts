@@ -4,11 +4,10 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { getAwsCredentials, getAwsRegion, getS3Bucket } from '@/lib/aws-credentials';
 
 function createS3Client(): S3Client | null {
-  const region = (process.env.AWS_REGION || 'ca-central-1').trim();
-  const accessKeyId = (process.env.AWS_ACCESS_KEY_ID || '').trim();
-  const secretAccessKey = (process.env.AWS_SECRET_ACCESS_KEY || '').trim();
+  const { region, accessKeyId, secretAccessKey } = getAwsCredentials();
 
   if (!accessKeyId || !secretAccessKey) {
     return null;
@@ -21,12 +20,7 @@ function createS3Client(): S3Client | null {
 }
 
 function getBucket(): string {
-  return (
-    process.env.S3BUCKET ||
-    process.env.AWS_S3_BUCKET ||
-    process.env.TEMPLATE_THUMBNAILS_BUCKET ||
-    ''
-  ).trim();
+  return getS3Bucket();
 }
 
 async function streamToBuffer(body: unknown): Promise<Buffer> {
@@ -78,7 +72,7 @@ export async function uploadJsonToS3({
 }): Promise<string> {
   const bucket = getBucket();
   const client = createS3Client();
-  const region = (process.env.AWS_REGION || 'ca-central-1').trim();
+  const region = getAwsRegion();
 
   if (!bucket || !client) {
     throw new Error('S3 is not configured (S3BUCKET, AWS credentials)');

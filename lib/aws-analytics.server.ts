@@ -8,6 +8,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { ObjectId } from 'mongodb';
 import type { Db } from 'mongodb';
+import { getAnalyticsBucketsRaw, getAwsCredentials, getBackupBucket } from '@/lib/aws-credentials';
 
 const OID_RE = /^[a-f0-9]{24}$/i;
 // Safety cap per bucket: 500 pages × 1000 keys = 500k objects
@@ -84,7 +85,7 @@ let refreshInFlight: Promise<AwsAnalytics> | null = null;
  * in the AWS account (local dev default).
  */
 function getAllowedBucketNames(): Set<string> | null {
-  const raw = (process.env.AWS_ANALYTICS_BUCKETS || '').trim();
+  const raw = getAnalyticsBucketsRaw();
   if (!raw) return null;
   const names = raw
     .split(',')
@@ -94,9 +95,7 @@ function getAllowedBucketNames(): Set<string> | null {
 }
 
 export function createClient(): { client: S3Client; region: string } | null {
-  const region = (process.env.AWS_REGION || 'ca-central-1').trim();
-  const accessKeyId = (process.env.AWS_ACCESS_KEY_ID || '').trim();
-  const secretAccessKey = (process.env.AWS_SECRET_ACCESS_KEY || '').trim();
+  const { region, accessKeyId, secretAccessKey } = getAwsCredentials();
   if (!accessKeyId || !secretAccessKey) return null;
   return {
     client: new S3Client({ region, credentials: { accessKeyId, secretAccessKey } }),
@@ -569,7 +568,7 @@ async function collectCompanyKeysInBucket(
  * in AWS Analytics; it's only excluded from these operational paths.
  */
 function excludeBackupBucket(buckets: CompanyBucketUsage[]): CompanyBucketUsage[] {
-  const backupBucket = (process.env.AWS_BACKUP_BUCKET || '').trim();
+  const backupBucket = getBackupBucket();
   if (!backupBucket) return buckets;
   return buckets.filter((b) => b.bucket !== backupBucket);
 }
