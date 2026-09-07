@@ -47,8 +47,25 @@ async function renderThumbnailBuffer(html: string) {
 
   try {
     const page = await browser.newPage();
+    await page.setViewport({ width: 800, height: 600, deviceScaleFactor: 1 });
     await page.setContent(normalizeHtml(html), {
-      waitUntil: 'load',
+      waitUntil: 'networkidle0',
+      timeout: 60_000,
+    });
+    await page.evaluate(async () => {
+      const timeoutMs = 15_000;
+      const images = Array.from(document.images || []);
+      await Promise.all(
+        images.map((img) => {
+          if (img.complete && img.naturalWidth > 0) return undefined;
+          return new Promise<void>((resolve) => {
+            const done = () => resolve();
+            img.addEventListener('load', done, { once: true });
+            img.addEventListener('error', done, { once: true });
+            setTimeout(done, timeoutMs);
+          });
+        }),
+      );
     });
     const screenshotBuffer = await page.screenshot({
       type: 'png',

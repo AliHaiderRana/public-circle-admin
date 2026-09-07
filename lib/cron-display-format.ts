@@ -7,6 +7,8 @@ const CRON_SCHEDULE_DESCRIPTIONS: Record<string, string> = {
   "0 4 * * *": "Daily at 4 AM",
   "0 6 * * *": "Daily at 6 AM",
   "0 0,12 * * *": "Twice daily (12 AM & 12 PM)",
+  "0 */6 * * *": "Every 6 hours",
+  "0 */12 * * *": "Every 12 hours",
   "0 3 * * 0": "Weekly on Sunday at 3 AM",
   "30 2 * * *": "Daily at 2:30 AM",
   "0 0 1 * * *": "Monthly on the 1st at 1 AM",
