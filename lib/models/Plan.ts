@@ -8,6 +8,8 @@ export type PlanQuota = {
   email: number;
   bandwidth: number;
   contact: number;
+  /** Tokens included per billing cycle for the AI template generator. */
+  aiTokens: number;
 };
 
 const toQuotaNumber = (value: unknown): number => {
@@ -22,6 +24,7 @@ const quotaSchema = new mongoose.Schema(
     // Stored as string in some legacy docs (e.g. "5000000000")
     bandwidth: { type: mongoose.Schema.Types.Mixed, required: true, default: 0 },
     contact: { type: Number, required: true, default: 0 },
+    aiTokens: { type: Number, required: true, default: 0 },
   },
   { _id: false },
 );
@@ -53,6 +56,7 @@ export function normalizePlanQuota(quota: Record<string, unknown> | null | undef
     email: toQuotaNumber(quota?.email),
     bandwidth: toQuotaNumber(quota?.bandwidth),
     contact: toQuotaNumber(quota?.contact),
+    aiTokens: toQuotaNumber(quota?.aiTokens),
   };
 }
 
