@@ -9,7 +9,7 @@ import {
   SESClient,
   type SendDataPoint,
 } from '@aws-sdk/client-ses';
-import { getAwsCredentials } from '@/lib/aws-credentials';
+import { getSesCredentials } from '@/lib/aws-credentials';
 import type { SesReputationLeader } from '@/lib/ses-health';
 
 const CACHE_TTL_MS = 2 * 60 * 1000;
@@ -83,7 +83,7 @@ function createClient(): {
   cloudWatch: CloudWatchClient;
   region: string;
 } | null {
-  const { region, accessKeyId, secretAccessKey } = getAwsCredentials('us-east-1');
+  const { region, accessKeyId, secretAccessKey } = getSesCredentials();
   if (!accessKeyId || !secretAccessKey) return null;
   const credentials = { accessKeyId, secretAccessKey };
   return {

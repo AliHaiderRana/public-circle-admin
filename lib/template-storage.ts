@@ -14,7 +14,7 @@ export function resolveTemplateStorage() {
     process.env.PUBLIC_CIRCLE_S3BUCKET ||
     ''
   ).trim();
-  const { region, accessKeyId, secretAccessKey } = getAwsCredentials('');
+  const { region, accessKeyId, secretAccessKey } = getAwsCredentials();
 
   if (!bucket || !region || !accessKeyId || !secretAccessKey) {
     throw new Error(
