@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireSuperAdminSession } from '@/lib/auth';
 import {
   getCompanyDailySendStats,
+  getCompanyReputationLeaders,
   getSesAnalytics,
 } from '@/lib/ses-analytics.server';
 
@@ -13,16 +14,20 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const forceRefresh = searchParams.get('refresh') === '1';
     const companyId = (searchParams.get('company') || '').trim();
-    const analytics = await getSesAnalytics(forceRefresh);
+    const [analytics, leaders] = await Promise.all([
+      getSesAnalytics(forceRefresh),
+      getCompanyReputationLeaders(),
+    ]);
 
     if (!companyId) {
-      return NextResponse.json(analytics);
+      return NextResponse.json({ ...analytics, ...leaders });
     }
 
     try {
       const companyStats = await getCompanyDailySendStats(companyId);
       return NextResponse.json({
         ...analytics,
+        ...leaders,
         dailyStats: companyStats.dailyStats,
         totalsLast14Days: companyStats.totalsLast14Days,
         scope: 'company',

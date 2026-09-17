@@ -10,6 +10,7 @@ import {
   type SendDataPoint,
 } from '@aws-sdk/client-ses';
 import { getAwsCredentials } from '@/lib/aws-credentials';
+import type { SesReputationLeader } from '@/lib/ses-health';
 
 const CACHE_TTL_MS = 2 * 60 * 1000;
 const REPUTATION_WINDOW_DAYS = 15;
@@ -71,6 +72,8 @@ export type SesAnalytics = {
   companyName: string | null;
   generatedAt: string;
 };
+
+export type { SesReputationLeader };
 
 let cache: { data: SesAnalytics; cachedAt: number } | null = null;
 let refreshInFlight: Promise<SesAnalytics> | null = null;
@@ -268,6 +271,13 @@ async function fetchSesAnalytics(): Promise<SesAnalytics> {
 
 const COMPANY_WINDOW_DAYS = 14;
 
+function companyWindowStart(): Date {
+  const start = new Date();
+  start.setUTCHours(0, 0, 0, 0);
+  start.setUTCDate(start.getUTCDate() - (COMPANY_WINDOW_DAYS - 1));
+  return start;
+}
+
 /**
  * Per-company daily send / bounce / complaint totals from EmailsSent (last 14 days).
  * Excludes TEST emails, matching SES health-monitor counting rules.
@@ -296,9 +306,7 @@ export async function getCompanyDailySendStats(
     throw new Error('Company not found');
   }
 
-  const start = new Date();
-  start.setUTCHours(0, 0, 0, 0);
-  start.setUTCDate(start.getUTCDate() - (COMPANY_WINDOW_DAYS - 1));
+  const start = companyWindowStart();
 
   const rows = await EmailsSent.aggregate<{
     _id: string;
@@ -366,6 +374,140 @@ export async function getCompanyDailySendStats(
     totalsLast14Days,
     companyName: company.name ?? null,
   };
+}
+
+const LEADER_LIMIT = 15;
+
+function rate(count: number, sent: number): number {
+  if (sent <= 0) return 0;
+  return Number(((count / sent) * 100).toFixed(2));
+}
+
+/**
+ * Accounts (company + primary user) ranked by bounce / complaint volume.
+ * Last 14 days of platform sends, excluding TEST emails — same window as
+ * GetSendStatistics / company SES activity on this page.
+ */
+export async function getCompanyReputationLeaders(): Promise<{
+  bounceLeaders: SesReputationLeader[];
+  complaintLeaders: SesReputationLeader[];
+}> {
+  const dbConnect = (await import('@/lib/db')).default;
+  const EmailsSent = (await import('@/lib/models/EmailsSent')).default;
+  const Company = (await import('@/lib/models/Company')).default;
+  const User = (await import('@/lib/models/User')).default;
+  const { USER_KIND } = await import('@/lib/constants');
+
+  await dbConnect();
+
+  const rows = await EmailsSent.aggregate<{
+    _id: unknown;
+    sent: number;
+    bounces: number;
+    hardBounces: number;
+    complaints: number;
+  }>([
+    {
+      $match: {
+        kind: { $ne: 'TEST' },
+        company: { $exists: true, $ne: null },
+        createdAt: { $gte: companyWindowStart() },
+      },
+    },
+    {
+      $group: {
+        _id: '$company',
+        sent: { $sum: 1 },
+        bounces: {
+          $sum: { $cond: [{ $ifNull: ['$emailEvents.Bounce', false] }, 1, 0] },
+        },
+        hardBounces: {
+          $sum: {
+            $cond: [
+              { $eq: ['$emailEvents.Bounce.bounce.bounceType', 'Permanent'] },
+              1,
+              0,
+            ],
+          },
+        },
+        complaints: {
+          $sum: { $cond: [{ $ifNull: ['$emailEvents.Complaint', false] }, 1, 0] },
+        },
+      },
+    },
+    {
+      $match: {
+        $or: [{ bounces: { $gt: 0 } }, { complaints: { $gt: 0 } }],
+      },
+    },
+  ]);
+
+  const companyIds = rows.map((r) => r._id).filter(Boolean);
+  if (companyIds.length === 0) {
+    return { bounceLeaders: [], complaintLeaders: [] };
+  }
+
+  const [companies, users] = await Promise.all([
+    Company.find({ _id: { $in: companyIds } }).select('name').lean(),
+    User.find({ company: { $in: companyIds }, kind: USER_KIND.PRIMARY })
+      .select('firstName lastName emailAddress company')
+      .lean(),
+  ]);
+
+  const companyNameById = new Map(
+    companies.map((c) => [String(c._id), (c as { name?: string }).name ?? null])
+  );
+  const userByCompanyId = new Map<
+    string,
+    { userId: string; userName: string | null; userEmail: string | null }
+  >();
+  for (const user of users as {
+    _id: unknown;
+    firstName?: string;
+    lastName?: string;
+    emailAddress?: string;
+    company?: unknown;
+  }[]) {
+    const key = String(user.company);
+    if (userByCompanyId.has(key)) continue;
+    const userName =
+      [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || null;
+    userByCompanyId.set(key, {
+      userId: String(user._id),
+      userName,
+      userEmail: user.emailAddress ?? null,
+    });
+  }
+
+  const leaders: SesReputationLeader[] = rows.map((row) => {
+    const companyId = String(row._id);
+    const owner = userByCompanyId.get(companyId);
+    return {
+      companyId,
+      companyName: companyNameById.get(companyId) ?? null,
+      userId: owner?.userId ?? null,
+      userName: owner?.userName ?? null,
+      userEmail: owner?.userEmail ?? null,
+      sent: row.sent,
+      bounces: row.bounces,
+      hardBounces: row.hardBounces,
+      bounceRate: rate(row.bounces, row.sent),
+      complaints: row.complaints,
+      complaintRate: rate(row.complaints, row.sent),
+    };
+  });
+
+  const bounceLeaders = leaders
+    .filter((row) => row.bounces > 0)
+    .sort((a, b) => b.bounces - a.bounces || b.bounceRate - a.bounceRate)
+    .slice(0, LEADER_LIMIT);
+
+  const complaintLeaders = leaders
+    .filter((row) => row.complaints > 0)
+    .sort((a, b) => b.complaints - a.complaints || b.complaintRate - a.complaintRate)
+    .slice(0, LEADER_LIMIT);
+
+  return { bounceLeaders, complaintLeaders };
 }
 
 /**

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import {
   Card,
@@ -49,6 +50,7 @@ import { CompanyCombobox } from '@/components/CompanyCombobox';
 import {
   AlertTriangle,
   CheckCircle2,
+  ExternalLink,
   Gauge,
   Info,
   Mail,
@@ -63,6 +65,7 @@ import {
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { cn } from '@/lib/utils';
 import { formatCompactCount, formatCount } from '../../db-analytics/format';
+import { getOverallHealthStatus, type SesReputationLeader } from '@/lib/ses-health';
 
 type SesDailyStat = {
   date: string;
@@ -97,6 +100,8 @@ type SesAnalytics = {
     rejects: number;
   };
   reputation?: SesReputation;
+  bounceLeaders?: SesReputationLeader[];
+  complaintLeaders?: SesReputationLeader[];
   scope?: 'account' | 'company';
   companyId?: string | null;
   companyName?: string | null;
@@ -173,47 +178,26 @@ function formatDayLabel(isoDate: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-function getOverallHealthStatus(
-  bounceRate: number | null,
-  complaintRate: number | null,
-  sendingEnabled: boolean
-): {
-  status: 'HEALTHY' | 'WARNING' | 'CRITICAL';
-  title: string;
-  description: string;
-} {
-  if (!sendingEnabled) {
-    return {
-      status: 'CRITICAL',
-      title: 'Account Sending Paused by AWS',
-      description: 'Amazon SES sending is paused for this account. Check SES console for suspension details.',
-    };
-  }
+function accountLabel(row: SesReputationLeader): string {
+  return row.userName || row.userEmail || row.companyName || 'Unknown account';
+}
 
-  const b = bounceRate ?? 0;
-  const c = complaintRate ?? 0;
-
-  if (b >= 10.0 || c >= 0.5) {
-    return {
-      status: 'CRITICAL',
-      title: 'CRITICAL — High Danger of AWS Suspension',
-      description: 'Account reputation metrics exceed AWS pause limits (10% Bounce / 0.5% Complaint). Immediate cleanup required.',
-    };
-  }
-
-  if (b >= 5.0 || c >= 0.1) {
-    return {
-      status: 'WARNING',
-      title: 'WARNING — Approaching AWS Risk Thresholds',
-      description: 'Reputation metrics exceed AWS target limits (5% Bounce / 0.1% Complaint). AWS may place account under review.',
-    };
-  }
-
-  return {
-    status: 'HEALTHY',
-    title: 'HEALTHY — Low Danger of AWS Action',
-    description: 'Account metrics are safely within AWS operating limits (Bounce < 5.0%, Complaint < 0.10%).',
-  };
+function CompanyDetailLink({
+  companyId,
+  companyName,
+}: {
+  companyId: string;
+  companyName: string | null;
+}) {
+  return (
+    <Link
+      href={`/dashboard/companies/${companyId}`}
+      className="inline-flex max-w-full items-center gap-1 font-medium text-primary hover:underline"
+    >
+      <span className="truncate">{companyName || 'View company'}</span>
+      <ExternalLink className="h-3 w-3 shrink-0 opacity-70" />
+    </Link>
+  );
 }
 
 export default function SesAnalyticsPage() {
@@ -753,6 +737,159 @@ export default function SesAnalyticsPage() {
               )}
             </CardContent>
           </Card>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card className="gap-0 py-0 shadow-sm">
+              <CardHeader className="border-b py-4 px-4 sm:px-6 [.border-b]:pb-4">
+                <CardTitle className="text-base font-semibold">Accounts with most bounces</CardTitle>
+                <CardDescription>
+                  Last 14 days of platform sends, excluding test emails — same window as SES activity below. Open a company to view its details.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="pl-4 sm:pl-6">User</TableHead>
+                      <TableHead>Company</TableHead>
+                      <TableHead className="text-right">Sent</TableHead>
+                      <TableHead className="text-right">Bounces</TableHead>
+                      <TableHead className="pr-4 text-right sm:pr-6">Rate</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      Array.from({ length: 4 }).map((_, i) => (
+                        <TableRow key={i}>
+                          <TableCell colSpan={5} className="py-3">
+                            <Skeleton className="h-8 w-full" />
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (data?.bounceLeaders ?? []).length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="p-0">
+                          <Empty className="min-h-[140px] border-0">
+                            <EmptyHeader>
+                              <EmptyTitle>No bounced sends</EmptyTitle>
+                              <EmptyDescription>
+                                No platform accounts have recorded bounces in the last 14 days.
+                              </EmptyDescription>
+                            </EmptyHeader>
+                          </Empty>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      (data?.bounceLeaders ?? []).map((row) => (
+                        <TableRow key={row.companyId}>
+                          <TableCell className="pl-4 py-2.5 sm:pl-6">
+                            <div className="font-medium leading-tight">{accountLabel(row)}</div>
+                            {row.userEmail && row.userName ? (
+                              <div className="truncate text-[11px] text-muted-foreground">
+                                {row.userEmail}
+                              </div>
+                            ) : null}
+                          </TableCell>
+                          <TableCell className="py-2.5">
+                            <CompanyDetailLink
+                              companyId={row.companyId}
+                              companyName={row.companyName}
+                            />
+                          </TableCell>
+                          <TableCell className="py-2.5 text-right tabular-nums text-sm">
+                            {formatCount(row.sent)}
+                          </TableCell>
+                          <TableCell className="py-2.5 text-right text-sm">
+                            <span className="tabular-nums font-medium">{formatCount(row.bounces)}</span>
+                            <span className="ml-1 text-[10px] text-muted-foreground">
+                              ({formatCount(row.hardBounces)} hard)
+                            </span>
+                          </TableCell>
+                          <TableCell className="pr-4 py-2.5 text-right tabular-nums text-sm sm:pr-6">
+                            {row.bounceRate.toFixed(2)}%
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            <Card className="gap-0 py-0 shadow-sm">
+              <CardHeader className="border-b py-4 px-4 sm:px-6 [.border-b]:pb-4">
+                <CardTitle className="text-base font-semibold">Accounts with most complaints</CardTitle>
+                <CardDescription>
+                  Last 14 days of platform sends, excluding test emails — same window as SES activity below. Open a company to view its details.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="pl-4 sm:pl-6">User</TableHead>
+                      <TableHead>Company</TableHead>
+                      <TableHead className="text-right">Sent</TableHead>
+                      <TableHead className="text-right">Complaints</TableHead>
+                      <TableHead className="pr-4 text-right sm:pr-6">Rate</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      Array.from({ length: 4 }).map((_, i) => (
+                        <TableRow key={i}>
+                          <TableCell colSpan={5} className="py-3">
+                            <Skeleton className="h-8 w-full" />
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (data?.complaintLeaders ?? []).length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="p-0">
+                          <Empty className="min-h-[140px] border-0">
+                            <EmptyHeader>
+                              <EmptyTitle>No complaints</EmptyTitle>
+                              <EmptyDescription>
+                                No platform accounts have recorded spam complaints in the last 14 days.
+                              </EmptyDescription>
+                            </EmptyHeader>
+                          </Empty>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      (data?.complaintLeaders ?? []).map((row) => (
+                        <TableRow key={row.companyId}>
+                          <TableCell className="pl-4 py-2.5 sm:pl-6">
+                            <div className="font-medium leading-tight">{accountLabel(row)}</div>
+                            {row.userEmail && row.userName ? (
+                              <div className="truncate text-[11px] text-muted-foreground">
+                                {row.userEmail}
+                              </div>
+                            ) : null}
+                          </TableCell>
+                          <TableCell className="py-2.5">
+                            <CompanyDetailLink
+                              companyId={row.companyId}
+                              companyName={row.companyName}
+                            />
+                          </TableCell>
+                          <TableCell className="py-2.5 text-right tabular-nums text-sm">
+                            {formatCount(row.sent)}
+                          </TableCell>
+                          <TableCell className="py-2.5 text-right tabular-nums text-sm font-medium">
+                            {formatCount(row.complaints)}
+                          </TableCell>
+                          <TableCell className="pr-4 py-2.5 text-right tabular-nums text-sm sm:pr-6">
+                            {row.complaintRate.toFixed(3)}%
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Sending Activity Chart */}
           <Card className="gap-0 py-0 shadow-sm">

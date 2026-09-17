@@ -3,7 +3,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Building2,
@@ -15,18 +14,7 @@ import {
   Clock,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import BounceRateCard from "@/components/BounceRateCard";
-import ComplaintRateCard from "@/components/ComplaintRateCard";
-import IndividualStatsCard from "@/components/IndividualStatsCard";
 import ActivitySection from "@/components/ActivitySection";
-import {
-  StatsCardSkeleton,
-  ReputationCardSkeleton,
-  ActivityCardSkeleton,
-  QuickActionsCardSkeleton,
-  AlertSkeleton,
-  TabsSkeleton,
-} from "@/components/SkeletonLoaders";
 import RefreshButton from "@/components/RefreshButton";
 
 interface AccountData {
@@ -52,28 +40,14 @@ interface EmailData {
   emailGrowth: number;
 }
 
-interface ReputationData {
-  bounceRate: number;
-  complaintRate: number;
-  bouncedEmails: number;
-  complainedEmails: number;
-  deliveredEmails: number;
-  reputationData: any[];
-  status: "Healthy" | "Warning" | "Account at risk";
-}
-
 export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [accountLoading, setAccountLoading] = useState(true);
   const [campaignLoading, setCampaignLoading] = useState(true);
   const [emailLoading, setEmailLoading] = useState(true);
-  const [reputationLoading, setReputationLoading] = useState(true);
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [campaignData, setCampaignData] = useState<CampaignData | null>(null);
   const [emailData, setEmailData] = useState<EmailData | null>(null);
-  const [reputationData, setReputationData] = useState<ReputationData | null>(
-    null,
-  );
 
   const fetchAccountData = async () => {
     setAccountLoading(true);
@@ -123,29 +97,11 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchReputationData = async () => {
-    setReputationLoading(true);
-    try {
-      const res = await fetch("/api/stats/reputation");
-      if (res.ok) {
-        const data = await res.json();
-        setReputationData(data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch reputation stats:", error);
-      setReputationData(null);
-    } finally {
-      setReputationLoading(false);
-    }
-  };
-
   const fetchAllData = async () => {
-    // Fetch all data in parallel but don't wait for all to complete
     await Promise.all([
       fetchAccountData(),
       fetchCampaignData(),
       fetchEmailData(),
-      fetchReputationData(),
     ]);
     setRefreshing(false);
   };
@@ -158,9 +114,6 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchAllData();
   }, []);
-
-  const isLoading =
-    accountLoading || campaignLoading || emailLoading || reputationLoading;
 
   return (
     <div className="space-y-8">
@@ -176,40 +129,9 @@ export default function DashboardPage() {
         <RefreshButton onRefresh={handleRefresh} isLoading={refreshing} />
       </div>
 
-      {/* System Status Alert */}
-      {reputationLoading ? (
-        <AlertSkeleton />
-      ) : reputationData ? (
-        <Alert
-          variant={
-            reputationData.status === "Healthy" ||
-            reputationData.status === "Warning"
-              ? "default"
-              : "destructive"
-          }
-        >
-          {reputationData.status === "Healthy" ? (
-            <CheckCircle className="h-4 w-4" />
-          ) : (
-            <AlertCircle className="h-4 w-4" />
-          )}
-          <AlertTitle>
-            Email Reputation: {reputationData.status}
-          </AlertTitle>
-          <AlertDescription>
-            {reputationData.status === "Healthy"
-              ? "Your email reputation is excellent. Continue maintaining good sending practices."
-              : reputationData.status === "Warning"
-                ? "Some issues detected. Monitor your bounce and complaint rates closely."
-                : "Immediate attention required. Your account reputation is at risk."}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="overview">Dashboard</TabsTrigger>
-          <TabsTrigger value="performance">Email Reputation</TabsTrigger>
           <TabsTrigger value="activity">Recent Activity</TabsTrigger>
         </TabsList>
 
@@ -404,35 +326,6 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="performance" className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-2">
-            {reputationLoading ? (
-              <>
-                <ReputationCardSkeleton />
-                <ReputationCardSkeleton />
-              </>
-            ) : reputationData ? (
-              <>
-                <BounceRateCard
-                  data={reputationData.reputationData}
-                  currentRate={reputationData.bounceRate}
-                  status={reputationData.status}
-                />
-                <ComplaintRateCard
-                  data={reputationData.reputationData}
-                  currentRate={reputationData.complaintRate}
-                  status={reputationData.status}
-                />
-              </>
-            ) : (
-              <>
-                <ReputationCardSkeleton />
-                <ReputationCardSkeleton />
-              </>
-            )}
-          </div>
         </TabsContent>
 
         <TabsContent value="activity" className="space-y-6">

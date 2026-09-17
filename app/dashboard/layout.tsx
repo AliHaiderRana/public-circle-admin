@@ -73,6 +73,7 @@ import {
 } from "@/components/ui/collapsible";
 import { BackgroundTasksProvider } from "@/context/BackgroundTasksContext";
 import { BackgroundTasksWidget } from "@/components/BackgroundTasksWidget";
+import SesHealthHeaderAlert from "@/components/SesHealthHeaderAlert";
 
 type SidebarChildItem = {
   name: string;
@@ -435,7 +436,7 @@ export default function DashboardLayout({
 
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
               <header className="flex h-14 shrink-0 items-center border-b border-border bg-card px-4 lg:h-16 lg:px-6">
-                <div className="flex w-full items-center justify-between">
+                <div className="flex w-full items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <Button
                       variant="ghost"
@@ -454,6 +455,7 @@ export default function DashboardLayout({
                       <BrandLogo variant="icon" iconClassName="h-7 w-7" />
                     </div>
                   </div>
+                  <SesHealthHeaderAlert />
                   <div className="flex items-center gap-1">
                     <ThemeToggle />
                     {!user?.isPartner && <NotificationDropdown />}

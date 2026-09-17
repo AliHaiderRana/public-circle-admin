@@ -195,6 +195,13 @@ function legacySummaryFromPathPattern(
   if (pathPattern === '/access-tokens' && m === 'POST') return `Created webhook${q}`;
   if (pathPattern === '/access-tokens/:id' && m === 'PATCH') return `Updated webhook${q}`;
   if (pathPattern === '/access-tokens/:id' && m === 'DELETE') return `Revoked webhook${q}`;
+  if (pathPattern === '/outgoing-webhooks' && m === 'POST') return `Created outgoing webhook${q}`;
+  if (pathPattern === '/outgoing-webhooks/:id' && m === 'PATCH') return `Updated outgoing webhook${q}`;
+  if (pathPattern === '/outgoing-webhooks/:id' && m === 'DELETE') return `Deleted outgoing webhook${q}`;
+  if (pathPattern === '/outgoing-webhooks/:id/test' && m === 'POST') return `Sent outgoing webhook test${q}`;
+  if (pathPattern === '/outgoing-webhooks/:id/rotate-secret' && m === 'POST') {
+    return `Rotated outgoing webhook secret${q}`;
+  }
 
   if (pathPattern === '/auth/send-invitation-email' && m === 'POST') {
     return email ? `Resent invitation to “${email}”` : 'Resent team member invitation';
@@ -416,7 +423,7 @@ function looksLikeRawTechnicalSummary(summary: string, path: string): boolean {
   if (/^\/?[a-z-]+\/[a-f\d]{24}$/i.test(summary)) return true;
   if (/^[a-z-]+$/.test(summary) && !summary.includes(' ')) return true;
   if (
-    /^(configuration|emails|roles|assets|attachments|social-links|stripe|segments|filters|templates|campaigns|company-contacts|access-tokens|company-grouping|users)\//i.test(
+    /^(configuration|emails|roles|assets|attachments|social-links|stripe|segments|filters|templates|campaigns|company-contacts|access-tokens|outgoing-webhooks|company-grouping|users)\//i.test(
       summary
     )
   ) {
