@@ -24,7 +24,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
-import { Search, Play, Mail, Filter, Building2, Calendar, Database } from 'lucide-react';
+import { Search, Play, Mail, Filter, Building2, Calendar, Database, MailWarning } from 'lucide-react';
 
 interface CampaignRun {
   _id: string;
@@ -39,11 +39,15 @@ interface CampaignRun {
   };
   isDataStoredOnWarehouse: boolean;
   emailsSentCount: number;
+  bounceCount?: number;
+  complaintCount?: number;
   emailCounts?: {
     total: number;
     to: number;
     cc: number;
     bcc: number;
+    bounceCount?: number;
+    complaintCount?: number;
   };
   createdAt: string;
   updatedAt: string;
@@ -286,6 +290,8 @@ export default function CampaignRunsPage() {
                     )}
                   </Button>
                 </TableHead>
+                <TableHead className="text-right">Bounces</TableHead>
+                <TableHead className="text-right">Complaints</TableHead>
                 <TableHead>Data Status</TableHead>
                 <TableHead>
                   <Button
@@ -312,6 +318,8 @@ export default function CampaignRunsPage() {
                     <TableCell className="pl-6"><Skeleton className="h-4 w-[150px]" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-[120px]" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-[80px]" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-[48px] ml-auto" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-[48px] ml-auto" /></TableCell>
                     <TableCell><Skeleton className="h-5 w-[80px] rounded-full" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-[100px]" /></TableCell>
                     <TableCell className="pl-8"><Skeleton className="h-8 w-24" /></TableCell>
@@ -319,7 +327,7 @@ export default function CampaignRunsPage() {
                 ))
               ) : campaignRuns.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center h-48 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center h-48 text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <Play size={40} className="text-muted-foreground/50" />
                       <p>No campaign runs found matching your filters.</p>
@@ -379,6 +387,25 @@ export default function CampaignRunsPage() {
                           )}
                         </div>
                       </div>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-sm">
+                      {(run.bounceCount ?? 0) > 0 ? (
+                        <span className="inline-flex items-center justify-end gap-1 font-medium text-amber-700 dark:text-amber-400">
+                          <MailWarning className="h-3.5 w-3.5" />
+                          {run.bounceCount}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">0</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-sm">
+                      {(run.complaintCount ?? 0) > 0 ? (
+                        <span className="font-medium text-red-700 dark:text-red-400">
+                          {run.complaintCount}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">0</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">

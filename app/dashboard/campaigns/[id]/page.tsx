@@ -18,7 +18,8 @@ import {
   BarChart3,
   Clock,
   CheckCircle2,
-  Info
+  Info,
+  MailWarning,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
@@ -48,6 +49,8 @@ interface CampaignDetail {
   isOnGoing: boolean;
   description?: string;
   campaignRunsCount?: number;
+  bounceCount?: number;
+  complaintCount?: number;
 }
 
 export default function CampaignDetailPage() {
@@ -176,7 +179,7 @@ export default function CampaignDetailPage() {
       </Alert>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -262,6 +265,44 @@ export default function CampaignDetailPage() {
               </div>
               <div className="h-14 w-14 bg-muted rounded-lg flex items-center justify-center">
                 <Play className="h-7 w-7 text-muted-foreground" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                  <MailWarning className="h-4 w-4 text-muted-foreground" />
+                  Bounces
+                </p>
+                <p className="text-3xl font-bold text-amber-700 dark:text-amber-400 mt-2">
+                  {campaign.bounceCount || 0}
+                </p>
+              </div>
+              <div className="h-14 w-14 bg-muted rounded-lg flex items-center justify-center">
+                <MailWarning className="h-7 w-7 text-muted-foreground" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  Complaints
+                </p>
+                <p className="text-3xl font-bold text-red-700 dark:text-red-400 mt-2">
+                  {campaign.complaintCount || 0}
+                </p>
+              </div>
+              <div className="h-14 w-14 bg-muted rounded-lg flex items-center justify-center">
+                <Mail className="h-7 w-7 text-muted-foreground" />
               </div>
             </div>
           </CardContent>

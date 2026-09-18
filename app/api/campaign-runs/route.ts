@@ -149,7 +149,13 @@ export async function GET(request: Request) {
             $sum: {
               $cond: [{ $eq: ['$recipientType', 'BCC'] }, 1, 0]
             }
-          }
+          },
+          bounceCount: {
+            $sum: { $cond: [{ $ifNull: ['$emailEvents.Bounce', false] }, 1, 0] },
+          },
+          complaintCount: {
+            $sum: { $cond: [{ $ifNull: ['$emailEvents.Complaint', false] }, 1, 0] },
+          },
         }
       }
     ]);
@@ -161,16 +167,30 @@ export async function GET(request: Request) {
         total: item.totalCount,
         to: item.toCount,
         cc: item.ccCount,
-        bcc: item.bccCount
+        bcc: item.bccCount,
+        bounceCount: item.bounceCount || 0,
+        complaintCount: item.complaintCount || 0,
       });
     });
     
     // Add email counts to campaign runs
-    const campaignRunsWithEmailCounts = campaignRuns.map(run => ({
-      ...run.toObject(),
-      emailsSentCount: emailCountMap.get(run._id.toString())?.total || 0,
-      emailCounts: emailCountMap.get(run._id.toString()) || { total: 0, to: 0, cc: 0, bcc: 0 }
-    }));
+    const campaignRunsWithEmailCounts = campaignRuns.map(run => {
+      const counts = emailCountMap.get(run._id.toString()) || {
+        total: 0,
+        to: 0,
+        cc: 0,
+        bcc: 0,
+        bounceCount: 0,
+        complaintCount: 0,
+      };
+      return {
+        ...run.toObject(),
+        emailsSentCount: counts.total,
+        bounceCount: counts.bounceCount,
+        complaintCount: counts.complaintCount,
+        emailCounts: counts,
+      };
+    });
     
     // Apply email count filter
     let filteredCampaignRuns = campaignRunsWithEmailCounts;

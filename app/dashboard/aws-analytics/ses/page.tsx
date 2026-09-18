@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
@@ -192,6 +192,8 @@ function CompanyDetailLink({
   return (
     <Link
       href={`/dashboard/companies/${companyId}`}
+      target="_blank"
+      rel="noopener noreferrer"
       className="inline-flex max-w-full items-center gap-1 font-medium text-primary hover:underline"
     >
       <span className="truncate">{companyName || 'View company'}</span>
@@ -212,6 +214,9 @@ export default function SesAnalyticsPage() {
   const [selectedCompanyLabel, setSelectedCompanyLabel] = useState<string | null>(
     null
   );
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [leadersLoading, setLeadersLoading] = useState(false);
+  const selectedDayRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && user && !user.isSuperAdmin) {
@@ -245,11 +250,64 @@ export default function SesAnalyticsPage() {
     [companyFilter]
   );
 
+  const fetchLeaders = useCallback(async (day: string | null, signal?: AbortSignal) => {
+    setLeadersLoading(true);
+    try {
+      const qs = new URLSearchParams({ leaders: '1' });
+      if (day) qs.set('day', day);
+      const res = await fetch(`/api/aws-analytics/ses?${qs.toString()}`, { signal });
+      const json = await res.json();
+      if (signal?.aborted) return;
+      if (!res.ok) throw new Error(json?.error || 'Failed to load accounts');
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              bounceLeaders: json.bounceLeaders ?? [],
+              complaintLeaders: json.complaintLeaders ?? [],
+            }
+          : prev
+      );
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setData((prev) =>
+        prev ? { ...prev, bounceLeaders: [], complaintLeaders: [] } : prev
+      );
+    } finally {
+      if (!signal?.aborted) setLeadersLoading(false);
+    }
+  }, []);
+
+  const toggleSelectedDay = useCallback((date: string) => {
+    setSelectedDay((current) => (current === date ? null : date));
+  }, []);
+
   useEffect(() => {
     if (!authLoading && user?.isSuperAdmin) {
       void fetchAnalytics(false, companyFilter);
     }
   }, [authLoading, user, companyFilter, fetchAnalytics]);
+
+  useEffect(() => {
+    if (!user?.isSuperAdmin || !data?.generatedAt) return;
+
+    const previousDay = selectedDayRef.current;
+    selectedDayRef.current = selectedDay;
+    // The main snapshot already includes the 14-day leaderboards.
+    if (!selectedDay && !previousDay) return;
+
+    const controller = new AbortController();
+    void fetchLeaders(selectedDay, controller.signal);
+    return () => controller.abort();
+  }, [user?.isSuperAdmin, selectedDay, data?.generatedAt, fetchLeaders]);
+
+  useEffect(() => {
+    if (!selectedDay) return;
+    document.getElementById('ses-day-leaders')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+    });
+  }, [selectedDay]);
 
   const tone = usageTone(data?.usagePercent ?? null);
 
@@ -300,6 +358,11 @@ export default function SesAnalyticsPage() {
     if (!companyFilter) return null;
     return selectedCompanyLabel || data?.companyName || 'Selected company';
   }, [companyFilter, selectedCompanyLabel, data?.companyName]);
+
+  const selectedDayLabel = selectedDay ? formatDayLabel(selectedDay) : null;
+  const leadersWindowCopy = selectedDayLabel
+    ? `Platform sends on ${selectedDayLabel} (UTC), excluding test emails.`
+    : 'Last 14 days of platform sends, excluding test emails.';
 
   const activitySourceLabel =
     data?.scope === 'company'
@@ -738,159 +801,6 @@ export default function SesAnalyticsPage() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="gap-0 py-0 shadow-sm">
-              <CardHeader className="border-b py-4 px-4 sm:px-6 [.border-b]:pb-4">
-                <CardTitle className="text-base font-semibold">Accounts with most bounces</CardTitle>
-                <CardDescription>
-                  Last 14 days of platform sends, excluding test emails — same window as SES activity below. Open a company to view its details.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead className="pl-4 sm:pl-6">User</TableHead>
-                      <TableHead>Company</TableHead>
-                      <TableHead className="text-right">Sent</TableHead>
-                      <TableHead className="text-right">Bounces</TableHead>
-                      <TableHead className="pr-4 text-right sm:pr-6">Rate</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      Array.from({ length: 4 }).map((_, i) => (
-                        <TableRow key={i}>
-                          <TableCell colSpan={5} className="py-3">
-                            <Skeleton className="h-8 w-full" />
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (data?.bounceLeaders ?? []).length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="p-0">
-                          <Empty className="min-h-[140px] border-0">
-                            <EmptyHeader>
-                              <EmptyTitle>No bounced sends</EmptyTitle>
-                              <EmptyDescription>
-                                No platform accounts have recorded bounces in the last 14 days.
-                              </EmptyDescription>
-                            </EmptyHeader>
-                          </Empty>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      (data?.bounceLeaders ?? []).map((row) => (
-                        <TableRow key={row.companyId}>
-                          <TableCell className="pl-4 py-2.5 sm:pl-6">
-                            <div className="font-medium leading-tight">{accountLabel(row)}</div>
-                            {row.userEmail && row.userName ? (
-                              <div className="truncate text-[11px] text-muted-foreground">
-                                {row.userEmail}
-                              </div>
-                            ) : null}
-                          </TableCell>
-                          <TableCell className="py-2.5">
-                            <CompanyDetailLink
-                              companyId={row.companyId}
-                              companyName={row.companyName}
-                            />
-                          </TableCell>
-                          <TableCell className="py-2.5 text-right tabular-nums text-sm">
-                            {formatCount(row.sent)}
-                          </TableCell>
-                          <TableCell className="py-2.5 text-right text-sm">
-                            <span className="tabular-nums font-medium">{formatCount(row.bounces)}</span>
-                            <span className="ml-1 text-[10px] text-muted-foreground">
-                              ({formatCount(row.hardBounces)} hard)
-                            </span>
-                          </TableCell>
-                          <TableCell className="pr-4 py-2.5 text-right tabular-nums text-sm sm:pr-6">
-                            {row.bounceRate.toFixed(2)}%
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-
-            <Card className="gap-0 py-0 shadow-sm">
-              <CardHeader className="border-b py-4 px-4 sm:px-6 [.border-b]:pb-4">
-                <CardTitle className="text-base font-semibold">Accounts with most complaints</CardTitle>
-                <CardDescription>
-                  Last 14 days of platform sends, excluding test emails — same window as SES activity below. Open a company to view its details.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead className="pl-4 sm:pl-6">User</TableHead>
-                      <TableHead>Company</TableHead>
-                      <TableHead className="text-right">Sent</TableHead>
-                      <TableHead className="text-right">Complaints</TableHead>
-                      <TableHead className="pr-4 text-right sm:pr-6">Rate</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      Array.from({ length: 4 }).map((_, i) => (
-                        <TableRow key={i}>
-                          <TableCell colSpan={5} className="py-3">
-                            <Skeleton className="h-8 w-full" />
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (data?.complaintLeaders ?? []).length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="p-0">
-                          <Empty className="min-h-[140px] border-0">
-                            <EmptyHeader>
-                              <EmptyTitle>No complaints</EmptyTitle>
-                              <EmptyDescription>
-                                No platform accounts have recorded spam complaints in the last 14 days.
-                              </EmptyDescription>
-                            </EmptyHeader>
-                          </Empty>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      (data?.complaintLeaders ?? []).map((row) => (
-                        <TableRow key={row.companyId}>
-                          <TableCell className="pl-4 py-2.5 sm:pl-6">
-                            <div className="font-medium leading-tight">{accountLabel(row)}</div>
-                            {row.userEmail && row.userName ? (
-                              <div className="truncate text-[11px] text-muted-foreground">
-                                {row.userEmail}
-                              </div>
-                            ) : null}
-                          </TableCell>
-                          <TableCell className="py-2.5">
-                            <CompanyDetailLink
-                              companyId={row.companyId}
-                              companyName={row.companyName}
-                            />
-                          </TableCell>
-                          <TableCell className="py-2.5 text-right tabular-nums text-sm">
-                            {formatCount(row.sent)}
-                          </TableCell>
-                          <TableCell className="py-2.5 text-right tabular-nums text-sm font-medium">
-                            {formatCount(row.complaints)}
-                          </TableCell>
-                          <TableCell className="pr-4 py-2.5 text-right tabular-nums text-sm sm:pr-6">
-                            {row.complaintRate.toFixed(3)}%
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </div>
-
           {/* Sending Activity Chart */}
           <Card className="gap-0 py-0 shadow-sm">
             <CardHeader className="border-b py-4 px-4 sm:px-6 [.border-b]:pb-4">
@@ -904,7 +814,11 @@ export default function SesAnalyticsPage() {
                       </Badge>
                     )}
                   </CardTitle>
-                  <CardDescription>{activitySourceLabel}</CardDescription>
+                  <CardDescription>
+                    {activitySourceLabel} Click a day to list bounce and complaint
+                    companies for that date.
+                    {selectedDayLabel ? ` Selected: ${selectedDayLabel}.` : ''}
+                  </CardDescription>
                 </div>
                 <CardAction className="static flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
                   <CompanyCombobox
@@ -968,17 +882,33 @@ export default function SesAnalyticsPage() {
                       </p>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Peak day {formatCompactCount(metricPeak)}
+                      {selectedDayLabel
+                        ? `Selected ${selectedDayLabel} — click again to clear`
+                        : `Peak day ${formatCompactCount(metricPeak)}`}
                     </p>
                   </div>
                   <ChartContainer
                     config={volumeChartConfig}
-                    className="aspect-auto h-[320px] w-full"
+                    className="aspect-auto h-[320px] w-full cursor-pointer"
                   >
                     <AreaChart
                       accessibilityLayer
                       data={chartData}
                       margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                      onClick={(state) => {
+                        const label = state?.activeLabel;
+                        if (typeof label === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(label)) {
+                          toggleSelectedDay(label);
+                          return;
+                        }
+                        const raw = state?.activeIndex ?? state?.activeTooltipIndex;
+                        const index = typeof raw === 'number' ? raw : Number(raw);
+                        const date =
+                          Number.isInteger(index) && index >= 0
+                            ? chartData[index]?.date
+                            : undefined;
+                        if (date) toggleSelectedDay(date);
+                      }}
                     >
                       <defs>
                         <linearGradient id="sesMetricFill" x1="0" y1="0" x2="0" y2="1">
@@ -996,7 +926,8 @@ export default function SesAnalyticsPage() {
                       </defs>
                       <CartesianGrid vertical={false} strokeDasharray="3 3" />
                       <XAxis
-                        dataKey="label"
+                        dataKey="date"
+                        tickFormatter={(value) => formatDayLabel(String(value))}
                         tickLine={false}
                         axisLine={false}
                         tickMargin={8}
@@ -1012,7 +943,17 @@ export default function SesAnalyticsPage() {
                       />
                       <ChartTooltip
                         cursor={{ stroke: 'var(--border)', strokeWidth: 1 }}
-                        content={<ChartTooltipContent indicator="line" />}
+                        content={
+                          <ChartTooltipContent
+                            indicator="line"
+                            labelFormatter={(value) => {
+                              const raw = String(value);
+                              return /^\d{4}-\d{2}-\d{2}$/.test(raw)
+                                ? formatDayLabel(raw)
+                                : raw;
+                            }}
+                          />
+                        }
                       />
                       <Area
                         type="monotone"
@@ -1020,7 +961,27 @@ export default function SesAnalyticsPage() {
                         stroke={`var(--color-${metric})`}
                         fill="url(#sesMetricFill)"
                         strokeWidth={2}
-                        dot={false}
+                        dot={(props) => {
+                          const { cx, cy, payload } = props;
+                          if (
+                            payload?.date !== selectedDay ||
+                            cx == null ||
+                            cy == null
+                          ) {
+                            return <g key={payload?.date} />;
+                          }
+                          return (
+                            <circle
+                              key={payload.date}
+                              cx={cx}
+                              cy={cy}
+                              r={5}
+                              fill={`var(--color-${metric})`}
+                              stroke="var(--background)"
+                              strokeWidth={2}
+                            />
+                          );
+                        }}
                         activeDot={{ r: 4, strokeWidth: 2 }}
                       />
                     </AreaChart>
@@ -1029,6 +990,185 @@ export default function SesAnalyticsPage() {
               )}
             </CardContent>
           </Card>
+
+          {selectedDayLabel ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/30 px-4 py-2.5">
+              <p className="text-sm">
+                Bounce and complaint accounts for{' '}
+                <span className="font-medium">{selectedDayLabel}</span>
+                <span className="ml-1 font-mono text-xs text-muted-foreground">
+                  ({selectedDay} UTC)
+                </span>
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedDay(null)}
+              >
+                Show last 14 days
+              </Button>
+            </div>
+          ) : null}
+
+          <div id="ses-day-leaders" className="grid scroll-mt-4 gap-4 lg:grid-cols-2">
+            <Card className="gap-0 py-0 shadow-sm">
+              <CardHeader className="border-b py-4 px-4 sm:px-6 [.border-b]:pb-4">
+                <CardTitle className="text-base font-semibold">Accounts with most bounces</CardTitle>
+                <CardDescription>
+                  {leadersWindowCopy} Open a company to view its details.
+                  {selectedDayLabel ? ' Click the selected day again to show the last 14 days.' : ' Click a graph or table day to filter.'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="pl-4 sm:pl-6">User</TableHead>
+                      <TableHead>Company</TableHead>
+                      <TableHead className="text-right">Sent</TableHead>
+                      <TableHead className="text-right">Bounces</TableHead>
+                      <TableHead className="pr-4 text-right sm:pr-6">Rate</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading || leadersLoading ? (
+                      Array.from({ length: 4 }).map((_, i) => (
+                        <TableRow key={i}>
+                          <TableCell colSpan={5} className="py-3">
+                            <Skeleton className="h-8 w-full" />
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (data?.bounceLeaders ?? []).length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="p-0">
+                          <Empty className="min-h-[140px] border-0">
+                            <EmptyHeader>
+                              <EmptyTitle>No bounced sends</EmptyTitle>
+                              <EmptyDescription>
+                                {selectedDayLabel
+                                  ? `No platform accounts recorded bounces on ${selectedDayLabel}.`
+                                  : 'No platform accounts have recorded bounces in the last 14 days.'}
+                              </EmptyDescription>
+                            </EmptyHeader>
+                          </Empty>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      (data?.bounceLeaders ?? []).map((row) => (
+                        <TableRow key={row.companyId}>
+                          <TableCell className="pl-4 py-2.5 sm:pl-6">
+                            <div className="font-medium leading-tight">{accountLabel(row)}</div>
+                            {row.userEmail && row.userName ? (
+                              <div className="truncate text-[11px] text-muted-foreground">
+                                {row.userEmail}
+                              </div>
+                            ) : null}
+                          </TableCell>
+                          <TableCell className="py-2.5">
+                            <CompanyDetailLink
+                              companyId={row.companyId}
+                              companyName={row.companyName}
+                            />
+                          </TableCell>
+                          <TableCell className="py-2.5 text-right tabular-nums text-sm">
+                            {formatCount(row.sent)}
+                          </TableCell>
+                          <TableCell className="py-2.5 text-right text-sm">
+                            <span className="tabular-nums font-medium">{formatCount(row.bounces)}</span>
+                            <span className="ml-1 text-[10px] text-muted-foreground">
+                              ({formatCount(row.hardBounces)} hard)
+                            </span>
+                          </TableCell>
+                          <TableCell className="pr-4 py-2.5 text-right tabular-nums text-sm sm:pr-6">
+                            {row.bounceRate.toFixed(2)}%
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            <Card className="gap-0 py-0 shadow-sm">
+              <CardHeader className="border-b py-4 px-4 sm:px-6 [.border-b]:pb-4">
+                <CardTitle className="text-base font-semibold">Accounts with most complaints</CardTitle>
+                <CardDescription>
+                  {leadersWindowCopy} Open a company to view its details.
+                  {selectedDayLabel ? ' Click the selected day again to show the last 14 days.' : ' Click a graph or table day to filter.'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="pl-4 sm:pl-6">User</TableHead>
+                      <TableHead>Company</TableHead>
+                      <TableHead className="text-right">Sent</TableHead>
+                      <TableHead className="text-right">Complaints</TableHead>
+                      <TableHead className="pr-4 text-right sm:pr-6">Rate</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading || leadersLoading ? (
+                      Array.from({ length: 4 }).map((_, i) => (
+                        <TableRow key={i}>
+                          <TableCell colSpan={5} className="py-3">
+                            <Skeleton className="h-8 w-full" />
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (data?.complaintLeaders ?? []).length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="p-0">
+                          <Empty className="min-h-[140px] border-0">
+                            <EmptyHeader>
+                              <EmptyTitle>No complaints</EmptyTitle>
+                              <EmptyDescription>
+                                {selectedDayLabel
+                                  ? `No platform accounts recorded spam complaints on ${selectedDayLabel}.`
+                                  : 'No platform accounts have recorded spam complaints in the last 14 days.'}
+                              </EmptyDescription>
+                            </EmptyHeader>
+                          </Empty>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      (data?.complaintLeaders ?? []).map((row) => (
+                        <TableRow key={row.companyId}>
+                          <TableCell className="pl-4 py-2.5 sm:pl-6">
+                            <div className="font-medium leading-tight">{accountLabel(row)}</div>
+                            {row.userEmail && row.userName ? (
+                              <div className="truncate text-[11px] text-muted-foreground">
+                                {row.userEmail}
+                              </div>
+                            ) : null}
+                          </TableCell>
+                          <TableCell className="py-2.5">
+                            <CompanyDetailLink
+                              companyId={row.companyId}
+                              companyName={row.companyName}
+                            />
+                          </TableCell>
+                          <TableCell className="py-2.5 text-right tabular-nums text-sm">
+                            {formatCount(row.sent)}
+                          </TableCell>
+                          <TableCell className="py-2.5 text-right tabular-nums text-sm font-medium">
+                            {formatCount(row.complaints)}
+                          </TableCell>
+                          <TableCell className="pr-4 py-2.5 text-right tabular-nums text-sm sm:pr-6">
+                            {row.complaintRate.toFixed(3)}%
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Daily Table */}
           <Card className="gap-0 py-0 shadow-sm">
@@ -1043,7 +1183,7 @@ export default function SesAnalyticsPage() {
                       data?.scope === 'company' && selectedCompanyName
                         ? ` · ${selectedCompanyName}`
                         : ''
-                    }`}
+                    }. Click a row to list bounce and complaint companies for that day.`}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
@@ -1099,7 +1239,23 @@ export default function SesAnalyticsPage() {
                           ? (row.bounces / row.deliveryAttempts) * 100
                           : 0;
                       return (
-                        <TableRow key={row.date}>
+                        <TableRow
+                          key={row.date}
+                          role="button"
+                          tabIndex={0}
+                          aria-pressed={selectedDay === row.date}
+                          className={cn(
+                            'cursor-pointer',
+                            selectedDay === row.date && 'bg-primary/5 hover:bg-primary/10'
+                          )}
+                          onClick={() => toggleSelectedDay(row.date)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              toggleSelectedDay(row.date);
+                            }
+                          }}
+                        >
                           <TableCell className="pl-4 py-2.5 text-sm sm:pl-6">
                             <div className="font-medium tabular-nums">
                               {formatDayLabel(row.date)}

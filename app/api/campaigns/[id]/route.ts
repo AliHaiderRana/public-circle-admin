@@ -3,6 +3,7 @@ import dbConnect from '@/lib/db';
 import Campaign from '@/lib/models/Campaign';
 import Company from '@/lib/models/Company';
 import CampaignRun from '@/lib/models/CampaignRun';
+import EmailsSent from '@/lib/models/EmailsSent';
 import { getServerSession, toAdminAuditSession } from '@/lib/auth';
 import { isPartnerSession, canPartnerAccessCompany } from '@/lib/partner-access.util';
 import { logPartnerPortalActivity, PARTNER_PORTAL_ACTIONS } from '@/lib/partner-activity';
@@ -55,8 +56,38 @@ export async function GET(
       }
     }
 
-    // Fetch campaign runs count for this campaign
-    const campaignRunsCount = await CampaignRun.countDocuments({ campaign: id });
+    // Fetch campaign runs count and bounce/complaint totals for this campaign
+    const campaignRunIds = (
+      await CampaignRun.find({ campaign: id }).select('_id').lean()
+    ).map((run) => run._id);
+    const [campaignRunsCount, emailStats] = await Promise.all([
+      Promise.resolve(campaignRunIds.length),
+      campaignRunIds.length
+        ? EmailsSent.aggregate<{
+            bounceCount: number;
+            complaintCount: number;
+          }>([
+            { $match: { campaignRun: { $in: campaignRunIds } } },
+            {
+              $group: {
+                _id: null,
+                bounceCount: {
+                  $sum: {
+                    $cond: [{ $ifNull: ['$emailEvents.Bounce', false] }, 1, 0],
+                  },
+                },
+                complaintCount: {
+                  $sum: {
+                    $cond: [{ $ifNull: ['$emailEvents.Complaint', false] }, 1, 0],
+                  },
+                },
+              },
+            },
+          ])
+        : Promise.resolve([]),
+    ]);
+    const bounceCount = emailStats[0]?.bounceCount || 0;
+    const complaintCount = emailStats[0]?.complaintCount || 0;
 
     const auditSession = toAdminAuditSession(session);
     if (auditSession) {
@@ -77,7 +108,9 @@ export async function GET(
     return NextResponse.json({ 
       campaign: {
         ...campaign,
-        campaignRunsCount
+        campaignRunsCount,
+        bounceCount,
+        complaintCount,
       }
     });
   } catch (error) {

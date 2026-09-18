@@ -45,6 +45,7 @@ import {
   ArrowUp,
   ArrowDown,
   Play,
+  MailWarning,
 } from "lucide-react";
 
 interface Company {
@@ -343,6 +344,8 @@ export default function CampaignsPage() {
                 <TableHead>Subject</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Campaign Runs</TableHead>
+                <TableHead className="text-right">Bounces</TableHead>
+                <TableHead className="text-right">Complaints</TableHead>
                 <TableHead>
                   <Button
                     variant="ghost"
@@ -381,6 +384,12 @@ export default function CampaignsPage() {
                       <Skeleton className="h-4 w-[100px]" />
                     </TableCell>
                     <TableCell>
+                      <Skeleton className="h-4 w-[48px] ml-auto" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-[48px] ml-auto" />
+                    </TableCell>
+                    <TableCell>
                       <Skeleton className="h-4 w-[100px]" />
                     </TableCell>
                     <TableCell className="pl-8">
@@ -391,7 +400,7 @@ export default function CampaignsPage() {
               ) : campaigns.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={9}
                     className="text-center h-48 text-muted-foreground"
                   >
                     <div className="flex flex-col items-center gap-2">
@@ -453,6 +462,10 @@ export default function CampaignsPage() {
                               {campaign.campaignRuns[0].emailsSentCount > 0 && (
                                 <div className="text-muted-foreground">
                                   {campaign.campaignRuns[0].emailsSentCount} emails
+                                  {(campaign.campaignRuns[0].bounceCount || 0) > 0 ||
+                                  (campaign.campaignRuns[0].complaintCount || 0) > 0
+                                    ? ` · ${campaign.campaignRuns[0].bounceCount || 0} bounces · ${campaign.campaignRuns[0].complaintCount || 0} complaints`
+                                    : ''}
                                 </div>
                               )}
                             </div>
@@ -460,6 +473,25 @@ export default function CampaignsPage() {
                         </div>
                       ) : (
                         <span className="text-sm text-muted-foreground">No runs</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-sm">
+                      {(campaign.bounceCount ?? 0) > 0 ? (
+                        <span className="inline-flex items-center justify-end gap-1 font-medium text-amber-700 dark:text-amber-400">
+                          <MailWarning className="h-3.5 w-3.5" />
+                          {campaign.bounceCount}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">0</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-sm">
+                      {(campaign.complaintCount ?? 0) > 0 ? (
+                        <span className="font-medium text-red-700 dark:text-red-400">
+                          {campaign.complaintCount}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">0</span>
                       )}
                     </TableCell>
                     <TableCell className="text-sm">

@@ -63,11 +63,15 @@ interface CampaignRunDetail {
   createdAt: string;
   updatedAt: string;
   emailsSentCount?: number;
+  bounceCount?: number;
+  complaintCount?: number;
   emailCounts?: {
     total: number;
     to: number;
     cc: number;
     bcc: number;
+    bounceCount?: number;
+    complaintCount?: number;
   };
 }
 
@@ -471,7 +475,7 @@ export default function CampaignRunDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 <div className="text-center p-4 bg-muted rounded-lg">
                   <div className="text-2xl font-bold text-foreground">
                     {campaignRun.emailsSentCount || 0}
@@ -495,6 +499,18 @@ export default function CampaignRunDetailPage() {
                     {campaignRun.emailCounts?.bcc || 0}
                   </div>
                   <div className="text-sm text-muted-foreground">BCC</div>
+                </div>
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-amber-700 dark:text-amber-400">
+                    {campaignRun.bounceCount || campaignRun.emailCounts?.bounceCount || 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Bounces</div>
+                </div>
+                <div className="text-center p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold text-red-700 dark:text-red-400">
+                    {campaignRun.complaintCount || campaignRun.emailCounts?.complaintCount || 0}
+                  </div>
+                  <div className="text-sm text-muted-foreground">Complaints</div>
                 </div>
               </div>
             </CardContent>
