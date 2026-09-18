@@ -14,9 +14,26 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const forceRefresh = searchParams.get('refresh') === '1';
     const companyId = (searchParams.get('company') || '').trim();
+    const day = (searchParams.get('day') || '').trim();
+    const leadersOnly = searchParams.get('leaders') === '1';
+
+    if (leadersOnly) {
+      try {
+        const leaders = await getCompanyReputationLeaders(day || null);
+        return NextResponse.json(leaders);
+      } catch (leadersErr) {
+        const message =
+          leadersErr instanceof Error ? leadersErr.message : 'Invalid day';
+        return NextResponse.json(
+          { error: message },
+          { status: message === 'Invalid day' ? 400 : 500 }
+        );
+      }
+    }
+
     const [analytics, leaders] = await Promise.all([
       getSesAnalytics(forceRefresh),
-      getCompanyReputationLeaders(),
+      getCompanyReputationLeaders(day || null),
     ]);
 
     if (!companyId) {

@@ -76,14 +76,23 @@ export async function GET(request: Request) {
       {
         $group: {
           _id: '$campaignRun',
-          totalCount: { $sum: 1 }
-        }
-      }
+          totalCount: { $sum: 1 },
+          bounceCount: {
+            $sum: { $cond: [{ $ifNull: ['$emailEvents.Bounce', false] }, 1, 0] },
+          },
+          complaintCount: {
+            $sum: { $cond: [{ $ifNull: ['$emailEvents.Complaint', false] }, 1, 0] },
+          },
+        },
+      },
     ]);
     
     // Create maps for easy lookup
     const campaignRunsMap = new Map();
-    const emailCountMap = new Map();
+    const emailStatsMap = new Map<
+      string,
+      { totalCount: number; bounceCount: number; complaintCount: number }
+    >();
     
     campaignRuns.forEach(run => {
       // Handle both populated and unpopulated campaign references
@@ -97,25 +106,48 @@ export async function GET(request: Request) {
     });
     
     emailCounts.forEach(item => {
-      emailCountMap.set(item._id.toString(), item.totalCount);
+      emailStatsMap.set(item._id.toString(), {
+        totalCount: item.totalCount || 0,
+        bounceCount: item.bounceCount || 0,
+        complaintCount: item.complaintCount || 0,
+      });
     });
     
     // Add campaign runs to each campaign
     const campaignsWithRuns = campaigns.map(campaign => {
       const campaignId = campaign._id.toString();
       const runs = campaignRunsMap.get(campaignId) || [];
-      const runsWithEmailCounts = runs.map((run: any) => ({
-        _id: run._id,
-        createdAt: run.createdAt,
-        updatedAt: run.updatedAt,
-        isDataStoredOnWarehouse: run.isDataStoredOnWarehouse,
-        emailsSentCount: emailCountMap.get(run._id.toString()) || 0
-      }));
+      const runsWithEmailCounts = runs.map((run: any) => {
+        const stats = emailStatsMap.get(run._id.toString()) || {
+          totalCount: 0,
+          bounceCount: 0,
+          complaintCount: 0,
+        };
+        return {
+          _id: run._id,
+          createdAt: run.createdAt,
+          updatedAt: run.updatedAt,
+          isDataStoredOnWarehouse: run.isDataStoredOnWarehouse,
+          emailsSentCount: stats.totalCount,
+          bounceCount: stats.bounceCount,
+          complaintCount: stats.complaintCount,
+        };
+      });
+      const bounceCount = runsWithEmailCounts.reduce(
+        (sum: number, run: { bounceCount: number }) => sum + run.bounceCount,
+        0
+      );
+      const complaintCount = runsWithEmailCounts.reduce(
+        (sum: number, run: { complaintCount: number }) => sum + run.complaintCount,
+        0
+      );
       
       return {
         ...campaign.toObject(),
         campaignRuns: runsWithEmailCounts,
-        campaignRunsCount: runsWithEmailCounts.length
+        campaignRunsCount: runsWithEmailCounts.length,
+        bounceCount,
+        complaintCount,
       };
     });
     

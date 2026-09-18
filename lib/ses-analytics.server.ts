@@ -270,12 +270,22 @@ async function fetchSesAnalytics(): Promise<SesAnalytics> {
 }
 
 const COMPANY_WINDOW_DAYS = 14;
+const UTC_DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function companyWindowStart(): Date {
   const start = new Date();
   start.setUTCHours(0, 0, 0, 0);
   start.setUTCDate(start.getUTCDate() - (COMPANY_WINDOW_DAYS - 1));
   return start;
+}
+
+function utcDayRange(day: string): { start: Date; end: Date } | null {
+  if (!UTC_DAY_RE.test(day)) return null;
+  const start = new Date(`${day}T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime())) return null;
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start, end };
 }
 
 /**
@@ -385,10 +395,10 @@ function rate(count: number, sent: number): number {
 
 /**
  * Accounts (company + primary user) ranked by bounce / complaint volume.
- * Last 14 days of platform sends, excluding TEST emails — same window as
- * GetSendStatistics / company SES activity on this page.
+ * Defaults to the last 14 days of platform sends (excluding TEST). Pass a
+ * UTC `YYYY-MM-DD` day to rank only that calendar day.
  */
-export async function getCompanyReputationLeaders(): Promise<{
+export async function getCompanyReputationLeaders(day?: string | null): Promise<{
   bounceLeaders: SesReputationLeader[];
   complaintLeaders: SesReputationLeader[];
 }> {
@@ -399,6 +409,14 @@ export async function getCompanyReputationLeaders(): Promise<{
   const { USER_KIND } = await import('@/lib/constants');
 
   await dbConnect();
+
+  const dayRange = day ? utcDayRange(day) : null;
+  if (day && !dayRange) {
+    throw new Error('Invalid day');
+  }
+  const createdAt = dayRange
+    ? { $gte: dayRange.start, $lt: dayRange.end }
+    : { $gte: companyWindowStart() };
 
   const rows = await EmailsSent.aggregate<{
     _id: unknown;
@@ -411,7 +429,7 @@ export async function getCompanyReputationLeaders(): Promise<{
       $match: {
         kind: { $ne: 'TEST' },
         company: { $exists: true, $ne: null },
-        createdAt: { $gte: companyWindowStart() },
+        createdAt,
       },
     },
     {
