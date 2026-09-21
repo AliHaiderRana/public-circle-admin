@@ -26,6 +26,7 @@ type PlanQuota = {
   email: number;
   bandwidth: number;
   contact: number;
+  aiTokens: number;
 };
 
 type StripePlanPrice = {
@@ -58,6 +59,7 @@ const quotaFields: Array<{
   { key: 'bandwidth', label: 'Bandwidth (bytes)', hint: 'Stored in bytes; shown to customers with KB/MB units.' },
   { key: 'contact', label: 'Contacts' },
   { key: 'project', label: 'Projects' },
+  { key: 'aiTokens', label: 'AI tokens', hint: 'Tokens included per billing cycle for the AI email template generator. Usage past this draws from the account balance.' },
 ];
 
 export default function PlanQuotasPage() {
@@ -91,6 +93,7 @@ export default function PlanQuotasPage() {
               email: Number(plan.quota?.email ?? 0),
               bandwidth: Number(plan.quota?.bandwidth ?? 0),
               contact: Number(plan.quota?.contact ?? 0),
+              aiTokens: Number(plan.quota?.aiTokens ?? 0),
             },
           ]),
         ),
@@ -115,7 +118,8 @@ export default function PlanQuotasPage() {
       draft.project !== Number(plan.quota?.project ?? 0) ||
       draft.email !== Number(plan.quota?.email ?? 0) ||
       draft.bandwidth !== Number(plan.quota?.bandwidth ?? 0) ||
-      draft.contact !== Number(plan.quota?.contact ?? 0)
+      draft.contact !== Number(plan.quota?.contact ?? 0) ||
+      draft.aiTokens !== Number(plan.quota?.aiTokens ?? 0)
     );
   };
 
@@ -148,6 +152,7 @@ export default function PlanQuotasPage() {
         email: Number(plan.quota?.email ?? 0),
         bandwidth: Number(plan.quota?.bandwidth ?? 0),
         contact: Number(plan.quota?.contact ?? 0),
+        aiTokens: Number(plan.quota?.aiTokens ?? 0),
       },
     }));
   };
@@ -171,6 +176,7 @@ export default function PlanQuotasPage() {
     if (draft.email !== Number(plan.quota?.email ?? 0)) quotaPayload.email = draft.email;
     if (draft.bandwidth !== Number(plan.quota?.bandwidth ?? 0)) quotaPayload.bandwidth = draft.bandwidth;
     if (draft.contact !== Number(plan.quota?.contact ?? 0)) quotaPayload.contact = draft.contact;
+    if (draft.aiTokens !== Number(plan.quota?.aiTokens ?? 0)) quotaPayload.aiTokens = draft.aiTokens;
 
     try {
       const res = await fetch(`/api/plans/${plan._id}`, {
@@ -220,7 +226,8 @@ export default function PlanQuotasPage() {
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Plan Quotas</h2>
         <p className="text-muted-foreground">
-          Edit subscription plan limits shown to customers (emails, bandwidth, contacts, projects).
+          Edit subscription plan limits shown to customers (emails, bandwidth, contacts, projects,
+          AI tokens).
           Prices shown in USD from Stripe (same as the customer app). Only quotas are editable here.
         </p>
       </div>

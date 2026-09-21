@@ -25,6 +25,7 @@ const updatePlanQuotaSchema = z
         email: nonNegativeInt.optional(),
         bandwidth: nonNegativeInt.optional(),
         contact: nonNegativeInt.optional(),
+        aiTokens: nonNegativeInt.optional(),
       })
       .refine((value) => Object.keys(value).length > 0, {
         message: 'At least one quota field is required',
