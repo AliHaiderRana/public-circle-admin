@@ -15,9 +15,34 @@ const CRON_SCHEDULE_DESCRIPTIONS: Record<string, string> = {
   "15 2 * * *": "Daily at 2:15 AM",
 };
 
-export function formatCronDuration(ms: number | null | undefined): string {
-  if (ms == null || !Number.isFinite(Number(ms))) return "-";
-  const value = Number(ms);
+function toFiniteNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const numeric = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+export function resolveCronDurationMs(
+  item?: {
+    duration?: number | string | null;
+    startTime?: string | Date | null;
+    endTime?: string | Date | null;
+  } | null,
+): number | null {
+  if (!item) return null;
+
+  const stored = toFiniteNumber(item.duration);
+  if (stored != null && stored >= 0) return stored;
+
+  if (!item.startTime || !item.endTime) return null;
+  const start = new Date(item.startTime).getTime();
+  const end = new Date(item.endTime).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  return end - start;
+}
+
+export function formatCronDuration(ms: number | string | null | undefined): string {
+  const value = toFiniteNumber(ms);
+  if (value == null || value < 0) return "-";
   if (value < 1000) return `${Math.round(value)}ms`;
   if (value < 60000) return `${(value / 1000).toFixed(2)}s`;
   return `${(value / 60000).toFixed(2)}m`;

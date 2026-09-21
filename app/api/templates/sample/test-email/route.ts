@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import { getServerSession, toAdminAuditSession } from '@/lib/auth';
-import { getAwsCredentials } from '@/lib/aws-credentials';
+import { getSesCredentials } from '@/lib/aws-credentials';
 import {
   logAdminActivity,
   ADMIN_AUDIT_ACTION,
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     const recipients = parseRecipientEmails(parsed.data.toEmailAddresses);
     const sourceEmailAddress = TEST_FROM_EMAIL;
 
-    const { region, accessKeyId, secretAccessKey } = getAwsCredentials();
+    const { region, accessKeyId, secretAccessKey } = getSesCredentials();
 
     if (!accessKeyId || !secretAccessKey) {
       return NextResponse.json(

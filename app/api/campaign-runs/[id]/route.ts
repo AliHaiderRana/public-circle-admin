@@ -86,7 +86,13 @@ export async function GET(
             $sum: {
               $cond: [{ $eq: ['$recipientType', 'BCC'] }, 1, 0]
             }
-          }
+          },
+          bounceCount: {
+            $sum: { $cond: [{ $ifNull: ['$emailEvents.Bounce', false] }, 1, 0] },
+          },
+          complaintCount: {
+            $sum: { $cond: [{ $ifNull: ['$emailEvents.Complaint', false] }, 1, 0] },
+          },
         }
       }
     ]);
@@ -96,8 +102,10 @@ export async function GET(
       total: emailCounts[0].totalCount,
       to: emailCounts[0].toCount,
       cc: emailCounts[0].ccCount,
-      bcc: emailCounts[0].bccCount
-    } : { total: 0, to: 0, cc: 0, bcc: 0 };
+      bcc: emailCounts[0].bccCount,
+      bounceCount: emailCounts[0].bounceCount || 0,
+      complaintCount: emailCounts[0].complaintCount || 0,
+    } : { total: 0, to: 0, cc: 0, bcc: 0, bounceCount: 0, complaintCount: 0 };
     
     console.log('Email counts:', emailCountsData);
 
@@ -105,6 +113,8 @@ export async function GET(
     const campaignRunWithCounts = {
       ...campaignRun.toObject(),
       emailsSentCount: emailCountsData.total,
+      bounceCount: emailCountsData.bounceCount,
+      complaintCount: emailCountsData.complaintCount,
       emailCounts: emailCountsData
     };
 

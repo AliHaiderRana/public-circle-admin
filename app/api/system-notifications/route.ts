@@ -32,7 +32,12 @@ export async function PATCH(request: Request) {
     const current = await updateSystemNotifications(body);
 
     const fieldsChanged = Object.keys(current).filter((key) => {
-      if (key === 'adminRecipients' || key === 'teamRecipients' || key === 'inAppRecipients') {
+      if (
+        key === 'adminRecipients' ||
+        key === 'teamRecipients' ||
+        key === 'inAppRecipients' ||
+        key.endsWith('Recipients')
+      ) {
         return false;
       }
       return (

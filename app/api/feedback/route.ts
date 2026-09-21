@@ -6,6 +6,7 @@ import User from '@/lib/models/User';
 import { FEEDBACK_STATUS, FEEDBACK_TYPE } from '@/lib/constants';
 import { getServerSession } from '@/lib/auth';
 import { isPartnerSession } from '@/lib/partner-access.util';
+import { serializeFeedback } from '@/lib/serialize-feedback.server';
 
 export async function GET(request: Request) {
   const session = await getServerSession();
@@ -55,30 +56,33 @@ export async function GET(request: Request) {
       ];
     }
 
-    const skip = (page - 1) * limit;
+    const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 100) : 10;
+    const safePage = Number.isFinite(page) && page > 0 ? page : 1;
 
-    const [items, totalCount] = await Promise.all([
+    const [docs, totalCount] = await Promise.all([
       Feedback.find(query)
-        .populate({ path: 'companyId', model: Company, select: 'name' })
+        .populate({ path: 'companyId', model: Company, select: '_id name' })
         .populate({
           path: 'userId',
           model: User,
-          select: 'firstName lastName emailAddress',
+          select: '_id firstName lastName emailAddress',
         })
         .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
+        .skip((safePage - 1) * safeLimit)
+        .limit(safeLimit)
         .lean(),
       Feedback.countDocuments(query),
     ]);
 
     return NextResponse.json({
-      items,
+      items: docs
+        .map((doc) => serializeFeedback(doc as Record<string, unknown>))
+        .filter((item): item is NonNullable<typeof item> => Boolean(item)),
       pagination: {
-        page,
-        limit,
+        page: safePage,
+        limit: safeLimit,
         total: totalCount,
-        pages: Math.ceil(totalCount / limit),
+        pages: Math.ceil(totalCount / safeLimit) || 0,
       },
     });
   } catch (error) {

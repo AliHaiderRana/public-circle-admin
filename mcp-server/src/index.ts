@@ -430,7 +430,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "get_system_notifications",
         description:
-          "Read support email notification settings, admin-level toggles, and per-admin email preferences from the admin panel API.",
+          "Read email notification settings, admin-level toggles, and per-admin email preferences from the admin panel API.",
         inputSchema: {
           type: "object" as const,
           properties: {},
@@ -440,12 +440,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "update_system_notifications",
         description:
-          "Update support email notification settings. Super-admin manages global toggles and per-admin email delivery only.",
+          "Update email notification settings. Super-admin manages global toggles and per-admin email delivery only.",
         inputSchema: {
           type: "object" as const,
           properties: {
             supportSendAlertEmail: { type: "boolean" },
+            feedbackSendAlertEmail: { type: "boolean" },
             dlqSendAlertEmail: { type: "boolean" },
+            dbSendAlertEmail: { type: "boolean" },
             adminPreferences: {
               type: "array",
               description: "Per-admin alert email preferences",
@@ -457,9 +459,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     type: "boolean",
                     description: "Whether this admin receives support alert emails",
                   },
+                  notifyFeedbackAlertEmail: {
+                    type: "boolean",
+                    description: "Whether this admin receives product feedback alert emails",
+                  },
                   notifyDlqAlertEmail: {
                     type: "boolean",
                     description: "Whether this admin receives DLQ alert emails",
+                  },
+                  notifyDbAlertEmail: {
+                    type: "boolean",
+                    description: "Whether this admin receives DB storage alert emails",
                   },
                 },
                 required: ["adminId"],

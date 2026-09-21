@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireSuperAdminSession } from '@/lib/auth';
 import {
   getCompanyDailySendStats,
+  getCompanyReputationLeaders,
   getSesAnalytics,
 } from '@/lib/ses-analytics.server';
 
@@ -13,16 +14,37 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const forceRefresh = searchParams.get('refresh') === '1';
     const companyId = (searchParams.get('company') || '').trim();
-    const analytics = await getSesAnalytics(forceRefresh);
+    const day = (searchParams.get('day') || '').trim();
+    const leadersOnly = searchParams.get('leaders') === '1';
+
+    if (leadersOnly) {
+      try {
+        const leaders = await getCompanyReputationLeaders(day || null);
+        return NextResponse.json(leaders);
+      } catch (leadersErr) {
+        const message =
+          leadersErr instanceof Error ? leadersErr.message : 'Invalid day';
+        return NextResponse.json(
+          { error: message },
+          { status: message === 'Invalid day' ? 400 : 500 }
+        );
+      }
+    }
+
+    const [analytics, leaders] = await Promise.all([
+      getSesAnalytics(forceRefresh),
+      getCompanyReputationLeaders(day || null),
+    ]);
 
     if (!companyId) {
-      return NextResponse.json(analytics);
+      return NextResponse.json({ ...analytics, ...leaders });
     }
 
     try {
       const companyStats = await getCompanyDailySendStats(companyId);
       return NextResponse.json({
         ...analytics,
+        ...leaders,
         dailyStats: companyStats.dailyStats,
         totalsLast14Days: companyStats.totalsLast14Days,
         scope: 'company',
