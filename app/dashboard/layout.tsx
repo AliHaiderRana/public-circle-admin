@@ -46,6 +46,7 @@ import {
   Link2,
   Database,
   Cloud,
+  ChartLine,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -171,6 +172,11 @@ const sidebarItems: SidebarItem[] = [
         name: "Customer Portal",
         href: "/dashboard/integrations",
         icon: Link2,
+      },
+      {
+        name: "Impressions",
+        href: "/dashboard/integrations/impressions",
+        icon: ChartLine,
       },
     ],
   },
