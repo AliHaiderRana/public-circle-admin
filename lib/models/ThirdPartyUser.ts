@@ -55,6 +55,9 @@ const schema = new mongoose.Schema(
       default: THIRD_PARTY_PORTAL_ACCESS.NONE,
       index: true,
     },
+    pcUserId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
+    pcCompanyId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
+    pcProjectAccessIds: [{ type: mongoose.Schema.Types.ObjectId }],
     referralCreatedAt: { type: Date, default: null },
     referralUpdatedAt: { type: Date, default: null },
     lastSyncedAt: { type: Date, default: null },
@@ -64,6 +67,8 @@ const schema = new mongoose.Schema(
 
 schema.index({ emailAddress: 1, source: 1 });
 schema.index({ role: 1, portalAccess: 1 });
+schema.index({ pcUserId: 1 });
+schema.index({ pcCompanyId: 1, referralCompanyId: 1 });
 
 const ThirdPartyUser =
   mongoose.models.ThirdPartyUser ||

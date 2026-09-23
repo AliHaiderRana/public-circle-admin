@@ -83,13 +83,43 @@ function normalizeAdminManagedPortal(
 
 function normalizePublicCircleServer(
   value: Partial<PublicCircleServerIntegration> | undefined,
+  existing?: PublicCircleServerIntegration,
 ): PublicCircleServerIntegration {
   const defaults = emptyIntegrationSettings().publicCircleServer;
+  const prior = existing ?? defaults;
+  const nextUrl =
+    value?.serverBaseUrl !== undefined
+      ? value.serverBaseUrl.trim().replace(/\/$/, '')
+      : prior.serverBaseUrl;
+  const nextKey =
+    value?.internalApiKey !== undefined && value.internalApiKey.trim()
+      ? value.internalApiKey.trim()
+      : prior.internalApiKey;
+  const ready = Boolean(nextUrl && nextKey);
+  const requestedEnabled = value?.enabled ?? prior.enabled;
   return {
-    enabled: value?.enabled ?? defaults.enabled,
-    serverBaseUrl: value?.serverBaseUrl?.trim() ?? defaults.serverBaseUrl,
-    internalApiKey: value?.internalApiKey?.trim() ?? defaults.internalApiKey,
+    enabled: ready ? Boolean(requestedEnabled) : false,
+    serverBaseUrl: nextUrl,
+    internalApiKey: nextKey,
   };
+}
+
+/** Sync impressions auth into every Referral company Integration-Settings doc. */
+async function syncPublicCircleServerToReferralCompanies(
+  publicCircleServer: PublicCircleServerIntegration,
+): Promise<void> {
+  const conn = await import('@/lib/referral-db').then((m) => m.getReferralDbConnection());
+  const updatedAt = new Date();
+  await conn.db.collection('Integration-Settings').updateMany(
+    { companyId: { $exists: true, $ne: null } },
+    {
+      $set: {
+        publicCircleServer,
+        updatedAt,
+      },
+    },
+  );
+  clearIntegrationSettingsCache();
 }
 
 async function writeIntegrationSettings(settings: IntegrationSettings): Promise<IntegrationSettings> {
@@ -97,7 +127,10 @@ async function writeIntegrationSettings(settings: IntegrationSettings): Promise<
   const current = await getIntegrationSettings();
   const normalized: IntegrationSettings = {
     adminPortal: normalizeAdminManagedPortal(settings.adminPortal, current.adminPortal),
-    publicCircleServer: normalizePublicCircleServer(settings.publicCircleServer),
+    publicCircleServer: normalizePublicCircleServer(
+      settings.publicCircleServer,
+      current.publicCircleServer,
+    ),
   };
 
   await conn.db.collection('Integration-Settings').updateOne(
@@ -112,28 +145,38 @@ async function writeIntegrationSettings(settings: IntegrationSettings): Promise<
 
 export async function getManagedIntegrationSettings(): Promise<IntegrationSettings> {
   const settings = await getIntegrationSettings();
+  const secrets = await import('@/lib/server-secrets.server').then((m) => m.getServerSecrets());
 
   await dbConnect();
   const config = (await AppConfig.findOne().lean()) as Record<string, unknown> | null;
-  const serverBaseUrl = String(config?.serverBaseUrl || "").trim();
-  const internalApiKey = String(config?.internalApiKey || "").trim();
+  const serverBaseUrl = String(config?.serverBaseUrl || '').trim();
+  const internalApiKey = String(config?.internalApiKey || '').trim();
 
   return {
     adminPortal: settings.adminPortal,
     publicCircleServer: {
       enabled: settings.publicCircleServer.enabled,
-      serverBaseUrl: serverBaseUrl || settings.publicCircleServer.serverBaseUrl,
-      internalApiKey: internalApiKey || settings.publicCircleServer.internalApiKey,
+      serverBaseUrl:
+        serverBaseUrl ||
+        settings.publicCircleServer.serverBaseUrl ||
+        secrets.serverBaseUrl,
+      internalApiKey:
+        internalApiKey ||
+        settings.publicCircleServer.internalApiKey ||
+        secrets.internalApiKey,
     },
   };
 }
 
 export async function savePublicCircleServerIntegration(
-  publicCircleServer: PublicCircleServerIntegration,
+  publicCircleServer: Partial<PublicCircleServerIntegration>,
 ): Promise<IntegrationSettings> {
   await dbConnect();
-  const normalized = normalizePublicCircleServer(publicCircleServer);
-  const current = await getIntegrationSettings();
+  const current = await getManagedIntegrationSettings();
+  const normalized = normalizePublicCircleServer(
+    publicCircleServer,
+    current.publicCircleServer,
+  );
 
   await AppConfig.findOneAndUpdate(
     {},
@@ -148,10 +191,13 @@ export async function savePublicCircleServerIntegration(
 
   clearServerSecretsCache();
 
-  return writeIntegrationSettings({
+  // Keep Referral company docs in sync so Reporting can authenticate with this key.
+  await syncPublicCircleServerToReferralCompanies(normalized);
+
+  return {
     adminPortal: current.adminPortal,
     publicCircleServer: normalized,
-  });
+  };
 }
 
 export async function saveAdminPortalIntegration(
@@ -169,10 +215,13 @@ export async function saveAdminPortalIntegration(
 export async function saveManagedIntegrationSettings(
   settings: IntegrationSettings,
 ): Promise<IntegrationSettings> {
-  const current = await getIntegrationSettings();
+  const current = await getManagedIntegrationSettings();
   const normalized: IntegrationSettings = {
     adminPortal: normalizeAdminManagedPortal(settings.adminPortal, current.adminPortal),
-    publicCircleServer: normalizePublicCircleServer(settings.publicCircleServer),
+    publicCircleServer: normalizePublicCircleServer(
+      settings.publicCircleServer,
+      current.publicCircleServer,
+    ),
   };
 
   await dbConnect();
@@ -187,6 +236,7 @@ export async function saveManagedIntegrationSettings(
     { upsert: true, new: true },
   );
   clearServerSecretsCache();
+  await syncPublicCircleServerToReferralCompanies(normalized.publicCircleServer);
 
   return writeIntegrationSettings(normalized);
 }
