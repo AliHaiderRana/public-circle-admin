@@ -6,8 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
+    "start": "node api.js && node dist/index.js",
+    "dev": "node api.js && tsx src/index.ts",
     "mcp": "node dist/index.js",
     "test": "tsx src/test-client.ts"
   },
