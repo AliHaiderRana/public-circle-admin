@@ -345,14 +345,14 @@ export function buildIntegrationDocs(input: IntegrationDocsInput = {}): Integrat
     },
     {
       id: 'public-circle-server',
-      title: 'Public Circle server (admin proxy)',
+      title: 'Impressions (internal API)',
       summary:
-        'Server URL and internal API key are used by this admin app when proxying ticket updates and third-party user provisioning. The referral app never calls these routes directly.',
+        'Server URL and internal API key authenticate Referral when it fetches email impressions, and authenticate this admin app when proxying internal routes.',
       relatedUrlField: 'serverBaseUrl',
       prerequisites: [
-        'Server base URL must point to the Public Circle API origin.',
-        'Internal API key must match the key configured on the Public Circle server.',
-        'Public Circle Admin reads support tickets directly from MongoDB for stats and inbox lists.',
+        'Server base URL must point to the API origin.',
+        'Internal API key must match AppConfig / INTERNAL_API_KEY on the API server.',
+        'Generate or set the key under Integrations → Impressions (super-admin).',
       ],
       configRequirements: [
         {
@@ -397,6 +397,16 @@ export function buildIntegrationDocs(input: IntegrationDocsInput = {}): Integrat
           'X-Internal-API-Key (proxied from admin internal referral route)',
           'Create or sync third-party user in Public Circle after referral signup.',
           'Referral signup → referral API → admin internal route → server.',
+        ),
+        api(
+          'referral-impressions',
+          'public-circle-server',
+          'POST',
+          serverBaseUrl,
+          '/internal/referral/impressions',
+          'X-Internal-API-Key',
+          'Email outreach impressions (emails sent, opens, clicks) per referral agent for a company.',
+          'Referral Reporting / member detail fetch via Integration-Settings.publicCircleServer.',
         ),
       ],
     },
