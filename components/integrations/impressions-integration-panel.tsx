@@ -14,7 +14,7 @@ import { SecretInput } from '@/components/integrations/secret-input';
 import {
   DEFAULT_IMPRESSIONS_PANEL_DESCRIPTION,
   DEFAULT_IMPRESSIONS_PANEL_TITLE,
-} from '@/lib/integration-settings.service';
+} from '@/lib/impressions-panel.constants';
 
 export type ImpressionsSettings = {
   enabled: boolean;
