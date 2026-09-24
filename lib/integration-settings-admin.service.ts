@@ -95,12 +95,22 @@ function normalizePublicCircleServer(
     value?.internalApiKey !== undefined && value.internalApiKey.trim()
       ? value.internalApiKey.trim()
       : prior.internalApiKey;
+  const nextPanelTitle =
+    value?.panelTitle !== undefined
+      ? value.panelTitle.trim() || defaults.panelTitle
+      : prior.panelTitle || defaults.panelTitle;
+  const nextPanelDescription =
+    value?.panelDescription !== undefined
+      ? value.panelDescription.trim() || defaults.panelDescription
+      : prior.panelDescription || defaults.panelDescription;
   const ready = Boolean(nextUrl && nextKey);
   const requestedEnabled = value?.enabled ?? prior.enabled;
   return {
     enabled: ready ? Boolean(requestedEnabled) : false,
     serverBaseUrl: nextUrl,
     internalApiKey: nextKey,
+    panelTitle: nextPanelTitle,
+    panelDescription: nextPanelDescription,
   };
 }
 
@@ -164,6 +174,8 @@ export async function getManagedIntegrationSettings(): Promise<IntegrationSettin
         internalApiKey ||
         settings.publicCircleServer.internalApiKey ||
         secrets.internalApiKey,
+      panelTitle: settings.publicCircleServer.panelTitle,
+      panelDescription: settings.publicCircleServer.panelDescription,
     },
   };
 }

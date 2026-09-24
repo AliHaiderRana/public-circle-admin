@@ -24,6 +24,10 @@ export type PublicCircleServerIntegration = {
   enabled: boolean;
   serverBaseUrl: string;
   internalApiKey: string;
+  /** White-label Integrations sidebar + page title */
+  panelTitle: string;
+  /** White-label panel / page description */
+  panelDescription: string;
 };
 
 export type IntegrationSettings = {
@@ -33,6 +37,10 @@ export type IntegrationSettings = {
 
 const COLLECTION = 'Integration-Settings';
 const CACHE_MS = 30_000;
+
+export const DEFAULT_IMPRESSIONS_PANEL_TITLE = 'Impressions';
+export const DEFAULT_IMPRESSIONS_PANEL_DESCRIPTION =
+  'Connect the email impressions API so Reporting and member detail can show emails sent, opens, and clicks alongside referral link clicks and sales.';
 
 let cachedSettings: { expiresAt: number; value: IntegrationSettings } | null = null;
 
@@ -55,6 +63,8 @@ export function emptyIntegrationSettings(): IntegrationSettings {
       enabled: false,
       serverBaseUrl: '',
       internalApiKey: '',
+      panelTitle: DEFAULT_IMPRESSIONS_PANEL_TITLE,
+      panelDescription: DEFAULT_IMPRESSIONS_PANEL_DESCRIPTION,
     },
   };
 }
@@ -105,6 +115,11 @@ function normalizeSettings(doc: {
         publicCircleServer.serverBaseUrl?.trim() ?? defaults.publicCircleServer.serverBaseUrl,
       internalApiKey:
         publicCircleServer.internalApiKey?.trim() ?? defaults.publicCircleServer.internalApiKey,
+      panelTitle:
+        publicCircleServer.panelTitle?.trim() || defaults.publicCircleServer.panelTitle,
+      panelDescription:
+        publicCircleServer.panelDescription?.trim() ||
+        defaults.publicCircleServer.panelDescription,
     },
   };
 }
