@@ -14,6 +14,7 @@ import {
   emptyIntegrationSettings,
   getIntegrationSettings,
 } from '@/lib/integration-settings.service';
+import { resolvePublicCircleServerOrigin } from '@/lib/public-circle-server-url.util';
 
 function resolveReferralBackendApiKey(
   incoming: string | undefined,
@@ -194,7 +195,10 @@ export async function savePublicCircleServerIntegration(
     {},
     {
       $set: {
-        serverBaseUrl: normalized.serverBaseUrl,
+        // AppConfig needs the API origin; Integration-Settings may store the full impressions URL.
+        serverBaseUrl:
+          resolvePublicCircleServerOrigin(normalized.serverBaseUrl) ||
+          normalized.serverBaseUrl,
         internalApiKey: normalized.internalApiKey,
       },
     },
@@ -241,7 +245,9 @@ export async function saveManagedIntegrationSettings(
     {},
     {
       $set: {
-        serverBaseUrl: normalized.publicCircleServer.serverBaseUrl,
+        serverBaseUrl:
+          resolvePublicCircleServerOrigin(normalized.publicCircleServer.serverBaseUrl) ||
+          normalized.publicCircleServer.serverBaseUrl,
         internalApiKey: normalized.publicCircleServer.internalApiKey,
       },
     },
