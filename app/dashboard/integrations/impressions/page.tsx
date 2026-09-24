@@ -22,6 +22,18 @@ import {
   type ImpressionsSettings,
 } from '@/components/integrations/impressions-integration-panel';
 
+function pickSettings(data: {
+  publicCircleServer?: { enabled?: boolean; internalApiKey?: string };
+  impressionsEndpoint?: string;
+}): ImpressionsSettings {
+  return {
+    ...emptyImpressionsSettings(),
+    enabled: Boolean(data.publicCircleServer?.enabled),
+    impressionsEndpoint: String(data.impressionsEndpoint || ''),
+    internalApiKey: String(data.publicCircleServer?.internalApiKey || ''),
+  };
+}
+
 export default function ImpressionsIntegrationsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -52,12 +64,7 @@ export default function ImpressionsIntegrationsPage() {
       const res = await fetch('/api/integrations');
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load impressions settings');
-      const loaded = {
-        ...emptyImpressionsSettings(),
-        enabled: Boolean(data.publicCircleServer?.enabled),
-        serverBaseUrl: String(data.publicCircleServer?.serverBaseUrl || ''),
-        internalApiKey: String(data.publicCircleServer?.internalApiKey || ''),
-      };
+      const loaded = pickSettings(data);
       setSettings(loaded);
       setSavedSettings(loaded);
     } catch (error) {
@@ -79,19 +86,13 @@ export default function ImpressionsIntegrationsPage() {
           scope: 'publicCircleServer',
           publicCircleServer: {
             enabled: next.enabled,
-            serverBaseUrl: next.serverBaseUrl.trim().replace(/\/$/, ''),
             internalApiKey: next.internalApiKey.trim(),
           },
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to save impressions settings');
-      const saved = {
-        ...emptyImpressionsSettings(),
-        enabled: Boolean(data.publicCircleServer?.enabled),
-        serverBaseUrl: String(data.publicCircleServer?.serverBaseUrl || ''),
-        internalApiKey: String(data.publicCircleServer?.internalApiKey || ''),
-      };
+      const saved = pickSettings(data);
       setSettings(saved);
       setSavedSettings(saved);
       setMessage(successMessage);
@@ -106,26 +107,20 @@ export default function ImpressionsIntegrationsPage() {
   }
 
   async function handleSave() {
-    const url = settings.serverBaseUrl.trim();
-    if (url) {
-      try {
-        // eslint-disable-next-line no-new
-        new URL(url);
-      } catch {
-        setMessage('Failed to save — enter a valid API base URL.');
-        return;
-      }
+    if (!settings.impressionsEndpoint.trim()) {
+      setMessage('Failed — Public Circles API origin is not configured.');
+      return;
     }
-    if (settings.enabled && (!url || !settings.internalApiKey.trim())) {
-      setMessage('Failed to save — URL and API key are required when enabled.');
+    if (settings.enabled && !settings.internalApiKey.trim()) {
+      setMessage('Failed to save — API key is required when enabled.');
       return;
     }
     await persist(settings, 'Impressions settings saved.');
   }
 
   async function handleToggle(enabled: boolean) {
-    if (enabled && (!settings.serverBaseUrl.trim() || !settings.internalApiKey.trim())) {
-      setMessage('Failed — save API base URL and key before enabling.');
+    if (enabled && (!settings.impressionsEndpoint.trim() || !settings.internalApiKey.trim())) {
+      setMessage('Failed — endpoint and API key are required before enabling.');
       return;
     }
     setPendingToggle(enabled);
@@ -161,7 +156,7 @@ export default function ImpressionsIntegrationsPage() {
           Impressions
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          API base URL and internal key for Referral impressions. Super-admin only.
+          Copy the endpoint and key into Referral. Super-admin only.
         </p>
       </div>
 
