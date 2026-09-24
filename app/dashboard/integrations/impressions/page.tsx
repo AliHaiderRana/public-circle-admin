@@ -21,6 +21,7 @@ import {
   emptyImpressionsSettings,
   type ImpressionsSettings,
 } from '@/components/integrations/impressions-integration-panel';
+import { DEFAULT_IMPRESSIONS_PANEL_TITLE } from '@/lib/integration-settings.service';
 
 export default function ImpressionsIntegrationsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -79,6 +80,9 @@ export default function ImpressionsIntegrationsPage() {
             enabled: next.enabled,
             serverBaseUrl: next.serverBaseUrl.trim().replace(/\/$/, ''),
             internalApiKey: next.internalApiKey.trim(),
+            panelTitle: next.panelTitle.trim() || DEFAULT_IMPRESSIONS_PANEL_TITLE,
+            panelDescription:
+              next.panelDescription.trim() || emptyImpressionsSettings().panelDescription,
           },
         }),
       });
@@ -116,7 +120,8 @@ export default function ImpressionsIntegrationsPage() {
       setMessage('Failed to save — URL and API key are required when enabled.');
       return;
     }
-    await persist(settings, 'Impressions settings saved.');
+    const title = settings.panelTitle?.trim() || DEFAULT_IMPRESSIONS_PANEL_TITLE;
+    await persist(settings, `${title} settings saved.`);
   }
 
   async function handleToggle(enabled: boolean) {
@@ -134,9 +139,10 @@ export default function ImpressionsIntegrationsPage() {
     const previous = settings;
     const next = { ...settings, enabled };
     setSettings(next);
+    const title = settings.panelTitle?.trim() || DEFAULT_IMPRESSIONS_PANEL_TITLE;
     const ok = await persist(
       next,
-      enabled ? 'Impressions tracking enabled.' : 'Impressions tracking disabled.',
+      enabled ? `${title} tracking enabled.` : `${title} tracking disabled.`,
     );
     if (!ok) setSettings(previous);
   }
@@ -149,16 +155,19 @@ export default function ImpressionsIntegrationsPage() {
     );
   }
 
+  const pageTitle = settings.panelTitle?.trim() || DEFAULT_IMPRESSIONS_PANEL_TITLE;
+  const pageDescription =
+    settings.panelDescription?.trim() ||
+    'Authenticate Referral reporting against email outreach. Super-admin only.';
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
           <ChartLine className="h-6 w-6" />
-          Impressions
+          {pageTitle}
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Authenticate Referral reporting against email outreach impressions. Super-admin only.
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">{pageDescription}</p>
       </div>
 
       {loading ? (
@@ -184,11 +193,13 @@ export default function ImpressionsIntegrationsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {pendingToggle ? 'Enable impressions tracking?' : 'Disable impressions tracking?'}
+              {pendingToggle
+                ? `Enable ${pageTitle.toLowerCase()} tracking?`
+                : `Disable ${pageTitle.toLowerCase()} tracking?`}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This updates the internal API key used for Referral impressions authentication
-              immediately when you continue.
+              This updates the internal API key used for Referral authentication immediately when
+              you continue.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
