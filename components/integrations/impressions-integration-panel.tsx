@@ -7,21 +7,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { SecretInput } from '@/components/integrations/secret-input';
-import {
-  DEFAULT_IMPRESSIONS_PANEL_DESCRIPTION,
-  DEFAULT_IMPRESSIONS_PANEL_TITLE,
-} from '@/lib/impressions-panel.constants';
 
 export type ImpressionsSettings = {
   enabled: boolean;
   serverBaseUrl: string;
   internalApiKey: string;
-  panelTitle: string;
-  panelDescription: string;
 };
 
 export function emptyImpressionsSettings(): ImpressionsSettings {
@@ -29,8 +22,6 @@ export function emptyImpressionsSettings(): ImpressionsSettings {
     enabled: false,
     serverBaseUrl: '',
     internalApiKey: '',
-    panelTitle: DEFAULT_IMPRESSIONS_PANEL_TITLE,
-    panelDescription: DEFAULT_IMPRESSIONS_PANEL_DESCRIPTION,
   };
 }
 
@@ -45,9 +36,7 @@ function isImpressionsDirty(current: ImpressionsSettings, saved: ImpressionsSett
     current.enabled !== saved.enabled ||
     current.serverBaseUrl.trim().replace(/\/$/, '') !==
       saved.serverBaseUrl.trim().replace(/\/$/, '') ||
-    current.internalApiKey !== saved.internalApiKey ||
-    (current.panelTitle || '').trim() !== (saved.panelTitle || '').trim() ||
-    (current.panelDescription || '').trim() !== (saved.panelDescription || '').trim()
+    current.internalApiKey !== saved.internalApiKey
   );
 }
 
@@ -75,10 +64,6 @@ export function ImpressionsIntegrationPanel({
     [settings, savedSettings],
   );
 
-  const displayTitle = settings.panelTitle?.trim() || DEFAULT_IMPRESSIONS_PANEL_TITLE;
-  const displayDescription =
-    settings.panelDescription?.trim() || DEFAULT_IMPRESSIONS_PANEL_DESCRIPTION;
-
   const ready =
     settings.enabled &&
     Boolean(settings.serverBaseUrl?.trim()) &&
@@ -97,7 +82,7 @@ export function ImpressionsIntegrationPanel({
         <div className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-2.5">
             <ChartLine className="h-5 w-5 text-primary" />
-            <CardTitle className="text-xl font-bold">{displayTitle}</CardTitle>
+            <CardTitle className="text-xl font-bold">Impressions</CardTitle>
             <Badge
               variant={ready ? 'default' : 'secondary'}
               className={
@@ -109,14 +94,17 @@ export function ImpressionsIntegrationPanel({
               {ready ? 'Active' : 'Inactive'}
             </Badge>
           </div>
-          <CardDescription>{displayDescription}</CardDescription>
+          <CardDescription>
+            Generate the internal API key and set the Public Circles API base URL. Referral uses
+            the same values to fetch email impressions.
+          </CardDescription>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {settings.enabled ? 'On' : 'Off'}
           </span>
           <Switch
-            aria-label={`Enable ${displayTitle} tracking`}
+            aria-label="Enable impressions tracking"
             checked={Boolean(settings.enabled)}
             disabled={saving}
             onCheckedChange={(checked) => onToggle(Boolean(checked))}
@@ -125,46 +113,11 @@ export function ImpressionsIntegrationPanel({
       </CardHeader>
 
       <CardContent className="space-y-4 pt-6">
-        <div className="space-y-4 rounded-lg border bg-muted/40 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-foreground">
-            White-label copy
-          </p>
-          <div className="space-y-2">
-            <Label htmlFor="impressions-panel-title">Panel / sidebar title</Label>
-            <Input
-              id="impressions-panel-title"
-              value={settings.panelTitle || ''}
-              disabled={saving}
-              placeholder={DEFAULT_IMPRESSIONS_PANEL_TITLE}
-              onChange={(event) =>
-                onChange({ ...settings, panelTitle: event.target.value })
-              }
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="impressions-panel-description">Description</Label>
-            <Textarea
-              id="impressions-panel-description"
-              value={settings.panelDescription || ''}
-              disabled={saving}
-              rows={3}
-              placeholder={DEFAULT_IMPRESSIONS_PANEL_DESCRIPTION}
-              onChange={(event) =>
-                onChange({ ...settings, panelDescription: event.target.value })
-              }
-            />
-            <p className="text-xs text-muted-foreground">
-              Used in Admin sidebar, this page, and synced to Referral Integrations. Leave blank
-              to restore defaults.
-            </p>
-          </div>
-        </div>
-
         <div className="space-y-2">
           <Label htmlFor="impressions-server-base-url">API base URL</Label>
           <Input
             id="impressions-server-base-url"
-            placeholder="https://api.example.com"
+            placeholder="https://api-staging.publiccircles.com"
             value={settings.serverBaseUrl}
             disabled={saving}
             onChange={(event) =>
@@ -187,7 +140,7 @@ export function ImpressionsIntegrationPanel({
           disabled={saving}
           placeholder="Generate or paste a key"
           onChange={(value) => onChange({ ...settings, internalApiKey: value })}
-          helperText={`Sent as X-Internal-API-Key. Synced to Referral companies on save (Integrations → ${displayTitle}).`}
+          helperText="Sent as X-Internal-API-Key. Synced to Referral companies on save."
         />
 
         <div className="flex justify-start">
@@ -218,7 +171,7 @@ export function ImpressionsIntegrationPanel({
           </p>
           <Button type="button" onClick={onSave} disabled={!dirty || saving}>
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Save {displayTitle.toLowerCase()} settings
+            Save impressions settings
           </Button>
         </div>
       </CardContent>

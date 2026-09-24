@@ -21,7 +21,6 @@ import {
   emptyImpressionsSettings,
   type ImpressionsSettings,
 } from '@/components/integrations/impressions-integration-panel';
-import { DEFAULT_IMPRESSIONS_PANEL_TITLE } from '@/lib/impressions-panel.constants';
 
 export default function ImpressionsIntegrationsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -55,7 +54,9 @@ export default function ImpressionsIntegrationsPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to load impressions settings');
       const loaded = {
         ...emptyImpressionsSettings(),
-        ...(data.publicCircleServer ?? {}),
+        enabled: Boolean(data.publicCircleServer?.enabled),
+        serverBaseUrl: String(data.publicCircleServer?.serverBaseUrl || ''),
+        internalApiKey: String(data.publicCircleServer?.internalApiKey || ''),
       };
       setSettings(loaded);
       setSavedSettings(loaded);
@@ -80,9 +81,6 @@ export default function ImpressionsIntegrationsPage() {
             enabled: next.enabled,
             serverBaseUrl: next.serverBaseUrl.trim().replace(/\/$/, ''),
             internalApiKey: next.internalApiKey.trim(),
-            panelTitle: next.panelTitle.trim() || DEFAULT_IMPRESSIONS_PANEL_TITLE,
-            panelDescription:
-              next.panelDescription.trim() || emptyImpressionsSettings().panelDescription,
           },
         }),
       });
@@ -90,7 +88,9 @@ export default function ImpressionsIntegrationsPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to save impressions settings');
       const saved = {
         ...emptyImpressionsSettings(),
-        ...(data.publicCircleServer ?? {}),
+        enabled: Boolean(data.publicCircleServer?.enabled),
+        serverBaseUrl: String(data.publicCircleServer?.serverBaseUrl || ''),
+        internalApiKey: String(data.publicCircleServer?.internalApiKey || ''),
       };
       setSettings(saved);
       setSavedSettings(saved);
@@ -120,8 +120,7 @@ export default function ImpressionsIntegrationsPage() {
       setMessage('Failed to save — URL and API key are required when enabled.');
       return;
     }
-    const title = settings.panelTitle?.trim() || DEFAULT_IMPRESSIONS_PANEL_TITLE;
-    await persist(settings, `${title} settings saved.`);
+    await persist(settings, 'Impressions settings saved.');
   }
 
   async function handleToggle(enabled: boolean) {
@@ -139,10 +138,9 @@ export default function ImpressionsIntegrationsPage() {
     const previous = settings;
     const next = { ...settings, enabled };
     setSettings(next);
-    const title = settings.panelTitle?.trim() || DEFAULT_IMPRESSIONS_PANEL_TITLE;
     const ok = await persist(
       next,
-      enabled ? `${title} tracking enabled.` : `${title} tracking disabled.`,
+      enabled ? 'Impressions tracking enabled.' : 'Impressions tracking disabled.',
     );
     if (!ok) setSettings(previous);
   }
@@ -155,19 +153,16 @@ export default function ImpressionsIntegrationsPage() {
     );
   }
 
-  const pageTitle = settings.panelTitle?.trim() || DEFAULT_IMPRESSIONS_PANEL_TITLE;
-  const pageDescription =
-    settings.panelDescription?.trim() ||
-    'Authenticate Referral reporting against email outreach. Super-admin only.';
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
           <ChartLine className="h-6 w-6" />
-          {pageTitle}
+          Impressions
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">{pageDescription}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          API base URL and internal key for Referral impressions. Super-admin only.
+        </p>
       </div>
 
       {loading ? (
@@ -193,9 +188,7 @@ export default function ImpressionsIntegrationsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {pendingToggle
-                ? `Enable ${pageTitle.toLowerCase()} tracking?`
-                : `Disable ${pageTitle.toLowerCase()} tracking?`}
+              {pendingToggle ? 'Enable impressions tracking?' : 'Disable impressions tracking?'}
             </AlertDialogTitle>
             <AlertDialogDescription>
               This updates the internal API key used for Referral authentication immediately when
