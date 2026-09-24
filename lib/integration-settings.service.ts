@@ -4,6 +4,10 @@ import {
   type AdminIntegrationEndpoint,
   type PartnerSocketEvent,
 } from '@/lib/partner-socket-events.catalog';
+import {
+  DEFAULT_IMPRESSIONS_PANEL_DESCRIPTION,
+  DEFAULT_IMPRESSIONS_PANEL_TITLE,
+} from '@/lib/impressions-panel.constants';
 
 export type AdminPortalIntegration = {
   enabled: boolean;
@@ -38,9 +42,10 @@ export type IntegrationSettings = {
 const COLLECTION = 'Integration-Settings';
 const CACHE_MS = 30_000;
 
-export const DEFAULT_IMPRESSIONS_PANEL_TITLE = 'Impressions';
-export const DEFAULT_IMPRESSIONS_PANEL_DESCRIPTION =
-  'Connect the email impressions API so Reporting and member detail can show emails sent, opens, and clicks alongside referral link clicks and sales.';
+export {
+  DEFAULT_IMPRESSIONS_PANEL_TITLE,
+  DEFAULT_IMPRESSIONS_PANEL_DESCRIPTION,
+} from '@/lib/impressions-panel.constants';
 
 let cachedSettings: { expiresAt: number; value: IntegrationSettings } | null = null;
 

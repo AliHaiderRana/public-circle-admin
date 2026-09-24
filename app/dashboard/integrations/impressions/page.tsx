@@ -21,7 +21,7 @@ import {
   emptyImpressionsSettings,
   type ImpressionsSettings,
 } from '@/components/integrations/impressions-integration-panel';
-import { DEFAULT_IMPRESSIONS_PANEL_TITLE } from '@/lib/integration-settings.service';
+import { DEFAULT_IMPRESSIONS_PANEL_TITLE } from '@/lib/impressions-panel.constants';
 
 export default function ImpressionsIntegrationsPage() {
   const { user, loading: authLoading } = useAuth();
