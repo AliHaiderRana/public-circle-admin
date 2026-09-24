@@ -95,8 +95,8 @@ export function ImpressionsIntegrationPanel({
             </Badge>
           </div>
           <CardDescription>
-            Generate the internal API key and set the Public Circles API base URL. Referral uses
-            the same values to fetch email impressions.
+            Set the full impressions endpoint URL and internal API key. Referral uses the same
+            values to fetch email impressions.
           </CardDescription>
         </div>
         <div className="flex items-center gap-3">
@@ -114,10 +114,10 @@ export function ImpressionsIntegrationPanel({
 
       <CardContent className="space-y-4 pt-6">
         <div className="space-y-2">
-          <Label htmlFor="impressions-server-base-url">API base URL</Label>
+          <Label htmlFor="impressions-server-base-url">Impressions endpoint URL</Label>
           <Input
             id="impressions-server-base-url"
-            placeholder="https://api-staging.publiccircles.com"
+            placeholder="https://api-staging.publiccircles.com/internal/referral/impressions"
             value={settings.serverBaseUrl}
             disabled={saving}
             onChange={(event) =>
@@ -125,11 +125,8 @@ export function ImpressionsIntegrationPanel({
             }
           />
           <p className="text-sm text-muted-foreground">
-            API server origin. Referral calls{' '}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">
-              /internal/referral/impressions
-            </code>{' '}
-            on this host.
+            Full Public Circles URL to POST impressions (include path). Synced to Referral as
+            entered.
           </p>
         </div>
 

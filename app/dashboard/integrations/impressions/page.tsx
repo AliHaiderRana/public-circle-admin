@@ -112,8 +112,8 @@ export default function ImpressionsIntegrationsPage() {
         // eslint-disable-next-line no-new
         new URL(url);
       } catch {
-        setMessage('Failed to save — enter a valid API base URL.');
-        return;
+      setMessage('Failed to save — enter a valid impressions endpoint URL.');
+      return;
       }
     }
     if (settings.enabled && (!url || !settings.internalApiKey.trim())) {
@@ -125,7 +125,7 @@ export default function ImpressionsIntegrationsPage() {
 
   async function handleToggle(enabled: boolean) {
     if (enabled && (!settings.serverBaseUrl.trim() || !settings.internalApiKey.trim())) {
-      setMessage('Failed — save API base URL and key before enabling.');
+      setMessage('Failed — save impressions URL and key before enabling.');
       return;
     }
     setPendingToggle(enabled);
@@ -161,7 +161,7 @@ export default function ImpressionsIntegrationsPage() {
           Impressions
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          API base URL and internal key for Referral impressions. Super-admin only.
+          Full impressions endpoint URL and internal key for Referral. Super-admin only.
         </p>
       </div>
 
