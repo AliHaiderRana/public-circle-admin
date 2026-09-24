@@ -1,11 +1,10 @@
 'use client';
 
-import { useMemo } from 'react';
-import { ChartLine, Loader2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ChartLine, Check, Copy, Loader2 } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
@@ -13,14 +12,15 @@ import { SecretInput } from '@/components/integrations/secret-input';
 
 export type ImpressionsSettings = {
   enabled: boolean;
-  serverBaseUrl: string;
+  /** Read-only full impressions POST URL (from AppConfig origin). */
+  impressionsEndpoint: string;
   internalApiKey: string;
 };
 
 export function emptyImpressionsSettings(): ImpressionsSettings {
   return {
     enabled: false,
-    serverBaseUrl: '',
+    impressionsEndpoint: '',
     internalApiKey: '',
   };
 }
@@ -33,10 +33,7 @@ export function randomInternalApiKey(): string {
 
 function isImpressionsDirty(current: ImpressionsSettings, saved: ImpressionsSettings): boolean {
   return (
-    current.enabled !== saved.enabled ||
-    current.serverBaseUrl.trim().replace(/\/$/, '') !==
-      saved.serverBaseUrl.trim().replace(/\/$/, '') ||
-    current.internalApiKey !== saved.internalApiKey
+    current.enabled !== saved.enabled || current.internalApiKey !== saved.internalApiKey
   );
 }
 
@@ -59,15 +56,16 @@ export function ImpressionsIntegrationPanel({
   onSave,
   onToggle,
 }: ImpressionsIntegrationPanelProps) {
+  const [copied, setCopied] = useState(false);
+
   const dirty = useMemo(
     () => isImpressionsDirty(settings, savedSettings),
     [settings, savedSettings],
   );
 
+  const endpoint = settings.impressionsEndpoint?.trim() || '';
   const ready =
-    settings.enabled &&
-    Boolean(settings.serverBaseUrl?.trim()) &&
-    Boolean(settings.internalApiKey?.trim());
+    settings.enabled && Boolean(endpoint) && Boolean(settings.internalApiKey?.trim());
 
   const statusText =
     message && !dirty
@@ -75,6 +73,17 @@ export function ImpressionsIntegrationPanel({
       : dirty
         ? 'Unsaved changes — save to apply.'
         : 'No pending changes.';
+
+  const handleCopy = async () => {
+    if (!endpoint) return;
+    try {
+      await navigator.clipboard.writeText(endpoint);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore
+    }
+  };
 
   return (
     <Card>
@@ -95,8 +104,7 @@ export function ImpressionsIntegrationPanel({
             </Badge>
           </div>
           <CardDescription>
-            Generate the internal API key and set the Public Circles API base URL. Referral uses
-            the same values to fetch email impressions.
+            Copy this endpoint and key into Referral Integrations → Impressions.
           </CardDescription>
         </div>
         <div className="flex items-center gap-3">
@@ -106,30 +114,42 @@ export function ImpressionsIntegrationPanel({
           <Switch
             aria-label="Enable impressions tracking"
             checked={Boolean(settings.enabled)}
-            disabled={saving}
+            disabled={saving || !endpoint}
             onCheckedChange={(checked) => onToggle(Boolean(checked))}
           />
         </div>
       </CardHeader>
 
       <CardContent className="space-y-4 pt-6">
-        <div className="space-y-2">
-          <Label htmlFor="impressions-server-base-url">API base URL</Label>
-          <Input
-            id="impressions-server-base-url"
-            placeholder="https://api-staging.publiccircles.com"
-            value={settings.serverBaseUrl}
-            disabled={saving}
-            onChange={(event) =>
-              onChange({ ...settings, serverBaseUrl: event.target.value })
-            }
-          />
-          <p className="text-sm text-muted-foreground">
-            API server origin. Referral calls{' '}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">
-              /internal/referral/impressions
-            </code>{' '}
-            on this host.
+        <div className="space-y-2 rounded-lg border bg-muted/40 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <Label>Impressions endpoint</Label>
+            <Badge variant="outline" className="font-normal text-xs bg-background">
+              POST
+            </Badge>
+          </div>
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center justify-between rounded-md border border-border bg-background p-3 font-mono text-xs shadow-xs">
+            <span className="flex-1 break-all select-all font-medium text-foreground py-0.5">
+              {endpoint || 'Configure Public Circles API base URL in system config first.'}
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={!endpoint || saving}
+              onClick={() => void handleCopy()}
+              className="shrink-0 gap-1.5 font-sans font-medium h-8"
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-emerald-600" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Fixed endpoint for this environment. Not editable — copy into Referral.
           </p>
         </div>
 
