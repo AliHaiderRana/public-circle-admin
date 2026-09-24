@@ -80,6 +80,7 @@ type SidebarChildItem = {
   name: string;
   href: string;
   icon: ComponentType<{ className?: string }>;
+  impressionsNav?: boolean;
 };
 
 type SidebarItem = {
@@ -177,6 +178,8 @@ const sidebarItems: SidebarItem[] = [
         name: "Impressions",
         href: "/dashboard/integrations/impressions",
         icon: ChartLine,
+        /** Resolved at runtime from publicCircleServer.panelTitle */
+        impressionsNav: true,
       },
     ],
   },
@@ -233,11 +236,31 @@ export default function DashboardLayout({
   const { user, logout } = useAuth();
   const pathname = usePathname();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [impressionsNavTitle, setImpressionsNavTitle] = useState("Impressions");
   const { stats } = useSupportStats();
   useAdminSupportRealtimeSync();
   const isSupportInboxPage =
     pathname === "/dashboard/support-requests" ||
     pathname.startsWith("/dashboard/support-requests/");
+
+  useEffect(() => {
+    if (!user?.isSuperAdmin) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/integrations");
+        if (!res.ok) return;
+        const data = await res.json();
+        const title = String(data?.publicCircleServer?.panelTitle || "").trim();
+        if (!cancelled && title) setImpressionsNavTitle(title);
+      } catch {
+        // Keep default "Impressions"
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.isSuperAdmin]);
 
   useEffect(() => {
     if (isSupportInboxPage) return;
@@ -248,6 +271,18 @@ export default function DashboardLayout({
     setActiveAdminSupportTicketId(null);
     void leaveSupportChatRoom(activeTicketId);
   }, [isSupportInboxPage]);
+
+  const resolvedSidebarItems = sidebarItems.map((item) => {
+    if (!item.children?.length) return item;
+    return {
+      ...item,
+      children: item.children.map((child) =>
+        child.impressionsNav
+          ? { ...child, name: impressionsNavTitle || child.name }
+          : child,
+      ),
+    };
+  });
 
   const portalSubtitle = user?.isPartner
     ? getPartnerPortalSubtitle(user?.referralRole)
@@ -284,7 +319,7 @@ export default function DashboardLayout({
       </div>
 
       <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {sidebarItems
+        {resolvedSidebarItems
           .filter((item) => {
             if (user?.isPartner) {
               return partnerSidebarHrefs.has(item.href);
