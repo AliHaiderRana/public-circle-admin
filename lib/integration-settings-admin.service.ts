@@ -14,7 +14,7 @@ import {
   emptyIntegrationSettings,
   getIntegrationSettings,
 } from '@/lib/integration-settings.service';
-import { resolvePublicCircleServerOrigin } from '@/lib/public-circle-server-url.util';
+import { resolvePublicCircleServerOrigin, buildImpressionsEndpointUrl } from '@/lib/public-circle-server-url.util';
 
 function resolveReferralBackendApiKey(
   incoming: string | undefined,
@@ -154,23 +154,28 @@ async function writeIntegrationSettings(settings: IntegrationSettings): Promise<
   return normalized;
 }
 
-export async function getManagedIntegrationSettings(): Promise<IntegrationSettings> {
+export async function getManagedIntegrationSettings(): Promise<
+  IntegrationSettings & { impressionsEndpoint: string }
+> {
   const settings = await getIntegrationSettings();
   const secrets = await import('@/lib/server-secrets.server').then((m) => m.getServerSecrets());
 
   await dbConnect();
   const config = (await AppConfig.findOne().lean()) as Record<string, unknown> | null;
-  const serverBaseUrl = String(config?.serverBaseUrl || '').trim();
+  const apiOrigin = resolvePublicCircleServerOrigin(
+    String(config?.serverBaseUrl || '').trim() ||
+      settings.publicCircleServer.serverBaseUrl ||
+      secrets.serverBaseUrl,
+  );
   const internalApiKey = String(config?.internalApiKey || '').trim();
+  const impressionsEndpoint = buildImpressionsEndpointUrl(apiOrigin);
 
   return {
     adminPortal: settings.adminPortal,
     publicCircleServer: {
       enabled: settings.publicCircleServer.enabled,
-      serverBaseUrl:
-        serverBaseUrl ||
-        settings.publicCircleServer.serverBaseUrl ||
-        secrets.serverBaseUrl,
+      // Keep origin in AppConfig sense for other Admin features; expose full endpoint separately.
+      serverBaseUrl: apiOrigin,
       internalApiKey:
         internalApiKey ||
         settings.publicCircleServer.internalApiKey ||
@@ -178,27 +183,40 @@ export async function getManagedIntegrationSettings(): Promise<IntegrationSettin
       panelTitle: settings.publicCircleServer.panelTitle,
       panelDescription: settings.publicCircleServer.panelDescription,
     },
+    impressionsEndpoint,
   };
 }
 
 export async function savePublicCircleServerIntegration(
   publicCircleServer: Partial<PublicCircleServerIntegration>,
-): Promise<IntegrationSettings> {
+): Promise<IntegrationSettings & { impressionsEndpoint: string }> {
   await dbConnect();
   const current = await getManagedIntegrationSettings();
+
+  // Endpoint is fixed from AppConfig origin — only key / enabled are editable in Admin.
+  const impressionsEndpoint =
+    current.impressionsEndpoint ||
+    buildImpressionsEndpointUrl(current.publicCircleServer.serverBaseUrl);
+
   const normalized = normalizePublicCircleServer(
-    publicCircleServer,
-    current.publicCircleServer,
+    {
+      ...publicCircleServer,
+      serverBaseUrl: impressionsEndpoint,
+    },
+    {
+      ...current.publicCircleServer,
+      serverBaseUrl: impressionsEndpoint,
+    },
   );
 
   await AppConfig.findOneAndUpdate(
     {},
     {
       $set: {
-        // AppConfig needs the API origin; Integration-Settings may store the full impressions URL.
+        // AppConfig keeps API origin only.
         serverBaseUrl:
-          resolvePublicCircleServerOrigin(normalized.serverBaseUrl) ||
-          normalized.serverBaseUrl,
+          resolvePublicCircleServerOrigin(current.publicCircleServer.serverBaseUrl) ||
+          resolvePublicCircleServerOrigin(impressionsEndpoint),
         internalApiKey: normalized.internalApiKey,
       },
     },
@@ -207,12 +225,13 @@ export async function savePublicCircleServerIntegration(
 
   clearServerSecretsCache();
 
-  // Keep Referral company docs in sync so Reporting can authenticate with this key.
+  // Referral stores the full impressions endpoint URL.
   await syncPublicCircleServerToReferralCompanies(normalized);
 
   return {
     adminPortal: current.adminPortal,
     publicCircleServer: normalized,
+    impressionsEndpoint,
   };
 }
 
