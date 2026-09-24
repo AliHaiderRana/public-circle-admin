@@ -6,18 +6,20 @@ import {
 } from '@/lib/referral-partner.service';
 import { getIntegrationSettings } from '@/lib/integration-settings.service';
 import { resolveCustomerPortalSecret } from '@/lib/partner-handoff.util';
+import { resolvePublicCircleServerOrigin } from '@/lib/public-circle-server-url.util';
 
 const DEBOUNCE_MS = 400;
 const pendingPartnerIds = new Set<string>();
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
 function resolveServerPushBaseUrl(serverBaseUrl?: string): string {
+  const fromStored = resolvePublicCircleServerOrigin(serverBaseUrl);
+  if (fromStored) return fromStored;
   const raw =
-    serverBaseUrl?.trim() ||
     process.env.SERVER_API_URL?.trim() ||
     process.env.NEXT_PUBLIC_SERVER_URL?.trim() ||
     '';
-  return raw.replace(/\/$/, '');
+  return resolvePublicCircleServerOrigin(raw) || raw.replace(/\/$/, '');
 }
 
 async function pushPartnerRealtimeStats(referralUserIds: string[]): Promise<void> {
