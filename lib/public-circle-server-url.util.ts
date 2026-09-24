@@ -8,3 +8,12 @@ export function resolvePublicCircleServerOrigin(stored?: string | null): string 
     return value;
   }
 }
+
+const IMPRESSIONS_PATH = '/internal/referral/impressions';
+
+/** Fixed impressions POST URL for this Admin environment (origin from AppConfig). */
+export function buildImpressionsEndpointUrl(originOrUrl?: string | null): string {
+  const origin = resolvePublicCircleServerOrigin(originOrUrl);
+  if (!origin) return '';
+  return `${origin}${IMPRESSIONS_PATH}`;
+}
