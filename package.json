@@ -3,9 +3,9 @@
   "version": "0.1.1",
   "private": true,
   "scripts": {
-    "dev": "node server.cjs",
-    "build": "next build --webpack",
-    "start": "NODE_ENV=production node server.cjs",
+    "dev": "node api.js && node server.cjs",
+    "build": "node api.js && next build --webpack",
+    "start": "node api.js && NODE_ENV=production node server.cjs",
     "seed": "node seed.js"
   },
   "dependencies": {
