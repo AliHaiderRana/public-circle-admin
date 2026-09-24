@@ -1,5 +1,6 @@
 import { getIntegrationSettings } from '@/lib/integration-settings.service';
 import { getServerSecrets } from '@/lib/server-secrets.server';
+import { resolvePublicCircleServerOrigin } from '@/lib/public-circle-server-url.util';
 
 function trimUrl(value: string | undefined): string {
   return value?.trim().replace(/\/$/, '') || '';
@@ -19,13 +20,15 @@ export async function getBackendApiUrl(): Promise<string> {
   }
 
   const settings = await getIntegrationSettings();
-  const fromIntegration = trimUrl(settings.publicCircleServer.serverBaseUrl);
+  const fromIntegration = resolvePublicCircleServerOrigin(
+    settings.publicCircleServer.serverBaseUrl,
+  );
   if (fromIntegration) {
     return fromIntegration;
   }
 
   const secrets = await getServerSecrets();
-  return trimUrl(secrets.serverBaseUrl);
+  return resolvePublicCircleServerOrigin(secrets.serverBaseUrl) || trimUrl(secrets.serverBaseUrl);
 }
 
 /** Server internal API key — Integration-Settings DB first. */
